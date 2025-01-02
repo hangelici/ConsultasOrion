@@ -1,105 +1,78 @@
- SELECT 
-    OSESTAB,
-    OSPLANO, 
+WITH MESES AS (
+    SELECT DISTINCT
+        EXTRACT(MONTH FROM ALLDAYS.DDATA) AS MES,
+        EXTRACT(YEAR FROM ALLDAYS.DDATA) AS ANO
+    FROM TABLE(ALLDAYS(CAST('01/12/2019' AS DATE), CURRENT_DATE)) ALLDAYS
+    
+    --where
+   -- EXTRACT(YEAR FROM ALLDAYS.DDATA)  >= 2024 --and EXTRACT(MONTH FROM ALLDAYS.DDATA) = 11
+),
+SALCONCE_INTERMEDIARIO AS (
+    SELECT 
+        s.mes,
+        s.ano,
+        s.analitica,
+        s.centrocus,
+        s.saldoini,
+        s.debitos,
+        s.creditos,
+        s.rdebitos,
+        s.rcreditos,
+        (s.saldoini + s.debitos + s.rdebitos) - (s.creditos + s.rcreditos) AS saldo_calculado
+    FROM SALCONCE s 
+    WHERE s.estab = 1 --and mes= 11 and ano = 2024 
+),
+SALDO_CALCULADO AS (
+    SELECT 
+        MESES.ano,
+        MESES.mes,
+        CENCUSCE.centrocus AS COD_CC,
+        PLACONAN.reduzida AS REDUZIDA,
+        COALESCE(SALCONCE_INTERMEDIARIO.saldoini, COALESCE((
+            SELECT saldo_calculado
+            FROM SALCONCE_INTERMEDIARIO s
+            WHERE CAST('01.' || LPAD(s.mes, 2,'0') || '.' || s.ano AS DATE) < 
+                  CAST('01.' || LPAD(MESES.mes, 2,'0') || '.' || MESES.ano AS DATE)
+              AND s.analitica = PLACONAN.reduzida
+              AND s.centrocus = CENCUSCE.centrocus
+            ORDER BY s.ano DESC, s.mes DESC
+            FETCH FIRST 1 ROWS ONLY
+        ), 0)) AS SALDO_INICIAL,
+        COALESCE(SALCONCE_INTERMEDIARIO.debitos, 0) AS DEBITOS,
+        COALESCE(SALCONCE_INTERMEDIARIO.creditos, 0) AS CREDITOS,
+        COALESCE(SALCONCE_INTERMEDIARIO.rdebitos, 0) AS RDEBITOS,
+        COALESCE(SALCONCE_INTERMEDIARIO.rcreditos, 0) AS RCREDITOS
+    FROM MESES
+    INNER JOIN PLACONAN ON PLACONAN.PLANO = 1
+    INNER JOIN CENCUSCE 
+        ON LENGTH(CENCUSCE.centrocus) = 9
+        AND CENCUSCE.CENCUSCOD = 2
+    LEFT JOIN SALCONCE_INTERMEDIARIO 
+        ON SALCONCE_INTERMEDIARIO.mes = MESES.mes 
+        AND SALCONCE_INTERMEDIARIO.ano = MESES.ano 
+        AND SALCONCE_INTERMEDIARIO.analitica = PLACONAN.reduzida
+        AND SALCONCE_INTERMEDIARIO.centrocus = CENCUSCE.centrocus
+)
+select
+ 1 AS OSESTAB,
+    '1#1' AS OSPLANO,
     COD_CC,
     REDUZIDA,
     ANO, 
     MES,
-    SUM(SALDO_INICIAL) as SALDO_INICIAL,
-    SUM(CREDITOS) AS CREDITOS, 
-    SUM(DEBITOS) AS DEBITOS, 
-    SUM(RCREDITOS) AS RCREDITOS,
-    SUM(RDEBITOS) AS RDEBITOS
+    (SALDO_INICIAL) AS SALDO_INICIAL,
+    (CREDITOS) AS CREDITOS, 
+    (DEBITOS) AS DEBITOS, 
+    (RCREDITOS) AS RCREDITOS,
+    (RDEBITOS) AS RDEBITOS
+from SALDO_CALCULADO 
 
-FROM(
+where ano =2024
 
-SELECT
-    1 OSESTAB,
-    '1#1' OSPLANO,
-    cencusce.centrocus AS COD_CC,
-    placonan.reduzida AS REDUZIDA,
-    MESES.ano,
-    MESES.mes,
+   
+union
 
-
-
-
-    COALESCE(SALCONCE.saldoini, COALESCE((
-                                    SELECT 
-                                       ((s.saLdoini +s.debitos+s.rdebitos) - (s.creditos+s.rcreditos))
-                                    FROM (
-                                        SELECT 
-                                            s.meS,
-                                            s.anO,
-                                            s.anALItIca,
-                                            s.CentrOcUs,
-                                            s.SALDOINI,
-                                               s.debitos,
-                                                s.creditos,
-                                                s.rcreditos,
-                                                s.rdebitos
-                                        FROM SALCONCE s 
-                                         where s.estab=1
-                                        ORDER BY s.ANO DESC, s.MES DESC, s.anaLitiCA, S.centrocUS
-                                    ) s 
-                                    wheRe caSt('01.' || lpad(s.mes, 2,'0') || '.' || s.Ano as date) < caSt('01.' || lpad(MESES.mes, 2,'0') || '.' || MESES.Ano as date)
-                                        AND s.ANALITICA = PLACONAN.REDUZIDA
-                                        AND s.CENTROCUS = CENCUSCE.CEntrOCus
-                                        AND PLACONAN.PLANO = 1 
-                                        AND ROWNUM = 1
-                                        
-
-
-                                ), 0)
-    ) AS SALDO_INICIAL,
-
-    COALESCE(SALCONCE.debitos, 0) AS debitos,
-    COALESCE(SALCONCE.creditos, 0) AS creditos,
-    COALESCE(SALCONCE.rdebitos, 0)rdebitos,
-    COALESCE(SALCONCE.rcreditos, 0)rcreditos
-
-     
-    FROM (SELECT DISTINCT
-            EXTRACT(MONTH FROM ALLDAYS.DDATA) AS MES,
-            EXTRACT(YEAR FROM ALLDAYS.DDATA) AS ANO
-            FROM TABLE(ALLDAYS(CAST('01/12/2019' AS DATE),CURRENT_DATE)) ALLDAYS
-        ) MESES 
-INNER JOIN PLACONAN 
-    ON PLACONAN.PLANO = 1 
-
-INNER JOIN CENCUSCE 
-    ON LENGTH(CENCUSCE.centrocus) = 9
-    AND CENCUSCE.CENCUSCOD = 2
-
-LEFT JOIN SALCONCE 
-    ON SALCONCE.MES = MESES.MES 
-    AND SALCONCE.ANO = MESES.ANO 
-    AND SALCONCE.ANALITICA = PLACONAN.REDUZIDA
-    AND SALCONCE.CENTROCUS = CENCUSCE.CENTROCUS
-    AND SALCONCE.ESTAB = 1
-
---WHERE PLACONAN.REDUZIDA = 11101
---AND CENCUSCE.CENTROCUS = 010103
-
- order by  CENCUSCE.CENTROCUS,ano,mes
-) DADOS 
-
-where 
-
-ano >= 2023
-
-GROUP BY  
-    OSESTAB,
-    OSPLANO, 
-    COD_CC,
-    REDUZIDA,
-    ANO, 
-    MES
-
-
-   union all
-    
-    select
+ select
 osestab,
 osplano,
 cod_cc,
@@ -167,4 +140,6 @@ left join viasoft.u_lancf f on
 
 where 
 
-ano >= 2023
+ano = 2024
+
+
