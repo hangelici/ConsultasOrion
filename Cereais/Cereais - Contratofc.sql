@@ -1,38 +1,153 @@
-SELECT
-       CONTRATO.ESTAB,
-       contratocfg.entradasaida ES,
-       contrato.contconf,contratocfg.descricao,
-       CONTRATO.NUMEROCM, CONTAMOV.NOME,
-       CONTRATO.CONTRATO,
-       contrato.numcomprador,
-       contrato.safra,
-       contrato.numintermediario,
-       TO_CHAR(contrato.dtemissao,'DD/MM/YYYY') AS dtemissao,
-        TO_CHAR(contrato.dtvencto,'DD/MM/YYYY') AS DtVencto,
-        TO_CHAR(contrato.dtlimentimp,'DD/MM/YYYY') AS LimEnt,    
-        TO_CHAR(contrato.dtmovsaldo,'DD/MM/YYYY') AS dtmovsaldo,
-       CONTRATOITE.ITEM,
-       contratoite.local,
-       contrato_u.qtdori as qtdoriginal,
-       contratoite.quantidade as qtdcontrato,
-        contrato_u.qtdori *  contratoite.valorunit/60 As vlroriginal,
-       contratoite.valorunit,
-       contratoite.valortotal,
-       CAST(COALESCE(PSALDO.NQTDSALDO,0)AS DECIMAL(18,2)) AS QTDSALDO,
-       COALESCE(PSALDO.NQTDDEV,0) AS QTDDEV,
-       ARREDONDAR(COALESCE(PSALDO.NQTDCANC,0),2) AS QTDCANC,
-       (COALESCE(PSALDO.nqtd,0) - (COALESCE(PSALDO.nqtdcanc,0) + COALESCE(PSALDO.NQTDSALDO,0)))SALDOENT,
-       COALESCE(PSALDO.NVLRSALDO,0) AS VLRSALDO,
-       contrato_u.statusass,
-       contrato_u.statusaprov,
-       contrato_u.statusfat,
-       contrato.userid,  
-       case when contrato.safra >=2223 then sum(rtporto.pesodescarregamento) else  sum(rtporto.pesodescarregamento) - (PSALDO.NQTDDEV) end pesodescarregamento,
-    case when contrato.safra >= 2223 then sum(rtporto.pesoretencao) else sum(rtporto.pesoretencao) - (PSALDO.NQTDDEV) end pesoretencao,
-   --    sum(rtporto.pesoretencao) - (PSALDO.NQTDDEV)pesoretencao,
-        coalesce(VLRREC.RECEBIDO,0)VLR_RECEBIDO
+-- ### NOTAS QUE NÃO DEVEM SER CONSIDERAS
+WITH NOTAS_EXCLUIDENTES AS (
+   SELECT
+    NFITEMAPARTIRDE.ESTABORIGEM,
+    NFITEMAPARTIRDE.SEQNOTAORIGEM,
+    NFITEMAPARTIRDE.SEQNOTAITEMORIGEM
+    FROM
+    NFITEMAPARTIRDE
+    
+    INNER JOIN NFITEM NFI ON 
+        NFI.ESTAB = NFITEMAPARTIRDE.ESTAB
+        AND NFI.SEQNOTA = NFITEMAPARTIRDE.SEQNOTA
+        AND NFI.SEQNOTAITEM = NFITEMAPARTIRDE.SEQNOTAITEM
+    
+    INNER JOIN NFCAB NFDV ON 
+        NFDV.ESTAB = NFI.ESTAB
+        AND NFDV.SEQNOTA = NFI.SEQNOTA
+    
+    INNER JOIN NFCFG NFCFGDV ON 
+        NFCFGDV.NOTACONF = NFDV.NOTACONF
+        AND NFCFGDV.NOTACONF IN (271)
+    LEFT JOIN CTRCNFCAB CTRCNFCABDV ON 
+        CTRCNFCABDV.ESTAB = NFITEMAPARTIRDE.ESTABORIGEM
+        AND CTRCNFCABDV.SEQNOTA = NFITEMAPARTIRDE.SEQNOTAORIGEM
+    
+    LEFT JOIN CTRC CTRCDV ON ( CTRCDV.SEQCTRC = CTRCNFCABDV.SEQCTRC )
+    LEFT JOIN CTRCCFG CTRCCFGDV ON 
+        ( CTRCCFGDV.ESTAB = CTRCDV.ESTAB )
+        AND ( CTRCCFGDV.CODIGOCFG = CTRCDV.CODIGOCFG )
+    
+    INNER JOIN NATOPERACAO NATDV ON 
+        NATDV.NATUREZADAOPERACAO = NFCFGDV.NATUREZADAOPERACAO
+        AND NATDV.ENTRADASAIDA = NFCFGDV.ENTRADASAIDA
+),
 
-FROM CONTRATO
+---- ## DUPLICATAS DOS CONTRATOS DE VENDA
+BAIXAS AS (
+    SELECT
+    EMPRESA,
+    DUPREC,
+    --SUM(VALOR) AS VLR,
+    SUM(PRDUPREC.VALOR * CASE WHEN PRDUPREC.TIPOREC IN ('R','J') THEN 1 ELSE -1 END) AS PAGO
+    FROM PRDUPREC
+
+    WHERE TIPOREC = 'R'
+    AND IDCTB IS NOT NULL
+    
+    GROUP BY EMPRESA,DUPREC
+),
+
+DUPLICATAS AS (
+    SELECT
+    CONTRATO.ESTAB,
+    CONTRATO.CONTRATO,
+    BAIXAS.PAGO
+    FROM CONTRATONFITE
+
+    INNER JOIN NFCAB
+    ON (NFCAB.ESTAB = CONTRATONFITE.ESTABNOTA)
+    AND (NFCAB.SEQNOTA = CONTRATONFITE.SEQNOTA)
+    AND (NFCAB.STATUS <> 'C')
+    
+    inner join nfitem on nfitem.estab=nfcab.estab
+                    and nfitem.seqnota=nfcab.seqnota
+    
+    INNER JOIN CONTRATO
+    ON  (CONTRATO.ESTAB    = CONTRATONFITE.ESTAB)
+    AND (CONTRATO.CONTRATO = CONTRATONFITE.CONTRATO) 
+    
+    inner JOIN NFCABAGRFIN
+    ON (NFCAB.ESTAB = NFCABAGRFIN.ESTAB)
+    AND (NFCAB.SEQNOTA = NFCABAGRFIN.SEQNOTA)
+    
+    inner JOIN AGRFINDUPREC
+    ON (AGRFINDUPREC.ESTAB = NFCABAGRFIN.ESTAB)
+    AND (AGRFINDUPREC.SEQPAGAMENTO = NFCABAGRFIN.SEQPAGAMENTO)
+    
+    LEFT JOIN BAIXAS ON
+    BAIXAS.EMPRESA = AGRFINDUPREC.ESTAB
+    AND BAIXAS.DUPREC = AGRFINDUPREC.DUPREC
+    
+    WHERE NOT exists (
+        SELECT 
+        1 
+        FROM NOTAS_EXCLUIDENTES
+        WHERE NFITEM.ESTAB = NOTAS_EXCLUIDENTES.ESTABORIGEM
+        AND NFITEM.SEQNOTA = NOTAS_EXCLUIDENTES.SEQNOTAORIGEM
+        AND NFITEM.SEQNOTAITEM = NOTAS_EXCLUIDENTES.SEQNOTAITEMORIGEM
+        )
+),
+
+--- #### RETEN PORTO
+RETPORTO AS (
+    SELECT
+    NFITEM.CONTRATO,
+    NFITEM.ESTAB,
+    SUM(RETENPORTO.PESODESCARREGAMENTO)PESODESCARREGAMENTO,
+    SUM(RETENPORTO.PESORETENCAO)  PESORETENCAO
+    FROM NFITEM
+
+    INNER JOIN RETENPORTO ON  
+        RETENPORTO.ESTAB=NFITEM.ESTAB
+        AND   RETENPORTO.SEQNOTA=NFITEM.SEQNOTA
+        AND   RETENPORTO.SEQNOTAITEM=NFITEM.SEQNOTAITEM
+
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM NOTAS_EXCLUIDENTES
+        WHERE NFITEM.ESTAB = NOTAS_EXCLUIDENTES.ESTABORIGEM
+        AND NFITEM.SEQNOTA = NOTAS_EXCLUIDENTES.SEQNOTAORIGEM
+        AND NFITEM.SEQNOTAITEM = NOTAS_EXCLUIDENTES.SEQNOTAITEMORIGEM
+    )
+    
+    GROUP BY NFITEM.CONTRATO, NFITEM.ESTAB
+)
+---- ########### SALDO CONTRATOS
+SELECT
+CONTRATO.ESTAB,
+CONTRATOCFG.ENTRADASAIDA ES,
+CONTRATO.CONTCONF,CONTRATOCFG.DESCRICAO,
+CONTRATO.NUMEROCM, CONTAMOV.NOME,
+CONTRATO.CONTRATO,
+CONTRATO.NUMCOMPRADOR,
+CONTRATO.SAFRA,
+CONTRATO.NUMINTERMEDIARIO,
+TO_CHAR(CONTRATO.DTEMISSAO,'DD/MM/YYYY') AS DTEMISSAO,
+TO_CHAR(CONTRATO.DTVENCTO,'DD/MM/YYYY') AS DTVENCTO,
+TO_CHAR(CONTRATO.DTLIMENTIMP,'DD/MM/YYYY') AS LIMENT,    
+TO_CHAR(CONTRATO.DTMOVSALDO,'DD/MM/YYYY') AS DTMOVSALDO,
+CONTRATOITE.ITEM,
+CONTRATOITE.LOCAL,
+CONTRATO_U.QTDORI AS QTDORIGINAL,
+CONTRATOITE.QUANTIDADE AS QTDCONTRATO,
+CONTRATO_U.QTDORI *  CONTRATOITE.VALORUNIT/60 AS VLRORIGINAL,
+CONTRATOITE.VALORUNIT,
+CONTRATOITE.VALORTOTAL,
+CAST(COALESCE(PSALDO.NQTDSALDO,0)AS DECIMAL(18,2)) AS QTDSALDO,
+COALESCE(PSALDO.NQTDDEV,0) AS QTDDEV,
+ARREDONDAR(COALESCE(PSALDO.NQTDCANC,0),2) AS QTDCANC,
+(COALESCE(PSALDO.NQTD,0) - (COALESCE(PSALDO.NQTDCANC,0) + COALESCE(PSALDO.NQTDSALDO,0)))SALDOENT,
+COALESCE(PSALDO.NVLRSALDO,0) AS VLRSALDO,
+CONTRATO_U.STATUSASS,
+CONTRATO_U.STATUSAPROV,
+CONTRATO_U.STATUSFAT,
+CONTRATO.USERID,  
+CASE WHEN CONTRATO.SAFRA >=2223 THEN (RETPORTO.PESODESCARREGAMENTO) ELSE  (RETPORTO.PESODESCARREGAMENTO) - (PSALDO.NQTDDEV) END PESODESCARREGAMENTO,
+CASE WHEN CONTRATO.SAFRA >= 2223 THEN (RETPORTO.PESORETENCAO) ELSE (RETPORTO.PESORETENCAO) - (PSALDO.NQTDDEV) END PESORETENCAO,
+COALESCE(DUPLICATAS.PAGO,0) AS VLR_RECEBIDO
+
+    FROM CONTRATO
 
       INNER JOIN FILIAL ON
       (FILIAL.ESTAB = CONTRATO.ESTAB)
@@ -43,8 +158,8 @@ FROM CONTRATO
       INNER JOIN CONTRATOCFG ON
      (CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF)
 
-     left join contrato_u on contrato_u.estab=contrato.estab
-                        and contrato_u.contrato=contrato.contrato
+     LEFT JOIN CONTRATO_U ON CONTRATO_U.ESTAB=CONTRATO.ESTAB
+                        AND CONTRATO_U.CONTRATO=CONTRATO.CONTRATO
                         
     INNER JOIN U_TEMPRESA ON (U_TEMPRESA.ESTAB = CONTRATO.ESTAB)
     
@@ -57,175 +172,22 @@ FROM CONTRATO
                  CONTRATOITE.SEQITEM, CONTRATOITE.SEQITEM, NULL, NULL, NULL,
                  NULL, NULL)) PSALDO
     ON (0=0)
-
-left join (
-select nfitem.contrato,
-       nfitem.estab,
-       retenporto.pesodescarregamento,
-     retenporto.pesoretencao  from nfcab
-
-inner join nfitem on nfitem.estab=nfcab.estab
-                and nfitem.seqnota=nfcab.seqnota
-
-inner join retenporto on  retenporto.estab=nfitem.estab
-                    and   retenporto.seqnota=nfitem.seqnota
-                    and   retenporto.seqnotaitem=nfitem.seqnotaitem
-
-
-                    WHERE  NOT exists (SELECT * FROM NFITEMAPARTIRDE
-
-                                       INNER JOIN NFITEM NFI ON
-                                       NFI.ESTAB = NFITEMAPARTIRDE.ESTAB AND
-                                       NFI.SEQNOTA = NFITEMAPARTIRDE.SEQNOTA AND
-                                       NFI.SEQNOTAITEM = NFITEMAPARTIRDE.SEQNOTAITEM
-
-                                       INNER JOIN NFCAB NFDV ON
-                                       NFDV.ESTAB = NFI.ESTAB AND
-                                       NFDV.SEQNOTA = NFI.SEQNOTA
-
-                                       INNER JOIN NFCFG NFCFGDV ON
-                                       NFCFGDV.NOTACONF = NFDV.NOTACONF
-                                        AND NFCFGDV.NOTACONF IN (271)
-
-                                        LEFT join ctrcnfcab ctrcnfcabdv
-                                        on ctrcnfcabdv.estab = NFITEMAPARTIRDE.ESTABORIGEM
-                                        and ctrcnfcabdv.seqnota =  NFITEMAPARTIRDE.SEQNOTAORIGEM
-
-                                        LEFT JOIN CTRC CTRCDV ON
-                                        (CTRCDV.SEQCTRC = CTRCNFCABDV.SEQCTRC)
-
-                                        LEFT JOIN CTRCCFG CTRCCFGDV  ON
-                                        (CTRCCFGDV.ESTAB = CTRCDV.ESTAB)
-                                        AND (CTRCCFGDV.CODIGOCFG = CTRCDV.CODIGOCFG)
-
-                                       INNER JOIN NATOPERACAO NATDV ON
-                                       NATDV.NATUREZADAOPERACAO = NFCFGDV.NATUREZADAOPERACAO AND
-                                       NATDV.ENTRADASAIDA = NFCFGDV.ENTRADASAIDA 
-
-                                       WHERE NFITEM.ESTAB = NFITEMAPARTIRDE.ESTABORIGEM
-                                         AND NFITEM.SEQNOTA = NFITEMAPARTIRDE.SEQNOTAORIGEM
-                                         AND NFITEM.SEQNOTAITEM = NFITEMAPARTIRDE.SEQNOTAITEMORIGEM
-                                         --AND COALESCE(ctrcnfcabDV.valorfrete,0)= 0
-										 ))rtporto
-
-                    on contrato.estab=rtporto.estab
-                    and contrato.contrato=rtporto.contrato
-
-left join (SELECT CONTRATO.ESTAB,CONTRATO.CONTRATO,
-  SUM(VDUPREC.VALOR - VDUPREC.SALDO)AS RECEBIDO
-
-FROM CONTRATONFITE
-
-INNER JOIN NFCAB
-ON (NFCAB.ESTAB = CONTRATONFITE.ESTABNOTA)
-AND (NFCAB.SEQNOTA = CONTRATONFITE.SEQNOTA)
-AND (NFCAB.STATUS <> 'C')
-
-inner join nfitem on nfitem.estab=nfcab.estab
-                and nfitem.seqnota=nfcab.seqnota
-
-INNER JOIN CONTRATO
-ON  (CONTRATO.ESTAB    = CONTRATONFITE.ESTAB)
-AND (CONTRATO.CONTRATO = CONTRATONFITE.CONTRATO) 
-
-inner JOIN NFCABAGRFIN
-ON (NFCAB.ESTAB = NFCABAGRFIN.ESTAB)
-AND (NFCAB.SEQNOTA = NFCABAGRFIN.SEQNOTA)
-
-inner JOIN AGRFINDUPREC
-ON (AGRFINDUPREC.ESTAB = NFCABAGRFIN.ESTAB)
-AND (AGRFINDUPREC.SEQPAGAMENTO = NFCABAGRFIN.SEQPAGAMENTO)
-
-inner JOIN VDUPREC
-ON (VDUPREC.EMPRESA = AGRFINDUPREC.ESTAB)
-AND (VDUPREC.DUPREC = AGRFINDUPREC.DUPREC)
-
- WHERE  NOT exists (SELECT * FROM NFITEMAPARTIRDE
-
-                                       INNER JOIN NFITEM NFI ON
-                                       NFI.ESTAB = NFITEMAPARTIRDE.ESTAB AND
-                                       NFI.SEQNOTA = NFITEMAPARTIRDE.SEQNOTA AND
-                                       NFI.SEQNOTAITEM = NFITEMAPARTIRDE.SEQNOTAITEM
-
-                                       INNER JOIN NFCAB NFDV ON
-                                       NFDV.ESTAB = NFI.ESTAB AND
-                                       NFDV.SEQNOTA = NFI.SEQNOTA
-
-                                       INNER JOIN NFCFG NFCFGDV ON
-                                       NFCFGDV.NOTACONF = NFDV.NOTACONF
-                                        AND NFCFGDV.NOTACONF IN (271)
-
-                                        LEFT join ctrcnfcab ctrcnfcabdv
-                                        on ctrcnfcabdv.estab = NFITEMAPARTIRDE.ESTABORIGEM
-                                        and ctrcnfcabdv.seqnota =  NFITEMAPARTIRDE.SEQNOTAORIGEM
-
-                                        LEFT JOIN CTRC CTRCDV ON
-                                        (CTRCDV.SEQCTRC = CTRCNFCABDV.SEQCTRC)
-
-                                        LEFT JOIN CTRCCFG CTRCCFGDV  ON
-                                        (CTRCCFGDV.ESTAB = CTRCDV.ESTAB)
-                                        AND (CTRCCFGDV.CODIGOCFG = CTRCDV.CODIGOCFG)
-
-                                       INNER JOIN NATOPERACAO NATDV ON
-                                       NATDV.NATUREZADAOPERACAO = NFCFGDV.NATUREZADAOPERACAO AND
-                                       NATDV.ENTRADASAIDA = NFCFGDV.ENTRADASAIDA 
-
-                                       WHERE NFITEM.ESTAB = NFITEMAPARTIRDE.ESTABORIGEM
-                                         AND NFITEM.SEQNOTA = NFITEMAPARTIRDE.SEQNOTAORIGEM
-                                         AND NFITEM.SEQNOTAITEM = NFITEMAPARTIRDE.SEQNOTAITEMORIGEM)
-                                         --AND COALESCE(ctrcnfcabDV.valorfrete,0)= 0)
-
-GROUP BY CONTRATO.ESTAB,CONTRATO.CONTRATO
-
-
-)VLRREC
-
-     on contrato.estab=VLRREC.estab
-    and contrato.contrato=VLRREC.contrato
-
-
-where
- /*contrato.estab IN (12,52,30,34,26,31,54,25)
-
- and*/ contratoite.item IN(1,3,2,6)
-
- AND U_TEMPRESA.EXVENDA = 'S'
     
- AND U_TEMPRESA.GRAOS = 'S'
+    LEFT JOIN RETPORTO ON
+        RETPORTO.ESTAB = CONTRATO.ESTAB
+        AND RETPORTO.CONTRATO = CONTRATO.CONTRATO
+        
+    LEFT JOIN DUPLICATAS ON
+        DUPLICATAS.ESTAB = CONTRATO.ESTAB
+        AND DUPLICATAS.CONTRATO = CONTRATO.CONTRATO
+    
+where
+CONTRATOITE.ITEM IN(1,3,2,6)
 
- and contrato.contconf IN(20,21,23)
+AND U_TEMPRESA.EXVENDA = 'S'
+    
+AND U_TEMPRESA.GRAOS = 'S'
 
-and contrato.dtmovsaldo > ='01/01/2021' 
+AND CONTRATO.CONTCONF IN(20,21,23)
 
- group by CONTRATO.ESTAB,
-       contratocfg.entradasaida,
-       contrato.contconf,contratocfg.descricao,
-       CONTRATO.NUMEROCM, CONTAMOV.NOME,
-       CONTRATO.CONTRATO,
-       contrato.numcomprador,
-       contrato.safra,
-       contrato.numintermediario,
-       contrato.dtemissao,
-       contrato.dtvencto,
-       contrato.dtlimentimp,    
-       contrato.dtmovsaldo,
-       CONTRATOITE.ITEM,
-       contratoite.local,
-       contrato_u.qtdori,
-       contratoite.quantidade,
-        contrato_u.qtdori,
-       contratoite.valorunit,
-       contratoite.valortotal,
-       PSALDO.NQTDSALDO,
-       PSALDO.NQTDDEV,
-       PSALDO.NQTDCANC,
-       PSALDO.nqtd,
-       PSALDO.NVLRSALDO,       
-       contrato_u.statusass,
-       contrato_u.statusaprov,
-       contrato_u.statusfat,
-       contrato.userid,
-       VLRREC.RECEBIDO
-
-       order by  CONTRATO.ESTAB,
-       CONTRATO.CONTRATO
+AND CONTRATO.DTMOVSALDO > ='01/01/2021' 
