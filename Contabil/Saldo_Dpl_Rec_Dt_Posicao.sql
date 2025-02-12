@@ -1,71 +1,92 @@
-WITH BAIXAS AS (
+WITH DPL AS (
     SELECT
     EMPRESA,
     DUPREC,
-    SUM(VALOR) AS VLR,
+    SEQRECBTO,
+    (VALOR) AS VALOR
+    FROM PRDUPRED
+
+    UNION ALL
+    
+    SELECT
+    EMPRESA,
+    DUPREC,
+    SEQRECBTO,
+    (VLRCHEQREC) AS VALOR
+    FROM PRDURECH
+    
+    
+    UNION ALL
+    
+    SELECT
+    EMPRESA,
+    DUPREC,
+    SEQRECBTO,
+    VALOR
+    FROM PRDUREDUP
+    
+    UNION ALL
+    
+    SELECT
+    EMPRESA,
+    DUPREC,
+    SEQRECBTO,
+    VALOR
+    FROM PRDURECAR
+    
+    UNION ALL
+    
+    SELECT
+    EMPRESA,
+    DUPREC,
+    SEQRECBTO,
+    VALOR
+    FROM PRDUREOUT
+    
+    UNION ALL
+    
+    SELECT
+    EMPRESA,
+    DUPREC,
+    SEQRECBTO,
+    VALOR
+    FROM PRDURECM
+    WHERE TROCO = 'N'
+    
+),
+
+BAIXAS_DPL AS (
+
+    SELECT
+    EMPRESA,
+    DUPREC,
+    SEQRECBTO,
+    SUM(VALOR) AS VALOR
+    FROM DPL
+
+    GROUP BY EMPRESA,DUPREC,SEQRECBTO
+
+), 
+
+BAIXAS AS (
+    SELECT
+    PRDUPREC.EMPRESA,
+    PRDUPREC.DUPREC,
+    SUM(BAIXAS_DPL.VALOR) AS VLR,
     SUM(PRDUPREC.VALOR * CASE WHEN PRDUPREC.TIPOREC IN ('R','J') THEN 1 ELSE -1 END) AS PAGO,
-    SUM(CASE WHEN PRDUPREC.TIPOREC IN ('J') THEN PRDUPREC.VALOR ELSE 0 END) JUROS,
-    SUM(CASE WHEN PRDUPREC.TIPOREC IN ('R') THEN PRDUPREC.VALOR ELSE 0 END) REC
+    SUM(CASE WHEN PRDUPREC.TIPOREC IN ('J') THEN BAIXAS_DPL.VALOR ELSE 0 END) JUROS,
+    SUM(CASE WHEN PRDUPREC.TIPOREC IN ('R') THEN BAIXAS_DPL.VALOR ELSE 0 END) REC
     FROM PRDUPREC
+    
+    INNER JOIN BAIXAS_DPL ON 
+        BAIXAS_DPL.EMPRESA = PRDUPREC.EMPRESA
+        AND BAIXAS_DPL.DUPREC = PRDUPREC.DUPREC
+        and BAIXAS_DPL.SEQRECBTO= PRDUPREC.SEQRECBTO
 
     WHERE TIPOREC IN ('R','J')
     AND DTRECBTO <= :DTPOSICAO
-    AND (
-        
-        EXISTS (
-            SELECT
-            1
-            FROM PRDUPRED
-            WHERE(PRDUPRED.EMPRESA = PRDUPREC.EMPRESA)
-                                            AND (PRDUPRED.DUPREC = PRDUPREC.DUPREC)
-                                            AND (PRDUPRED.SEQRECBTO = PRDUPREC.SEQRECBTO)
-            )
-        OR
-        EXISTS (
-            SELECT
-            1
-            FROM PRDUREDUP
-            WHERE (PRDUREDUP.EMPRESA = PRDUPREC.EMPRESA)
-                                            AND (PRDUREDUP.DUPREC = PRDUPREC.DUPREC)
-                                          AND (PRDUREDUP.SEQRECBTO = PRDUPREC.SEQRECBTO)
-        )
-        OR
-        EXISTS  (
-            SELECT
-            1
-            FROM PRDURECH
-            WHERE (PRDURECH.EMPRESA = PRDUPREC.EMPRESA)
-                                            AND (PRDURECH.DUPREC = PRDUPREC.DUPREC)
-                                            AND (PRDURECH.SEQRECBTO = PRDUPREC.SEQRECBTO)
-        )
-       OR 
-       EXISTS (
-        SELECT
-        1
-        FROM PRDURECAR
-        WHERE (PRDURECAR.EMPRESA = PRDUPREC.EMPRESA)
-                                             AND (PRDURECAR.DUPREC = PRDUPREC.DUPREC)
-                                             AND (PRDURECAR.SEQRECBTO = PRDUPREC.SEQRECBTO)
-        )
-        OR
-        EXISTS (
-            SELECT
-            1
-            FROM PRDUREOUT
-            WHERE (PRDUREOUT.EMPRESA = PRDUPREC.EMPRESA)
-                                             AND (PRDUREOUT.DUPREC = PRDUPREC.DUPREC)
-                                             AND (PRDUREOUT.SEQRECBTO = PRDUPREC.SEQRECBTO)
-            )
-        OR EXISTS (
-            SELECT
-            1
-            FROM PRDURECM
-            WHERE (PRDURECM.EMPRESA = PRDUPREC.EMPRESA)
-                                            AND (PRDURECM.DUPREC = PRDUPREC.DUPREC)
-                                            AND (PRDURECM.SEQRECBTO = PRDUPREC.SEQRECBTO)
-            )
-    )
-    GROUP BY EMPRESA,DUPREC
+   
+    GROUP BY PRDUPREC.EMPRESA,PRDUPREC.DUPREC
 ),
 
 CTRNOTA AS
@@ -115,18 +136,21 @@ REAJ_MAX AS (
 
 DUP_REAJ AS (
    SELECT 
-  RA.ESTAB,
-  RA.DUPREC,
-  CASE 
-    WHEN CAST(:DTPOSICAO AS DATE) < RM.DTREAJUSTE THEN RA.VALORREAJ 
-    ELSE RM.VALORREAJ 
-  END AS VALORREAJ
-FROM 
-  (SELECT * FROM REAJ_ANT WHERE RN = 1) RA
-JOIN
-  (SELECT * FROM REAJ_MAX WHERE RN = 1) RM
-    ON RA.ESTAB = RM.ESTAB 
-   AND RA.DUPREC = RM.DUPREC
+      RM.ESTAB,
+      RM.DUPREC,
+      CASE 
+         -- Se a data de posição for menor que a data do reajuste, e não houver registro em REAJ_ANT,
+         -- usa o VALORATU (valor antes do reajuste) de RM; caso haja RA, você pode optar por usar
+         -- o VALORREAJ de RA se isso for o desejado. Aqui, por exemplo, usamos NVL para usar RA.VALORREAJ se existir;
+         -- se não, usamos RM.VALORATU.
+         WHEN CAST(:DTPOSICAO AS DATE) < RM.DTREAJUSTE THEN NVL(RA.VALORREAJ, RM.VALORATU)
+         ELSE RM.VALORREAJ
+      END AS VALORREAJ
+   FROM 
+      (SELECT * FROM REAJ_MAX WHERE RN = 1) RM
+   LEFT JOIN
+      (SELECT * FROM REAJ_ANT WHERE RN = 1) RA
+      ON RM.ESTAB = RA.ESTAB AND RM.DUPREC = RA.DUPREC
 )
 
 select
@@ -215,5 +239,5 @@ AND PDUPREC.DTEMISSAO BETWEEN :DTINI AND :DTFIM
 AND FILIAL.EMPRESA = 1
 AND (0 IN (:ESTAB) OR FILIAL.ESTAB IN (:ESTAB))
 --AND PDUPREC.CLIENTE = 75916
-AND PDUPREC.INCMANUT <> 'S'	
+AND (PDUPREC.INCMANUT <> 'S'	or pduprec.analitica = 336 OR PDUPREC.ANALITICA = 97)
 --AND PDUPREC.DUPREC = '169123-1' AND PDUPREC.CLIENTE = 1714
