@@ -34,6 +34,8 @@ V_MULTIPLIC NUMBER ;
 v_item NUMBER;
 v_seqitem number ;
 V_CONTCONF NUMBER ;
+v_moeda number ;
+v_moeda_data varchar2(3) ;
 BEGIN
 
    IF UPDATING THEN
@@ -65,6 +67,10 @@ BEGIN
         WHEN NO_DATA_FOUND THEN
           V_MULTIPLIC := 60;
       END;
+      
+      v_moeda := NVL(:NEW.MOEDA, 0);
+   
+   v_moeda_data := CASE WHEN V_MOEDA = 2 THEN 'B' ELSE NULL END ;
 
    select  TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2 INTO TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2 from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
@@ -79,11 +85,11 @@ BEGIN
 
    INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.numintermediario,contrato.endalternativo,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
-   contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,pessentrega,seqendentrega,pessretirada,seqendretirada)
+   contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,pessentrega,seqendentrega,pessretirada,seqendretirada,moedadia)
 
    VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(prazopagamento,to_date(CURRENT_DATE)),:new.userid,
-   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,0,:NEW.OBS,999,'N',:new.valortotal,'I',:new.DTPREVISAO,:new.DTVALIDADE,
-   :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,:NEW.pessentrega,:NEW.seqendentrega,:NEW.pessretirada,:NEW.seqendretirada);
+   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,999,'N',:new.valortotal,'I',:new.DTPREVISAO,:new.DTVALIDADE,
+   :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,:NEW.pessentrega,:NEW.seqendentrega,:NEW.pessretirada,:NEW.seqendretirada,v_moeda_data);
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
    CONTRATOITE.VALORTOTAL,CONTRATOITE.TIPOSALDO,CONTRATOITE.PRECOVENDA,CONTRATOITE.QUALCOTACAO,CONTRATOITE.DTMOVSALDO)
