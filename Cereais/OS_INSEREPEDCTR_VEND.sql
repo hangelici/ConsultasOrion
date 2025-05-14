@@ -30,6 +30,10 @@ TIPO VARCHAR2(1);
 P_VALOR NUMBER;
 P_UNIDADE VARCHAR2(2);
 P_NUMDIASPGTO NUMBER;
+V_MULTIPLIC NUMBER ;
+v_item NUMBER;
+v_seqitem number ;
+V_CONTCONF NUMBER ;
 BEGIN
 
    IF UPDATING THEN
@@ -48,11 +52,30 @@ BEGIN
    END;
    select peditem.item,peditem.quantidade,peditem.valor,peditem.valorunitario,local INTO ITEM,quantidade,valor,valorunitario,pedlocal  
    from peditem where peditem.estab=:NEW.ESTAB and peditem.serie=:NEW.SERIE and peditem.numero=:NEW.NUMERO; 
+   
+    select peditem.item into v_item from peditem where peditem.estab=:NEW.ESTAB and peditem.serie=:NEW.SERIE and peditem.numero=:NEW.NUMERO; 
+
+   
+   BEGIN
+        SELECT MULTIPLIC 
+          INTO V_MULTIPLIC 
+          FROM ITEMPREMB 
+         WHERE ITEMPREMB.ESTAB = :NEW.ESTAB AND ITEMPREMB.ITEM = v_item;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          V_MULTIPLIC := 60;
+      END;
 
    select  TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2 INTO TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2 from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
 
    CONTRATOCONF := CASE WHEN :NEW.PEDIDOCONF = 250 THEN CONTCONF END;
+   V_CONTCONF := CASE WHEN :NEW.PEDIDOCONF = 250 THEN CONTCONF END;
+
+    select contratocfgite.seqitem into v_seqitem from contratocfgite 
+   where contratocfgite.contconf = V_CONTCONF
+   and contratocfgite.item = v_item
+   ;
 
    INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.numintermediario,contrato.endalternativo,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
@@ -64,7 +87,7 @@ BEGIN
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
    CONTRATOITE.VALORTOTAL,CONTRATOITE.TIPOSALDO,CONTRATOITE.PRECOVENDA,CONTRATOITE.QUALCOTACAO,CONTRATOITE.DTMOVSALDO)
-   VALUES (:NEW.ESTAB,CONTRATOD,ITEM,ITEM,PEDLOCAL,to_date(CURRENT_DATE),QUANTIDADE,ARREDONDAR((valorunitario*60),6),ARREDONDAR((VALOR),2),'A','I','N',:new.DTPREVISAO);
+   VALUES (:NEW.ESTAB,CONTRATOD,v_seqitem/*ITEM*/,ITEM,PEDLOCAL,to_date(CURRENT_DATE),QUANTIDADE,ARREDONDAR((valorunitario*V_MULTIPLIC),6),ARREDONDAR((VALOR),2),'A','I','N',:new.DTPREVISAO);
 
    INSERT INTO CONTRATOESTAB (ESTAB,CONTRATO,ESTABBX)
    VALUES (:NEW.ESTAB,CONTRATOD,:NEW.ESTAB);
