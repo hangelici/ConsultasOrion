@@ -35,6 +35,8 @@ P_ESTABORIGEM NUMBER;
 V_MULTIPLIC NUMBER ;
 v_item NUMBER;
 v_seqitem number ;
+v_moeda number ;
+v_moeda_data varchar2(3) ;
 BEGIN
 
    IF UPDATING THEN
@@ -58,6 +60,10 @@ BEGIN
    
    select peditem.item into v_item from peditem where peditem.estab=:NEW.ESTAB and peditem.serie=:NEW.SERIE and peditem.numero=:NEW.NUMERO; 
    
+   v_moeda := NVL(:NEW.MOEDA, 0);
+   
+   v_moeda_data := CASE WHEN V_MOEDA = 2 THEN 'B' ELSE NULL END ;
+   
    select contratocfgite.seqitem into v_seqitem from contratocfgite 
    where contratocfgite.contconf = (CASE WHEN :NEW.PEDIDOCONF = 200 THEN 1 WHEN :NEW.PEDIDOCONF = 204 THEN 7 WHEN :NEW.PEDIDOCONF = 202 THEN 50 ELSE 2 END)
    and contratocfgite.item = v_item
@@ -80,11 +86,11 @@ BEGIN
    
    INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.numintermediario,contrato.endalternativo,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
-   contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete)
+   contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,moedadia)
 
    VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(prazopagamento,to_date(CURRENT_DATE)),:new.userid,
-   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,0,:NEW.OBS,1,'N',:new.valortotal,(case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end),:new.DTPREVISAO,:new.DTVALIDADE,
-   :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete);
+   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,(case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end),:new.DTPREVISAO,:new.DTVALIDADE,
+   :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,v_moeda_data);
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
    CONTRATOITE.VALORTOTAL,CONTRATOITE.TIPOSALDO,CONTRATOITE.PRECOVENDA,CONTRATOITE.QUALCOTACAO,CONTRATOITE.DTMOVSALDO)
