@@ -89,7 +89,7 @@ BEGIN
    contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,moedadia)
 
    VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(prazopagamento,to_date(CURRENT_DATE)),:new.userid,
-   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,(case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end),:new.DTPREVISAO,:new.DTVALIDADE,
+   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,'A',:new.DTPREVISAO,:new.DTVALIDADE,
    :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,v_moeda_data);
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
@@ -134,14 +134,15 @@ BEGIN
    INSERT INTO contratodtvencto (estab,contrato,sequencia,dtvencto,qtdfluxocx,numdiaspagto)
    VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN prazopagamento ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
-   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET,INSECAOTAXA,ESTABORIGEM)   
+   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET,INSECAOTAXA,ESTABORIGEM, ATIVO_OS)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
    TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,
   -- 'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
    :new.DTPREVISAO,
    QTRIGO,
    --'Sem_Padrao',
-   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET, P_INSECAOTAXA,P_ESTABORIGEM);   
+   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET, P_INSECAOTAXA,P_ESTABORIGEM,
+   (case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end));   
 
    INSERT INTO u_logpedctr ( u_logpedctr_id,estab,serie_ped,pedido,confctr,contrato,GERADO,EXCLUIR,NUMEROCM,QUANTIDADE) VALUES 
    (OS_GEN_LOGPEDCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.SERIE,:NEW.NUMERO,CONTRATOCONF,CONTRATOD,'S','N',:NEW.PESSOA,QUANTIDADE); 
