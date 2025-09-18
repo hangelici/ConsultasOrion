@@ -37,6 +37,9 @@ v_item NUMBER;
 v_seqitem number ;
 v_moeda number ;
 v_moeda_data varchar2(3) ;
+v_prazo DATE;
+v_regiao varchar2(100);
+
 BEGIN
 
    IF UPDATING THEN
@@ -88,15 +91,15 @@ BEGIN
       END;
 
    select  TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,COALESCE(DOCPENDENTE,'N')
-   AS DOCPENDENTE,PERCENTUAL1,PERCENTUAL2, INSECAOTAXA,ESTABORIGEM
-    INTO TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,P_ATIVO,PERCENTUAL1,PERCENTUAL2, P_INSECAOTAXA,P_ESTABORIGEM from pedcab_u
+   AS DOCPENDENTE,PERCENTUAL1,PERCENTUAL2, INSECAOTAXA,ESTABORIGEM,DTVECTOORIGEM,REGIAO
+    INTO TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,P_ATIVO,PERCENTUAL1,PERCENTUAL2, P_INSECAOTAXA,P_ESTABORIGEM,v_prazo,v_regiao from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
    
    INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.numintermediario,contrato.endalternativo,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
    contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,moedadia)
 
-   VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(prazopagamento,to_date(CURRENT_DATE)),:new.userid,
+   VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(v_prazo,prazopagamento),:new.userid,
    :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,'A',:new.DTPREVISAO,:new.DTVALIDADE,
    :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,v_moeda_data);
 
@@ -140,9 +143,9 @@ BEGIN
    END IF;
 
    INSERT INTO contratodtvencto (estab,contrato,sequencia,dtvencto,qtdfluxocx,numdiaspagto)
-   VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN prazopagamento ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
+   VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN coalesce(v_prazo,prazopagamento) ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
-   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET,INSECAOTAXA,ESTABORIGEM, ATIVO_OS)   
+   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET,INSECAOTAXA,ESTABORIGEM, ATIVO_OS,REGIAO)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
    TIPOFRETES,TIPOENTREGA,TIPOPGTO,TIPOPESSOA,
   -- 'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
@@ -150,7 +153,7 @@ BEGIN
    QTRIGO,
    --'Sem_Padrao',
    'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET, P_INSECAOTAXA,P_ESTABORIGEM,
-   (case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end));   
+   (case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end),v_regiao);   
 
    INSERT INTO u_logpedctr ( u_logpedctr_id,estab,serie_ped,pedido,confctr,contrato,GERADO,EXCLUIR,NUMEROCM,QUANTIDADE) VALUES 
    (OS_GEN_LOGPEDCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.SERIE,:NEW.NUMERO,CONTRATOCONF,CONTRATOD,'S','N',:NEW.PESSOA,QUANTIDADE); 
