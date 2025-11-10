@@ -1,5 +1,5 @@
 WITH  NFCAB_FILTRADA AS (
-    SELECT *
+    SELECT ESTAB,SERIE,NOTA,NUMEROCM,CHAVEACESSONFE,USERID,DTEMISSAO,SEQENDERECO,VALOR,CLIENTEIMP,SEQNOTA,NOTACONF
     FROM NFCAB
     WHERE DTENTSAI BETWEEN :DTINICIAL AND :DTFINAL
       AND STATUS <> 'C'
@@ -64,7 +64,17 @@ SIEG_ITENS AS (
     cofinstaxa AS ALIQUOTA_COFINS,
     PISVALOR,
     COFINSVALOR,
-  CODSITUACAO
+  (
+    CASE 
+        WHEN CODSITUACAO IS NOT NULL THEN 9999 
+        WHEN LENGTH(icmscdcst) >= 4 THEN 9999
+        ELSE CAST(icmscdcst AS NUMBER) 
+    END) as CODSITUACAO,
+    
+   CAST(
+    CASE WHEN LENGTH(icmscdcst) >=4 THEN '0' ELSE piscdcst END 
+    AS NUMBER
+    ) CSTITENS
     FROM U_NOTASSIEG_ITENS 
     
 ),
@@ -176,11 +186,11 @@ NFCABPRODUTOR_AJUSTADO AS (
     FROM NFCABPRODUTOR
 )
 
-select
+select DISTINCT
 *
 from(
 
-SELECT DISTINCT
+SELECT --DISTINCT
 coalesce(ENDE.TIPO,MOV.TIPO) as tipo,
 --R.UF AS UF_2,
 CID.UF,
@@ -282,17 +292,22 @@ CASE WHEN NFCAB.clienteimp IS NOT NULL THEN filial.INSCEST ELSE coalesce(trim(en
 (SIEG.ie) AS IE_FISCALIO,
 --case when coalesce(trim(ende.credencialagro),trim(MOV.inscestad)) <> cast(SIEG.ie as number) then 'S' ELSE 'N' end dif_ie,
 CASE
- WHEN REGEXP_LIKE(filial.INSCEST, '^\d+$') 
-        and   REGEXP_LIKE(SIEG.ie, '^\d+$')
-        and TO_NUMBER(filial.INSCEST) = TO_NUMBER(SIEG.ie)
-        and NFCAB.clienteimp < 100
-        then 'N'
-  WHEN REGEXP_LIKE(coalesce(trim(ende.credencialagro), trim(MOV.inscestad)), '^\d+$') 
-       AND REGEXP_LIKE(SIEG.ie, '^\d+$')
-       AND TO_NUMBER(coalesce(trim(ende.credencialagro), trim(MOV.inscestad))) <> TO_NUMBER(SIEG.ie)
-       AND COALESCE(NFCAB.clienteimp,101) < 100
-  THEN 'S'
-  ELSE 'N'
+    WHEN TRANSLATE(filial.INSCEST, '0123456789', '0000000000') = filial.INSCEST
+         AND TRANSLATE(SIEG.ie, '0123456789', '0000000000') = SIEG.ie
+         AND TO_NUMBER(filial.INSCEST) = TO_NUMBER(SIEG.ie)
+         AND NFCAB.clienteimp < 100
+    THEN 'N'
+
+    WHEN TRANSLATE(coalesce(trim(ende.credencialagro), trim(MOV.inscestad)),
+                   '0123456789', '0000000000')
+         = coalesce(trim(ende.credencialagro), trim(MOV.inscestad))
+         AND TRANSLATE(SIEG.ie, '0123456789', '0000000000') = SIEG.ie
+         AND TO_NUMBER(coalesce(trim(ende.credencialagro), trim(MOV.inscestad)))
+               <> TO_NUMBER(SIEG.ie)
+         AND COALESCE(NFCAB.clienteimp,101) < 100
+    THEN 'S'
+
+    ELSE 'N'
 END AS DIF_IE
 /*,
 nfcab.chaveacessonfe,
@@ -378,9 +393,9 @@ LEFT JOIN OS_REGRA_NOTA_2 R ON
     AND R.ITEM = COALESCE(MARC.ITEM,0)
     AND R.CFOPFORNECEDOR = SIEG_ITENS.CFOP
     AND R.NCM = COALESCE(NCM_MARC.NCM,'0')--SIEG_ITENS.NCM
-    AND CAST(R.CSTFORNECEDOR AS NUMBER) = (CASE WHEN SIEG_ITENS.CODSITUACAO IS NOT NULL THEN 9999 ELSE CAST(SIEG_ITENS.CST_ICMS AS NUMBER) END)
+    AND CAST(R.CSTFORNECEDOR AS NUMBER) = SIEG_ITENS.CODSITUACAO--(CASE WHEN SIEG_ITENS.CODSITUACAO IS NOT NULL THEN 9999 ELSE CAST(SIEG_ITENS.CST_ICMS AS NUMBER) END)
     AND TRIM(R.ORIGEM) = TRIM(coalesce(ENDE.TIPO,MOV.TIPO))
-    AND CAST(R.CSTPISCOFIS AS NUMBER) =  CAST(CASE WHEN LENGTH(SIEG_ITENS.CST_ICMS)>=4 THEN '0' ELSE (SIEG_ITENS.CST_PIS) END AS NUMBER)
+    AND CAST(R.CSTPISCOFIS AS NUMBER) =  SIEG_ITENS.CSTITENS--CAST(CASE WHEN LENGTH(SIEG_ITENS.CST_ICMS)>=4 THEN '0' ELSE (SIEG_ITENS.CST_PIS) END AS NUMBER)
     and R.ORIGEM  IN ('EMPRESA','PRODUTOR')
 
 WHERE
@@ -396,7 +411,7 @@ and nfcab.estab <> 5
 UNION ALL
 
 
-SELECT DISTINCT
+SELECT --DISTINCT
 coalesce(ENDE.TIPO,MOV.TIPO) as tipo,
 --R.UF AS UF_2,
 CID.UF,
