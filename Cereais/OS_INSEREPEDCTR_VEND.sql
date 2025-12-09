@@ -36,6 +36,8 @@ v_seqitem number ;
 V_CONTCONF NUMBER ;
 v_moeda number ;
 v_moeda_data varchar2(3) ;
+v_prazo DATE;
+
 BEGIN
 
    IF UPDATING THEN
@@ -45,8 +47,15 @@ BEGIN
 
    --SELECT MAX(CONTRATO)+1 INTO CONTRATOD FROM CONTRATO WHERE ESTAB=:NEW.ESTAB;
    SELECT (ID_INT)+1 INTO CONTRATOD from seqprimarykey where tabela='CONTRATO'AND SUBSTR(CHAVEVALOR,7,4)=:NEW.ESTAB; 
-   SELECT CASE WHEN FORMAPGTO = 20 THEN current_date else prazopagamento end into prazopagamento FROM pedcabpgto where pedcabpgto.estab=:NEW.ESTAB AND pedcabpgto.SERIE=:NEW.SERIE AND pedcabpgto.NUMERO=:NEW.NUMERO;
-      BEGIN
+   
+   SELECT 
+        CASE 
+            WHEN (FORMAPGTO IN (24,22,20,21) AND (PRAZOPAGAMENTO > CURRENT_DATE)) THEN PRAZOPAGAMENTO
+            ELSE CURRENT_DATE 
+        END INTO PRAZOPAGAMENTO 
+    FROM PEDCABPGTO WHERE PEDCABPGTO.ESTAB=:NEW.ESTAB AND PEDCABPGTO.SERIE=:NEW.SERIE AND PEDCABPGTO.NUMERO=:NEW.NUMERO;
+      
+   BEGIN
    SELECT NUMDIASPAGTO INTO P_NUMDIASPGTO FROM PEDCABDTPAGTO where PEDCABDTPAGTO.estab=:NEW.ESTAB AND PEDCABDTPAGTO.SERIE=:NEW.SERIE AND PEDCABDTPAGTO.NUMERO=:NEW.NUMERO;
    EXCEPTION 
       WHEN NO_DATA_FOUND THEN 
@@ -72,7 +81,11 @@ BEGIN
    
    v_moeda_data := CASE WHEN V_MOEDA = 2 THEN 'B' ELSE NULL END ;
 
-   select  TIPOFRETES,OS_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2 INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2 from pedcab_u
+   select
+      TIPOFRETES,OS_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,
+      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM
+      INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,v_prazo
+   from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
 
    CONTRATOCONF := CASE WHEN :NEW.PEDIDOCONF = 250 THEN CONTCONF END;
@@ -87,7 +100,7 @@ BEGIN
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
    contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,pessentrega,seqendentrega,pessretirada,seqendretirada,moedadia)
 
-   VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(prazopagamento,to_date(CURRENT_DATE)),:new.userid,
+   VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(v_prazo,prazopagamento),:new.userid,
    :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,999,'N',:new.valortotal,'I',:new.DTPREVISAO,:new.DTVALIDADE,
    :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,:NEW.pessentrega,:NEW.seqendentrega,:NEW.pessretirada,:NEW.seqendretirada,v_moeda_data);
 
@@ -131,7 +144,7 @@ BEGIN
    END IF;
 
    INSERT INTO contratodtvencto (estab,contrato,sequencia,dtvencto,qtdfluxocx,numdiaspagto)
-   VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN prazopagamento ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
+   VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN COALESCE(v_prazo,prazopagamento) ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
    INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
