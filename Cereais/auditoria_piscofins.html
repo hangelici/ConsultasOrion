@@ -65,6 +65,7 @@
                     <th>PIS</th>
                     <th>COFINS</th>
                     <th>Pedido</th>
+                    <th>Contrato</th>
                      <th>PIS</th>
                     <th>COFINS</th>
                 </tr>
@@ -97,6 +98,13 @@
                           <span th:if="${#lists.isEmpty(ERP)}">-</span>
                       </td>					  
                     <td th:text="${d.PED_INTEGRA}" style="text-align:left"></td>
+                    <!-- CTR -->
+                      <td style="text-align:right">
+                          <span th:each="a : ${ERP}" 
+                                th:if="${a.PEDIDO == d.PED_INTEGRA && a.ESTAB == d.EMPRESA_INTEGRA && a.PESSOA == d.PESSOA_INTEGRA && a.ITEM == d.ITEM_INTEGRA }"
+                                th:text="${a.CONTRATO}"></span>
+                          <span th:if="${#lists.isEmpty(ERP)}">-</span>
+                      </td>	
                     <td class="format-number" th:text="${d.PIS}" style="text-align:right"></td>
                     <td class="format-number" th:text="${d.COFINS}" style="text-align:right"></td>
                 </tr>
