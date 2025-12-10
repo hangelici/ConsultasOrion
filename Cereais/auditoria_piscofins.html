@@ -1,0 +1,231 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+<div id="layout">
+    <h3>Auditoria Fiscal Tributação PIS/COFINS</h3>
+  
+<!-- Spinner de Carregamento -->
+<div id="loading" style="position: fixed; width: 100%; height: 100%; background-color: white; z-index: 1000; display: flex; justify-content: center; align-items: center;">
+    <i class="fas fa-spinner fa-spin" style="font-size: 50px;"></i>
+</div>
+  
+    <div id="header">
+        <!-- Campos de Filtros -->
+        <div class="filters">
+            <input type="text" id="pedidoFilter" onkeyup="filterTable('pedidoFilter', 0)" placeholder="Filtrar por Pedido">
+        <select id="estabFilter" onchange="applyAllFilters()">
+            <option value="">Todas (Filiais)</option>
+            <!-- Popula as opções do select com dados de Filiais, exceto OSESTAB = 0 -->
+            <tr th:each="f : ${Filiais}">
+                <option th:if="${f.OSESTAB != 0}" th:value="${f.OSESTAB}" th:text="${f.FILIAL}"></option>
+            </tr>
+        </select>
+          
+          <!-- Filtro de Produto -->
+            <select id="tipoProdutoFilter" onchange="applyAllFilters()">
+                <option value="">Todos (Produtos)</option>
+                <option value="AVEIA">AVEIA</option>
+                <option value="MILHETO">MILHETO</option>
+                <option value="MILHO EM GRÃOS">MILHO EM GRÃOS</option>
+                <option value="SOJA EM GRAOS">SOJA EM GRÃOS</option>
+                <option value="SORGO EM GRÃOS">SORGO EM GRÃOS</option>
+                <option value="TRIGO EM GRÃOS">TRIGO EM GRÃOS</option>
+                <option value="TRITICALE">TRITICALE</option>
+            </select>
+          
+          	<!-- Checkbox de filtro "Apenas com Vínculo" -->
+			<label class="switch">
+				<input type="checkbox" id="semVinculoFilter" onclick="applyAllFilters()">
+				<span class="slider"></span>
+			</label>
+			<span>Apenas com vínculo</span>
+          
+             <button class="clear-btn" onclick="clearFilters()">
+                <i class="fas fa-times-circle"></i> Limpar Filtros
+            </button>
+
+            <button class="export-btn" onclick="exportTableToExcel('tabelaExcel', 'Relatorio_Troca_Posicao_Estoque')">
+                <i class="fas fa-file-excel"></i> Exportar Excel
+            </button>
+
+        </div>
+        <br>
+
+        <table id="tabelaExcel" class="report">
+            <thead>
+                <tr>
+                    <th>UF</th>
+                    <th>Estab</th>
+                    <th>Item</th>
+                    <th>NF</th>
+                    <th>PIS</th>
+                    <th>COFINS</th>
+                    <th>Pedido</th>
+                     <th>PIS</th>
+                    <th>COFINS</th>
+                </tr>
+            </thead>
+            <tbody>
+               <tr th:each="d : ${APP}" th:class="${#lists.isEmpty(APP) ? 'sem-vinculo' : ''}">
+                    <td th:text="${d.UF}" style="text-align:center"></td>
+                    <td th:text="${d.Estab}" style="text-align:center"></td>
+                    <td th:text="${d.Item}" style="text-align:center"></td>
+                      <!-- NF-e -->
+                      <td style="text-align:center">
+                          <span th:each="a : ${ERP}" 
+                                th:if="${a != null && a.PEDIDO == d.PED_INTEGRA && a.ESTAB == d.EMPRESA_INTEGRA && a.PESSOA == d.PESSOA_INTEGRA && a.ITEM == d.ITEM_INTEGRA}"
+                                th:text="${a.NOTA}"
+                                style="display: block;"></span>
+                          <span th:if="${#lists.isEmpty(ERP)}">-</span>
+                      </td>
+					  <!-- NF-e PIS-->
+                      <td class="format-number" style="text-align:center">
+                          <span th:each="a : ${ERP}" 
+                                th:if="${a.PEDIDO == d.PED_INTEGRA && a.ESTAB == d.EMPRESA_INTEGRA && a.PESSOA == d.PESSOA_INTEGRA && a.ITEM == d.ITEM_INTEGRA}"
+                                th:text="${a.PIS}"></span>
+                          <span th:if="${#lists.isEmpty(ERP)}">-</span>
+                      </td>
+					  <!-- NF-e COFINS-->
+                      <td class="format-number" style="text-align:right">
+                          <span th:each="a : ${ERP}" 
+                                th:if="${a.PEDIDO == d.PED_INTEGRA && a.ESTAB == d.EMPRESA_INTEGRA && a.PESSOA == d.PESSOA_INTEGRA && a.ITEM == d.ITEM_INTEGRA }"
+                                th:text="${a.COFINS}"></span>
+                          <span th:if="${#lists.isEmpty(ERP)}">-</span>
+                      </td>					  
+                    <td th:text="${d.PED_INTEGRA}" style="text-align:left"></td>
+                    <td class="format-number" th:text="${d.PIS}" style="text-align:right"></td>
+                    <td class="format-number" th:text="${d.COFINS}" style="text-align:right"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- JavaScript para filtrar a tabela e formatar os números -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // Selecionar todas as células da tabela que contêm spans de NF-e
+    const cells = document.querySelectorAll("td");
+
+    cells.forEach(cell => {
+        // Selecionar todos os spans dentro da célula com "display: block"
+        const spans = Array.from(cell.querySelectorAll("span")).filter(span =>
+            getComputedStyle(span).display === "block"
+        );
+
+        if (spans.length > 0) {
+            // Exibir apenas o primeiro span e ocultar os outros
+            spans.forEach((span, index) => {
+                span.style.display = index === 0 ? "block" : "none";
+            });
+        }
+    });
+});
+  
+// Atualizar os filtros para corresponder às novas colunas
+function applyAllFilters() {
+    var ufFilter = document.getElementById('ufFilter')?.value.toUpperCase();
+    var estabFilter = document.getElementById('estabFilter')?.value.toUpperCase();
+    var itemFilter = document.getElementById('itemFilter')?.value.toUpperCase();
+    var nfFilter = document.getElementById('nfFilter')?.value.toUpperCase();
+    var pedidoFilter = document.getElementById('pedidoFilter')?.value.toUpperCase();
+
+    var table = document.querySelector("table.report");
+    var tr = table.getElementsByTagName("tr");
+
+    for (var i = 1; i < tr.length; i++) {
+        var tdUF = tr[i].getElementsByTagName("td")[0];
+        var tdEstab = tr[i].getElementsByTagName("td")[1];
+        var tdItem = tr[i].getElementsByTagName("td")[2];
+        var tdNF = tr[i].getElementsByTagName("td")[3];
+        var tdPedido = tr[i].getElementsByTagName("td")[6];
+
+        var match = true;
+
+        // Verificar cada filtro
+        if (ufFilter && tdUF && tdUF.textContent.toUpperCase().indexOf(ufFilter) === -1) {
+            match = false;
+        }
+        if (estabFilter && tdEstab && tdEstab.textContent.toUpperCase().indexOf(estabFilter) === -1) {
+            match = false;
+        }
+        if (itemFilter && tdItem && tdItem.textContent.toUpperCase().indexOf(itemFilter) === -1) {
+            match = false;
+        }
+        if (nfFilter && tdNF && tdNF.textContent.toUpperCase().indexOf(nfFilter) === -1) {
+            match = false;
+        }
+        if (pedidoFilter && tdPedido && tdPedido.textContent.toUpperCase().indexOf(pedidoFilter) === -1) {
+            match = false;
+        }
+
+        // Mostrar ou esconder a linha com base nos filtros aplicados
+        tr[i].style.display = match ? "" : "none";
+    }
+}
+
+function clearFilters() {
+    document.getElementById('ufFilter').value = '';
+    document.getElementById('estabFilter').value = '';
+    document.getElementById('itemFilter').value = '';
+    document.getElementById('nfFilter').value = '';
+    document.getElementById('pedidoFilter').value = '';
+
+    applyAllFilters(); // Reaplicar os filtros com os campos limpos
+}
+
+// Função para formatar os números nas células
+function formatNumber(num) {
+    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+}
+
+function formatTableNumbers() {
+    var cells = document.querySelectorAll('td.format-number');
+    cells.forEach(function(cell) {
+        var value = parseFloat(cell.textContent);
+        if (!isNaN(value)) {
+            cell.textContent = formatNumber(value);
+        }
+    });
+}
+
+// Exportar tabela para Excel
+function exportTableToExcel(tableID, filename = '') {
+    var table = document.getElementById(tableID);
+    var wb = XLSX.utils.table_to_book(table, { sheet: "Sheet1" });
+    var wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+
+    function s2ab(s) {
+        var buf = new ArrayBuffer(s.length);
+        var view = new Uint8Array(buf);
+        for (var i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+        return buf;
+    }
+
+    var blob = new Blob([s2ab(wbout)], { type: "application/octet-stream" });
+
+    // Forçar download
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename ? filename + '.xlsx' : 'relatorio.xlsx';
+    link.click();
+}
+
+// Adicionar eventos aos campos de filtro
+document.getElementById('ufFilter').onkeyup = applyAllFilters;
+document.getElementById('estabFilter').onkeyup = applyAllFilters;
+document.getElementById('itemFilter').onkeyup = applyAllFilters;
+document.getElementById('nfFilter').onkeyup = applyAllFilters;
+document.getElementById('pedidoFilter').onkeyup = applyAllFilters;
+
+window.onload = formatTableNumbers;
+
+</script>
+
+
+</body>
+</html>
