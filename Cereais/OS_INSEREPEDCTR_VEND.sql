@@ -37,6 +37,8 @@ V_CONTCONF NUMBER ;
 v_moeda number ;
 v_moeda_data varchar2(3) ;
 v_prazo DATE;
+v_dtlimite DATE;
+v_dtmov DATE;
 
 BEGIN
 
@@ -96,17 +98,35 @@ BEGIN
    and contratocfgite.item = v_item
    ;
 
+   BEGIN
+    IF  :NEW.DTPREVISAO < TRUNC(CURRENT_DATE)
+    THEN
+        v_dtmov := TRUNC(CURRENT_DATE);
+    ELSE
+        v_dtmov := :NEW.DTPREVISAO;
+    END IF;
+    END;
+
+    BEGIN
+    IF :NEW.DTVALIDADE < TRUNC(CURRENT_DATE)
+    THEN
+        v_dtlimite := TRUNC(CURRENT_DATE);
+    ELSE
+        v_dtlimite := :NEW.DTVALIDADE;
+    END IF;
+    END;
+
    INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.numintermediario,contrato.endalternativo,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
    contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,pessentrega,seqendentrega,pessretirada,seqendretirada,moedadia)
 
    VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(v_prazo,prazopagamento),:new.userid,
    :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,999,'N',:new.valortotal,'I',:new.DTPREVISAO,:new.DTVALIDADE,
-   :new.DTPREVISAO,:new.DTVALIDADE,:new.DTVALIDADE,to_date(CURRENT_DATE),0,:new.kmfrete,:NEW.pessentrega,:NEW.seqendentrega,:NEW.pessretirada,:NEW.seqendretirada,v_moeda_data);
+   v_dtmov,v_dtlimite,v_dtlimite,to_date(CURRENT_DATE),0,:new.kmfrete,:NEW.pessentrega,:NEW.seqendentrega,:NEW.pessretirada,:NEW.seqendretirada,v_moeda_data);
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
    CONTRATOITE.VALORTOTAL,CONTRATOITE.TIPOSALDO,CONTRATOITE.PRECOVENDA,CONTRATOITE.QUALCOTACAO,CONTRATOITE.DTMOVSALDO)
-   VALUES (:NEW.ESTAB,CONTRATOD,v_seqitem/*ITEM*/,ITEM,PEDLOCAL,to_date(CURRENT_DATE),QUANTIDADE,ARREDONDAR((valorunitario*V_MULTIPLIC),6),ARREDONDAR((VALOR),2),'A','I','N',:new.DTPREVISAO);
+   VALUES (:NEW.ESTAB,CONTRATOD,v_seqitem/*ITEM*/,ITEM,PEDLOCAL,to_date(CURRENT_DATE),QUANTIDADE,ARREDONDAR((valorunitario*V_MULTIPLIC),6),ARREDONDAR((VALOR),2),'A','I','N',v_dtmov);
 
    INSERT INTO CONTRATOESTAB (ESTAB,CONTRATO,ESTABBX)
    VALUES (:NEW.ESTAB,CONTRATOD,:NEW.ESTAB);
