@@ -194,6 +194,4 @@ GROUP BY DADOS.OSRTV,
        DADOS.COD_RTV,
        --DADOS.DESC_RTV,
        DADOS.DATA
-     
-     UNION ALL
   
