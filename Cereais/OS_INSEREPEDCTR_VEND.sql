@@ -39,7 +39,7 @@ v_moeda_data varchar2(3) ;
 v_prazo DATE;
 v_dtlimite DATE;
 v_dtmov DATE;
-
+v_triangular varchar2(5);
 BEGIN
 
    IF UPDATING THEN
@@ -85,8 +85,8 @@ BEGIN
 
    select
       TIPOFRETES,OS_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,
-      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM
-      INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,v_prazo
+      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM,OS_TRIANGULAR
+      INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,v_prazo,v_triangular
    from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
 
@@ -166,14 +166,14 @@ BEGIN
    INSERT INTO contratodtvencto (estab,contrato,sequencia,dtvencto,qtdfluxocx,numdiaspagto)
    VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN COALESCE(v_prazo,prazopagamento) ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
-   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET)   
+   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET,OS_TRIANGULAR)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
    TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,
   -- 'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
    :new.DTPREVISAO,
    QTRIGO,
    --'Sem_Padrao',
-   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET);   
+   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET,v_triangular);   
 
    INSERT INTO u_logpedctr ( u_logpedctr_id,estab,serie_ped,pedido,confctr,contrato,GERADO,EXCLUIR,NUMEROCM,QUANTIDADE) VALUES 
    (OS_GEN_LOGPEDCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.SERIE,:NEW.NUMERO,CONTRATOCONF,CONTRATOD,'S','N',:NEW.PESSOA,QUANTIDADE); 
