@@ -40,6 +40,7 @@ v_prazo DATE;
 v_dtlimite DATE;
 v_dtmov DATE;
 v_triangular varchar2(5);
+v_pess_triangular number;
 BEGIN
 
    IF UPDATING THEN
@@ -49,14 +50,14 @@ BEGIN
 
    --SELECT MAX(CONTRATO)+1 INTO CONTRATOD FROM CONTRATO WHERE ESTAB=:NEW.ESTAB;
    SELECT (ID_INT)+1 INTO CONTRATOD from seqprimarykey where tabela='CONTRATO'AND SUBSTR(CHAVEVALOR,7,4)=:NEW.ESTAB; 
-   
+
    SELECT 
         CASE 
             WHEN (FORMAPGTO IN (24,22,20,21) AND (PRAZOPAGAMENTO > CURRENT_DATE)) THEN PRAZOPAGAMENTO
             ELSE CURRENT_DATE 
         END INTO PRAZOPAGAMENTO 
     FROM PEDCABPGTO WHERE PEDCABPGTO.ESTAB=:NEW.ESTAB AND PEDCABPGTO.SERIE=:NEW.SERIE AND PEDCABPGTO.NUMERO=:NEW.NUMERO;
-      
+
    BEGIN
    SELECT NUMDIASPAGTO INTO P_NUMDIASPGTO FROM PEDCABDTPAGTO where PEDCABDTPAGTO.estab=:NEW.ESTAB AND PEDCABDTPAGTO.SERIE=:NEW.SERIE AND PEDCABDTPAGTO.NUMERO=:NEW.NUMERO;
    EXCEPTION 
@@ -65,10 +66,10 @@ BEGIN
    END;
    select peditem.item,peditem.quantidade,peditem.valor,peditem.valorunitario,local INTO ITEM,quantidade,valor,valorunitario,pedlocal  
    from peditem where peditem.estab=:NEW.ESTAB and peditem.serie=:NEW.SERIE and peditem.numero=:NEW.NUMERO; 
-   
+
     select peditem.item into v_item from peditem where peditem.estab=:NEW.ESTAB and peditem.serie=:NEW.SERIE and peditem.numero=:NEW.NUMERO; 
 
-   
+
    BEGIN
         SELECT MULTIPLIC 
           INTO V_MULTIPLIC 
@@ -78,15 +79,16 @@ BEGIN
         WHEN NO_DATA_FOUND THEN
           V_MULTIPLIC := 60;
       END;
-      
+
       v_moeda := NVL(:NEW.MOEDA, 0);
-   
+
    v_moeda_data := CASE WHEN V_MOEDA = 2 THEN 'B' ELSE NULL END ;
 
    select
       TIPOFRETES,OS_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,
-      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM,OS_TRIANGULAR
-      INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,v_prazo,v_triangular
+      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM,OS_TRIANGULAR,OS_PESS_TRIANGULAR
+      INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,v_prazo,v_triangular,
+      v_pess_triangular
    from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
 
@@ -138,11 +140,11 @@ BEGIN
         FROM PREPRESE 
         WHERE PREPRESE.REPRESENT = :NEW.REPRESENT 
           AND EMPRESA = 1;
-        
+
         -- Insere os dados com a margem correta
         INSERT INTO contratocom (estab, contrato, sequencia, numerocm, percentual, liberado, tipo, unidade) 
         VALUES (:NEW.ESTAB, CONTRATOD, 1, :NEW.REPRESENT, MARGENMINIMA, 'N', 'V', 'SC');
-        
+
         INSERT INTO os_contratocom (estab, contrato, numerocm, seq, meta) 
         VALUES (:NEW.ESTAB, CONTRATOD, :NEW.REPRESENT, '1', '100');
     END IF;
@@ -154,7 +156,7 @@ BEGIN
    INSERT INTO contratocom (estab,contrato,sequencia,numerocm,percentual,liberado,tipo,unidade) 
    VALUES (:NEW.ESTAB,CONTRATOD,2,CORRETOR1,P_VALOR,'N',TIPO,P_UNIDADE);
    END IF;
-   
+
    IF CORRETOR2 > 0 THEN
    TIPO := CASE WHEN VLRCORRETOR2 IS NULL OR VLRCORRETOR2 = 0 THEN 'P' ELSE 'V' END;
    P_UNIDADE := CASE WHEN VLRCORRETOR1 IS NULL OR VLRCORRETOR1 = 0 THEN NULL ELSE 'SC' END;
@@ -166,14 +168,15 @@ BEGIN
    INSERT INTO contratodtvencto (estab,contrato,sequencia,dtvencto,qtdfluxocx,numdiaspagto)
    VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN COALESCE(v_prazo,prazopagamento) ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
-   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit,NRTICKET,OS_TRIANGULAR)   
+   INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,
+   contrato_edit,NRTICKET,OS_TRIANGULAR,OS_PESS_TRIANGULAR)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
    TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,
   -- 'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
    :new.DTPREVISAO,
    QTRIGO,
    --'Sem_Padrao',
-   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET,v_triangular);   
+   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET,v_triangular,v_pess_triangular);   
 
    INSERT INTO u_logpedctr ( u_logpedctr_id,estab,serie_ped,pedido,confctr,contrato,GERADO,EXCLUIR,NUMEROCM,QUANTIDADE) VALUES 
    (OS_GEN_LOGPEDCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.SERIE,:NEW.NUMERO,CONTRATOCONF,CONTRATOD,'S','N',:NEW.PESSOA,QUANTIDADE); 
