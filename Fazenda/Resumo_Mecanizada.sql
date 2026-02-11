@@ -31,7 +31,7 @@ select
 from
     dw_fazenda.dm_replanejamento dr
 where
-    (dr.CODIGOATV = 84)),
+    (dr.CODIGOATV in (84, 83))),
 plantio_67 as (
 select
     b18.OSAPONTA AS OSAPONTA,
@@ -177,54 +177,58 @@ select
     b.OSTALHAO AS OSTALHAO,
     b.HA_APLICADOS AS HA_APLICADOS,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 20 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 20 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_1pre is null)) then (b.DT_ABERTO + interval 20 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_1pre is not null)) then rp.replan_mec_1pre
     end) AS dt_plan_mec1pre,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 70 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 70 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_2pre is null)) then (b.DT_ABERTO + interval 70 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_2pre is not null)) then rp.replan_mec_2pre
     end) AS dt_plan_mec2pre,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 90 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 90 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_1cap is null)) then (b.DT_ABERTO + interval 90 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_1cap is not null)) then rp.replan_mec_1cap
     end) AS dt_plan_mec1cap,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 180 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 180 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_2cap is null)) then (b.DT_ABERTO + interval 180 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_2cap is not null)) then rp.replan_mec_2cap
     end) AS dt_plan_mec2cap,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 90 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 90 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_1adub is null)) then (b.DT_ABERTO + interval 90 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_1adub is not null)) then rp.replan_mec_1adub
     end) AS dt_plan_mec1adub,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 270 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 270 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_2adub is null)) then (b.DT_ABERTO + interval 270 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_2adub is not null)) then rp.replan_mec_2adub
     end) AS dt_plan_mec2adub,
     (case
-        when (b.COD_ATIVID = 84) then (b.DT_ABERTO + interval 270 day)
+        when (b.COD_ATIVID = 83) then (b.DT_ABERTO + interval 270 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_cap is null)) then (b.DT_ABERTO + interval 270 day)
         when ((b.COD_ATIVID = 18)
             and (rp.replan_mec_cap is not null)) then rp.replan_mec_cap
     end) AS dt_plan_meccap,
+    (case
+        when (b.COD_ATIVID = 84) then b.DT_ABERTO
+        else NULL
+    end) AS DT_PLANJ_1ERRAD,
     p67.DT_MEC_1PRE AS DT_MEC_1PRE,
     p68.DT_MEC_2PRE AS DT_MEC_2PRE,
     p37.DT_MEC_1CAP AS DT_MEC_1CAP,
@@ -317,6 +321,7 @@ select
     c.DT_MEC_1ADUB AS DT_MEC_1ADUB,
     c.DT_MEC_2ADUB AS DT_MEC_2ADUB,
     c.DT_MEC_CAP AS DT_MEC_CAP,
+    c.DT_PLANJ_1ERRAD AS DT_PLANJ_1ERRAD,
     c.AREA_TOTAL AS AREA_TOTAL,
     c.HORAS_18 AS HORAS_18,
     c.HORAS_67 AS HORAS_67,
@@ -330,52 +335,52 @@ select
     (case
         when (((c.DT_MEC_1PRE is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_67) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_67) / 8), 2)
         else NULL
     end) AS diaria_67,
     (case
         when (((c.DT_MEC_2PRE is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_68) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_68) / 8), 2)
         else NULL
     end) AS diaria_68,
     (case
         when (((c.DT_MEC_1PRE is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_78) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_78) / 8), 2)
         else NULL
     end) AS diaria_78,
     (case
         when (((c.DT_MEC_1ADUB is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_79) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_79) / 8), 2)
         else NULL
     end) AS diaria_79,
     (case
         when (((c.DT_MEC_2ADUB is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_80) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_80) / 8), 2)
         else NULL
     end) AS diaria_80,
     (case
         when (((c.DT_MEC_CAP is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_87) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_87) / 8), 2)
         else NULL
     end) AS diaria_87,
     (case
         when (((c.DT_MEC_2CAP is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_38) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_38) / 8), 2)
         else NULL
     end) AS diaria_38,
     (case
         when (((c.DT_MEC_1CAP is null)
             and (c.COD_ATIVID = 18))
-            or (c.COD_ATIVID = 84)) then round(((c.AREA_TOTAL * c.HORAS_37) / 8), 2)
+            or (c.COD_ATIVID = 83)) then round(((c.AREA_TOTAL * c.HORAS_37) / 8), 2)
         else NULL
     end) AS diaria_37
 from
     campos c
 where
-    (c.COD_ATIVID in (18, 84));
+    (c.COD_ATIVID in (18, 83, 84));
