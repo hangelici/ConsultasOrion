@@ -1,4 +1,5 @@
-WITH BAIXAS_DUPPAG AS 
+WITH
+BAIXAS_DUPPAG AS 
 (
     SELECT
     EMPRESA,
@@ -286,13 +287,29 @@ SELECT
         AND PDUPREC.DTEMISSAO BETWEEN NVL(:DTEMIINI,'01/01/2001') AND NVL(:DTEMIFIM,'31/12/2099')
         AND PDUPREC.DTVENCTO  BETWEEN NVL(:DTINI,'01/01/2001') AND NVL(:DTFIM,'31/12/2099')
 
-     
+        <#if ESTAB?has_content>
         and PDUPREC.EMPRESA IN (:ESTAB)
-       
+          </#if>
 
-   
+      <#if CLIENTE?has_content>
+        and PDUPREC.CLIENTE IN (:CLIENTE)
+          </#if>
 
+       <#if CONCEITO?has_content>
+        and CONCEITO.CONCEITO IN (:CONCEITO)
+          </#if>
 
+        <#if GRUPOCM?has_content>
+        and CONTAMOV.GRUPOCM IN (:GRUPOCM)
+          </#if>
+
+        <#if SITUACAO?has_content>
+        and PDUPREC.SITUACAO IN (:SITUACAO)
+          </#if>
+
+        <#if TIPOS?has_content>
+        and 1 IN (:TIPOS)
+          </#if> 
         
         )DADOS
 
@@ -415,12 +432,27 @@ INNER JOIN FILIAL ON FILIAL.ESTAB = CONTAMOVLAN.ESTAB
       AND CONTAMOVLAN.DTMOVTO BETWEEN NVL(:DTEMIINI,'01/01/2001') AND NVL(:DTEMIFIM,'31/12/2099')
       AND CONTAMOVLAN.VENCIMENTO  BETWEEN NVL(:DTINI,'01/01/2001') AND NVL(:DTFIM,'31/12/2099')
 
-  
+    <#if ESTAB?has_content>
         and CONTAMOVLAN.ESTAB IN (:ESTAB)
-         
+          </#if>
+
+      <#if CLIENTE?has_content>
+        and CONTAMOVLAN.NUMEROCM IN (:CLIENTE)
+          </#if>
+
+        <#if CONCEITO?has_content>
+        and CONCEITO.CONCEITO IN (:CONCEITO)
+          </#if>
 
 
-        
+        <#if GRUPOCM?has_content>
+        and CONTAMOV.GRUPOCM IN (:GRUPOCM)
+          </#if>
+
+
+        <#if TIPOS?has_content>
+        and 2 IN (:TIPOS)
+          </#if> 
 
 UNION ALL
 
@@ -520,12 +552,32 @@ SELECT  '3 - DUPLICATA - A PAGAR' TIPO,
         AND PDUPPAGA.DTEMISSAO BETWEEN NVL(:DTEMIINI,'01/01/2001') AND NVL(:DTEMIFIM,'31/12/2099')
         AND PDUPPAGA.DTVENCTO  BETWEEN NVL(:DTINI,'01/01/2001') AND NVL(:DTFIM,'31/12/2099')
 
-       
+        <#if ESTAB?has_content>
         and PDUPPAGA.EMPRESA IN (:ESTAB)
-         
+          </#if>
 
-    
+       <#if CLIENTE?has_content>
+        and PDUPPAGA.FORNECEDOR IN (:CLIENTE)
+          </#if>
 
+        <#if CONCEITO?has_content>
+        and CONCEITO.CONCEITO IN (:CONCEITO)
+          </#if>
+
+        <#if GRUPOCM?has_content>
+        and CONTAMOV.GRUPOCM IN (:GRUPOCM)
+          </#if>
+        
+        
+        <#if SITUACAO?has_content>
+        and PDUPPAGA.SITUACAO IN (:SITUACAO)
+          </#if>
+
+          
+        <#if TIPOS?has_content>
+        and 3 IN (:TIPOS)
+          </#if> 
+        
 
 UNION ALL
 
@@ -594,9 +646,28 @@ AND U.TIPOCTR NOT IN ('CTR-CT','CTR-VT','CTR-TF','CTR-LB','CTR-BMF-C','CTR-BMF-V
 AND CONTRATO.DTEMISSAO BETWEEN NVL(:DTEMIINI,'01/01/2001') AND NVL(:DTEMIFIM,'31/12/2099')
 AND CONTRATO.DTVENCTO  BETWEEN NVL(:DTINI,'01/01/2001') AND NVL(:DTFIM,'31/12/2099')
 
-
+<#if ESTAB?has_content>
     and CONTRATO.ESTAB IN (:ESTAB)
+</#if>
 
+<#if CLIENTE?has_content>
+    and CONTRATO.NUMEROCM IN (:CLIENTE)
+</#if>
+
+
+<#if CONCEITO?has_content>
+    and CONCEITO.CONCEITO IN (:CONCEITO)
+</#if>
+
+
+<#if GRUPOCM?has_content>
+    and CONTAMOV.GRUPOCM IN (:GRUPOCM)
+</#if>
+
+
+<#if TIPOS?has_content>
+    and 7 IN (:TIPOS)
+</#if> 
 
 
 union all
@@ -651,11 +722,27 @@ AND UPPER(F.STATUS) NOT IN ('CANCELADA')
 AND PDUPREC.DTEMISSAO BETWEEN NVL(:DTEMIINI,'01/01/2001') AND NVL(:DTEMIFIM,'31/12/2099')
 AND I.DT_VENCTO  BETWEEN NVL(:DTINI,'01/01/2001') AND NVL(:DTFIM,'31/12/2099')
 
-
+<#if ESTAB?has_content>
     and F.ESTAB IN (:ESTAB)
+</#if>
+
+<#if CLIENTE?has_content>
+    and PDUPREC.CLIENTE IN (:CLIENTE)
+</#if>
 
 
+<#if CONCEITO?has_content>
+    and CONCEITO.CONCEITO IN (:CONCEITO)
+</#if>
 
+<#if GRUPOCM?has_content>
+    and CONTAMOV.GRUPOCM IN (:GRUPOCM)
+</#if>
+
+
+<#if TIPOS?has_content>
+    and 6 IN (:TIPOS)
+</#if> 
 
 UNION ALL
 
@@ -749,10 +836,26 @@ UNION ALL
       AND CONTAMOVLAN.DTMOVTO BETWEEN NVL(:DTEMIINI,'01/01/2001') AND NVL(:DTEMIFIM,'31/12/2099')
         AND CONTAMOVLAN.VENCIMENTO  BETWEEN NVL(:DTINI,'01/01/2001') AND NVL(:DTFIM,'31/12/2099')
 
-   
+    <#if ESTAB?has_content>
         and CONTAMOVLAN.ESTAB IN (:ESTAB)
- 
+    </#if>
 
+   <#if CLIENTE?has_content>
+        and CONTAMOVLAN.NUMEROCM IN (:CLIENTE)
+    </#if>
+
+    <#if CONCEITO?has_content>
+        and CONCEITO.CONCEITO IN (:CONCEITO)
+    </#if>
+
+    <#if GRUPOCM?has_content>
+        and CONTAMOV.GRUPOCM IN (:GRUPOCM)
+    </#if>
+
+
+    <#if TIPOS?has_content>
+        and 6 IN (:TIPOS)
+    </#if> 
         
 
 ORDER BY 11,12,1 asc ,9
