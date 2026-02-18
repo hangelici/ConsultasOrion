@@ -1,3 +1,4 @@
+
 WITH
   -- 0) Lista de pedidos por NF (usando LISTAGG) e materializada
   PedidosPorNF AS (
@@ -30,7 +31,8 @@ WITH
       PD.DTVENCTO,
       PD.DTEMISSAO,
       PD.NRODOCTOORIGEM,
-      PD.HISTORICO
+      PD.HISTORICO,
+      PD.VALOR AS VLRDUP
     FROM PDUPPAGA PD
     WHERE (PD.DEPOSITAR IS NULL OR PD.DEPOSITAR = 'N')
       AND PD.QUITADA = 'N'
@@ -62,7 +64,7 @@ WITH
     FROM ESTRATEGIAREGRA R
     JOIN ESTRATEGIAPEDIDO EP 
       ON R.IDESTRATEGIA = EP.IDESTRATEGIA 
-      AND EP.IDESTRATEGIA IN (427, 431, 433) -- REGRA DA APROVACAO DE ORCAMENTO
+      AND EP.IDESTRATEGIA IN (427, 431, 433)
     JOIN RegrasDoGrupo RG 
       ON RG.IDREGRA = R.IDREGRA
   ),
@@ -93,7 +95,7 @@ WITH
       FL.REDUZIDO,
       PDB.DUPPAG,
       PDB.DTVENCTO,
-      NF.VALOR AS VLRAUTPAGAR,
+      PDB.VLRDUP AS VLRAUTPAGAR,
       NVL(PNF.PEDIDOS, '') AS PEDIDOS
     FROM PD_Base PDB
     JOIN AGRFINDUPPAG AF 
@@ -120,7 +122,7 @@ WITH
       ON CV.IDREGRA = RF.IDREGRA
       AND NF.CENTROCUS = CV.CENTROCUSTO
   ),
- 
+
   -- 7) Notas pendentes (via movimento)
   NotasPendentesMov AS (
     SELECT 
@@ -137,7 +139,7 @@ WITH
       FL.REDUZIDO,
       PDB.DUPPAG,
       PDB.DTVENCTO,
-      NF.VALOR AS VLRAUTPAGAR,
+      PDB.VLRDUP AS VLRAUTPAGAR,
       NVL(PNF.PEDIDOS, '') AS PEDIDOS
     FROM PD_Base PDB
     JOIN CONTAMOVLAN CML 
@@ -171,7 +173,7 @@ WITH
       AND NF.CENTROCUS = CV.CENTROCUSTO
   )
 
--- 8) Resultado final com formatação igual à consulta 1
+-- 8) Resultado final
 SELECT 
   APROVAR,
   CANCELAR,
