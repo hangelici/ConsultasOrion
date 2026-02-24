@@ -37,6 +37,14 @@ BEGIN
                 WHERE U_ADIANTAMENTOS.ESTAB = :NEW.ESTAB
                 AND U_ADIANTAMENTOS.SERIE = :NEW.SERIE
                 AND U_ADIANTAMENTOS.NUM_PED = :NEW.NUMERO;
+                EXCEPTION
+                WHEN NO_DATA_FOUND THEN
+                    V_BANCO := NULL;
+                    V_AGENCIA := NULL;
+                    V_CONTA := NULL;
+                    V_PIX := NULL;
+                    V_VALOR := NULL;
+                    V_USER  := NULL;
             END;
 
             BEGIN
