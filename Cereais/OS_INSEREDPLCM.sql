@@ -17,6 +17,12 @@ BEGIN
         WHERE CONTAMOVLAN_U.ESTAB = :NEW.ESTAB
         AND CONTAMOVLAN_U.NUMEROCM = :NEW.NUMEROCM
         AND CONTAMOVLAN_U.SEQCM = :NEW.SEQCM;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                V_BANCO := NULL;
+                V_AGENCIA := NULL;
+                V_CONTA := NULL;
+                V_PIX := NULL;
     END;
     
     INSERT INTO PDUPPAGA
