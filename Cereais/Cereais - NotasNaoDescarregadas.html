@@ -1,0 +1,262 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+ <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div id="layout">
+  <h3>Dados - Fiscal IO</h3>
+  <div id="header">
+    <div class="filters">
+      <input type="text" id="notaFilter" onkeyup="applyAllFilters('notaFilter',0)" placeholder="Filtro de Nota">
+
+    </div>
+    </div>
+    <div id="statusMessage" style="
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #004085;
+    background: #cce5ff;
+    border: 1px solid #b8daff;
+    border-radius: 4px;
+    display: none;
+    "></div>
+
+    <table id ="tabelaPrincipal" class="report">
+      <thead>
+        <tr>
+          <th>Filial (CNPJ)</th>
+          <th>Chave</th>
+          <th>Nota</th>
+          <th>Serie</th>
+          <th>Dt.Emi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr th:each="d : ${FISCALIO}" >
+          <td th:text="${d.filial}" style="text-align: left"></td>
+          <td th:text="${d.chave}" style="text-align: left"></td>
+          <td th:text="${d.nota}" style="text-align: left"></td>
+          <td th:text="${d.serie}" style="text-align: left"></td>
+          <td th:text="${d.dtemi}" style="text-align: left"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script th:inline="javascript">
+    const notasMap = /*[[${DESCARGA}]]*/ [];
+</script>
+
+<script>
+/*
+function showStatusMessage(text, timeout = 5000) {
+    const box = document.getElementById("statusMessage");
+    box.textContent = text;
+    box.style.display = "block";
+
+    if (timeout > 0) {
+        setTimeout(() => {
+            box.style.display = "none";
+        }, timeout);
+    }
+}*/
+
+function ocultarDuplicados() {
+
+    // Agora valida APENAS pela CHAVE (sem CNPJ)
+    const setOracle = new Set(
+        //notasMap.map(n => n.CHAVEACESSONFE)
+        notasMap.map(n => String(n.CHAVEACESSONFE).trim())
+    );
+
+    const rows = document.querySelectorAll("#tabelaPrincipal tbody tr");
+
+    let ocultadas = 0;
+
+    rows.forEach(row => {
+
+        const cols = row.querySelectorAll("td");
+        if (cols.length === 0) return;
+
+        const chave = String(cols[1].textContent || "").trim();//cols[0].textContent.trim();      // CHAVE da tabela
+
+        // Se a chave existe no Oracle → OCULTAR
+        if (setOracle.has(chave)) {
+            row.style.display = "none";
+            ocultadas++;
+        } else {
+            row.style.display = "";
+        }
+    });
+
+    //alert(`Ocultadas ${ocultadas} linhas que já existem no Oracle.`);
+    //showStatusMessage(`Ocultadas ${ocultadas} linhas que já existem no Oracle.`);
+    document.getElementById("statusMessage").style.display = "block";
+    document.getElementById("statusMessage").textContent =
+        `Ocultadas ${ocultadas} linhas que já existem no Viasoft.`;
+
+}
+
+
+function mostrarTodos() {
+    const rows = document.querySelectorAll("#tabelaPrincipal tbody tr");
+    rows.forEach(row => {
+        row.style.display = "";
+    });
+    alert("Todos os registros foram exibidos novamente.");
+}
+
+function destacarAusentes() {
+
+    // Conjunto contendo APENAS as CHAVES do Oracle
+    const setOracle = new Set(
+        notasMap.map(n => n.CHAVEACESSONFE)
+    );
+
+    const rows = document.querySelectorAll("#tabelaPrincipal tbody tr");
+    let destacados = 0;
+
+    rows.forEach(row => {
+
+        const cols = row.querySelectorAll("td");
+        if (cols.length === 0) return;
+
+        const chave = cols[1].textContent.trim();
+
+        // Se NÃO existe no Oracle → destacar (vermelho)
+        if (!setOracle.has(chave)) {
+            row.style.backgroundColor = "#ffcccc";
+            destacados++;
+        } else {
+            row.style.backgroundColor = "";
+        }
+    });
+
+    alert(`Destacadas ${destacados} linhas ausentes no Oracle.`);
+}
+
+function exportarAusentes() {
+
+    // Set de CHAVES vindas do Oracle
+    const setOracle = new Set(
+        notasMap.map(n => n.CHAVEACESSONFE)
+    );
+
+    const rows = document.querySelectorAll("#tabelaPrincipal tbody tr");
+
+    let linhas = [];
+
+    // Pega automaticamente todos os nomes do cabeçalho da tabela
+    const headerCols = document.querySelectorAll("#tabelaPrincipal thead th");
+    const header = Array.from(headerCols).map(th => th.textContent.trim());
+    linhas.push(header.join(";"));
+
+    rows.forEach(row => {
+
+        const cols = row.querySelectorAll("td");
+        if (cols.length === 0) return;
+
+        const chave = cols[0].textContent.trim();
+
+        // Exportar só ausentes (não existem no Oracle)
+        if (!setOracle.has(chave)) {
+
+            const values = Array.from(cols).map(col =>
+                col.textContent.trim()
+            );
+
+            linhas.push(values.join(";"));
+        }
+    });
+
+    const csv = linhas.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ausentes_oracle.csv";
+    a.click();
+}
+
+
+document.addEventListener("DOMContentLoaded", function () {
+    ocultarDuplicados();
+
+    // Selecionar todas as células da tabela que contêm spans de NF-e
+    const cells = document.querySelectorAll("td");
+
+    cells.forEach(cell => {
+        // Selecionar todos os spans dentro da célula com "display: block"
+        const spans = Array.from(cell.querySelectorAll("span")).filter(span =>
+            getComputedStyle(span).display === "block"
+        );
+
+        if (spans.length > 0) {
+            // Exibir apenas o primeiro span e ocultar os outros
+            spans.forEach((span, index) => {
+                span.style.display = index === 0 ? "block" : "none";
+            });
+        }
+    });
+    
+});
+
+// Abre/fecha a lista de checkboxes
+function toggleDropdown() {
+  document.getElementById("filialList").classList.toggle("show");
+}
+
+// Seleciona/desseleciona todas as filiais
+function toggleAllFilials(checked) {
+  const checkboxes = document.querySelectorAll('input[name="filialCheckbox"]');
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = checked;
+  });
+  applyAllFilters();
+}
+
+function applyAllFilters(){
+  var notaFilter = (document.getElementById('notaFilter')?.value || '').trim().toUpperCase();
+  // Checkbox das Filiais
+  var checkboxes = document.querySelectorAll('input[name="filialCheckbox"]:checked');
+  var estabFilters = Array.from(checkboxes).map(cb => cb.value.trim().toUpperCase());
+  var filterEstab = estabFilters.length > 0;
+
+  var table = document.querySelector("table.report");
+  if (!table) return;
+
+  var tr = table.getElementsByTagName("tr");
+
+  for (var i = 1; i < tr.length; i++){
+    var tdNota = tr[i].getElementsByTagName("td")[2];
+    var tdFilial = tr[i].getElementsByTagName("td")[0];
+
+    var match = true;
+
+    // Filtragem da Nota
+    if (notaFilter && tdNota){
+      var cellNota = tdNota.textContent.toUpperCase();
+      if (cellNota.indexOf(notaFilter) === -1) match = false;
+    }
+    
+    // Filtragem do CNPJ (Filial)
+    if (match && filterEstab && tdFilial){
+      var cellFilialCNPJ = (tdFilial.textContent || tdFilial.innerText).trim().toUpperCase();
+      if (estabFilters.indexOf(cellFilialCNPJ) === -1){
+        match = false;
+      }
+    }
+  
+    tr[i].style.display = match ? "" : "none";
+  }
+}
+
+
+</script>
