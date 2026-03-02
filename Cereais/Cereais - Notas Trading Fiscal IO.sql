@@ -13,7 +13,8 @@ d2.cfop,
 d2.xprod,
 d.emitnome,
 d.transpnome,
-case when d3.infadfisco = '' then d3.infcpl else d3.infadfisco end info,
+d3.infadfisco,
+d3.infcpl,
 d2.qcom,
 d2.vuncom,
 d2.vprod
@@ -24,8 +25,21 @@ left join filial f on f.cnpj = d.emitid
 left join docheadtext d3 on d3.chave = d.chave
 where
 d.model = '55'
-and d2.cfop in ('5102', '6102', '5101', '6101', '5117', '5116', '5907', '5906', '5949', '5923', '5922', '5105')
+and d2.cfop in ('5102', '6102', '5101', '6101', '5117', '5116', '5907', '5906', '5949', '5923',  '5105')
 and cast(d.dtemi as date) >= :DTINI
+and ( 'TODOS' in (:PLACA)
+      or d.trnplaca in (:PLACA)
+   or exists (
+        select 1
+        from unnest(string_to_array(:PLACA, ',')) as p(placa)
+        where d3.infadfisco ilike '%' || p.placa || '%'
+   )
+   or exists (
+        select 1
+        from unnest(string_to_array(:PLACA, ',')) as p(placa)
+        where d3.infcpl ilike '%' || p.placa || '%'
+   )
+)
 and f.cnpj is null
 and d.filial in (
 '07191228002603',
@@ -57,15 +71,5 @@ and not exists (
 		e.chave = d.chave
 		and e.tpevento in ('210240', '210220')
 )
-
+order by cast(d.dtemi as date) asc,  CAST(d.hremi AS time) asc
 )dados
-where
-      'TODOS' in (:PLACA)
-      or dados.placa in (:PLACA)
-   or exists (
-        select 1
-        from unnest(string_to_array(:PLACA, ',')) as p(placa)
-        where dados.info ilike '%' || p.placa || '%'
-   )
-
-order by cast(dtemi as date) asc
