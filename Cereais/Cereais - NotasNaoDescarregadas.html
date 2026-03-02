@@ -48,6 +48,7 @@
                     <th>Vlr Total</th>
                     <th>Info.Fisco.</th>
                     <th>Info.Compl.</th>
+                    <th>Motivo</th>
                 </tr>
             </thead>
             <tbody>
@@ -68,6 +69,12 @@
                     <td th:text="${d.vprod}" style="text-align: left"></td>
                     <td th:text="${d.infadfisco}" style="text-align: left"></td>
                     <td th:text="${d.infcpl}" style="text-align: left"></td>
+                    <!-- Motivo -->
+                    <td style="text-align:right">
+                        <span th:each="a : ${AUDITORIA}" th:if="${a.CHAVEACESSO == d.chave}"
+                            th:text="${a.MOTIVO}"></span>
+                        <span th:if="${#lists.isEmpty(AUDITORIA)}">-</span>
+                    </td>
                 </tr>
             </tbody>
         </table>
