@@ -32,22 +32,42 @@
         <table id="tabelaPrincipal" class="report">
             <thead>
                 <tr>
+                    <th>Dt.Emi</th>
+                    <th>Hra.Emi</th>
                     <th>Filial (CNPJ)</th>
                     <th>Chave</th>
                     <th>Nota</th>
                     <th>Serie</th>
-                    <th>Dt.Emi</th>
+                    <th>CFOP</th>
+                    <th>Emitente</th>
+                    <th>Transp.</th>
                     <th>Placa</th>
+                    <th>Produto</th>
+                    <th>Peso</th>
+                    <th>Vlr Unit</th>
+                    <th>Vlr Total</th>
+                    <th>Info.Fisco.</th>
+                    <th>Info.Compl.</th>
                 </tr>
             </thead>
             <tbody>
                 <tr th:each="d : ${FISCALIO}">
+                    <td th:text="${d.dtemi}" style="text-align: left"></td>
+                    <td th:text="${d.hremi}" style="text-align: left"></td>
                     <td th:text="${d.filial}" style="text-align: left"></td>
                     <td th:text="${d.chave}" style="text-align: left"></td>
                     <td th:text="${d.nota}" style="text-align: left"></td>
                     <td th:text="${d.serie}" style="text-align: left"></td>
-                    <td th:text="${d.dtemi}" style="text-align: left"></td>
+                    <td th:text="${d.cfop}" style="text-align: left"></td>
+                    <td th:text="${d.emitnome}" style="text-align: left"></td>
+                    <td th:text="${d.transpnome}" style="text-align: left"></td>
                     <td th:text="${d.placa}" style="text-align: left"></td>
+                    <td th:text="${d.xprod}" style="text-align: left"></td>
+                    <td th:text="${d.qcom}" style="text-align: left"></td>
+                    <td th:text="${d.vuncom}" style="text-align: left"></td>
+                    <td th:text="${d.vprod}" style="text-align: left"></td>
+                    <td th:text="${d.infadfisco}" style="text-align: left"></td>
+                    <td th:text="${d.infcpl}" style="text-align: left"></td>
                 </tr>
             </tbody>
         </table>
@@ -89,7 +109,7 @@
                 const cols = row.querySelectorAll("td");
                 if (cols.length === 0) return;
 
-                const chave = String(cols[1].textContent || "").trim();//cols[0].textContent.trim();      // CHAVE da tabela
+                const chave = String(cols[3].textContent || "").trim();//cols[0].textContent.trim();      // CHAVE da tabela
 
                 // Se a chave existe no Oracle → OCULTAR
                 if (setOracle.has(chave)) {
@@ -132,7 +152,7 @@
                 const cols = row.querySelectorAll("td");
                 if (cols.length === 0) return;
 
-                const chave = cols[1].textContent.trim();
+                const chave = cols[3].textContent.trim();
 
                 // Se NÃO existe no Oracle → destacar (vermelho)
                 if (!setOracle.has(chave)) {
@@ -167,7 +187,7 @@
                 const cols = row.querySelectorAll("td");
                 if (cols.length === 0) return;
 
-                const chave = cols[0].textContent.trim();
+                const chave = cols[3].textContent.trim();
 
                 // Exportar só ausentes (não existem no Oracle)
                 if (!setOracle.has(chave)) {
@@ -240,8 +260,8 @@
             var tr = table.getElementsByTagName("tr");
 
             for (var i = 1; i < tr.length; i++) {
-                var tdNota = tr[i].getElementsByTagName("td")[2];
-                var tdFilial = tr[i].getElementsByTagName("td")[0];
+                var tdNota = tr[i].getElementsByTagName("td")[4];
+                var tdFilial = tr[i].getElementsByTagName("td")[2];
 
                 var match = true;
 
