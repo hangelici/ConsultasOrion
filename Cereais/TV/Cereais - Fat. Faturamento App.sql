@@ -1,16 +1,6 @@
 -- ### Responsavel Faturamento
 select
-dados.*,
-case
-	when ("Min" between 5 and 7) and "IdFlow" = 5 then 'amarelo'
-	when ("Min" > 7) and "IdFlow" = 5 then 'vermelho'
-	when "IdFlow" in (22,36,41,42,49,51) then 'vermelho'
-	when ("Min" between 7 and 10) and "IdFlow" = 15 then 'amarelo'
-	when ("Min" > 10) and "IdFlow" = 15 then 'vermelho'
-	when ("Min" between 5 and 7) and "IdFlow" = 23 then 'amarelo'
-	when ("Min" > 7) and "IdFlow" = 23 then 'vermelho'
-	else 'verde'
-end cor_status
+dados.*
 from(
 select
 lcd."Id",
@@ -24,8 +14,18 @@ flow."WorkflowAcaoId" as "IdFlow",
 lcd."DescrLocalEmbarque" as "Embarque",
 sem."Nome"||'-'||se."UF" as "Desembarque",
 lcd."Descarga",
-ROUND(EXTRACT(EPOCH from (current_timestamp - flow."DataCriacao")) / 60,0) as "Min",
-ROUND(EXTRACT(EPOCH from (current_timestamp - flowinicio."DataCriacao")) / 60,0) as "Min_Total"
+(EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60)::int as "Min",
+(EXTRACT(EPOCH FROM (current_timestamp - flowinicio."DataCriacao"))/60)::int as "Min_Total",
+CASE
+    WHEN flow."WorkflowAcaoId" IN (22,36,41,42,49,51) THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 5 AND (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) > 7 THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 5 AND (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) >= 5 THEN 'amarelo'
+    WHEN flow."WorkflowAcaoId" = 15 AND (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) > 10 THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 15 AND (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) >= 7 THEN 'amarelo'
+    WHEN flow."WorkflowAcaoId" = 23 AND (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) > 7 THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 23 AND (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) >= 5 THEN 'amarelo'
+    ELSE 'verde'
+END as cor_status
 from "log_CargaDado" lcd
 left join "sys_Pessoa" sp on sp."Id" = lcd."DestinoId"
 left join "log_CargaTran" lct on lct."CargaDadoId" = lcd."Id"
@@ -35,45 +35,28 @@ left join "sys_Item" si on si."Id" = lci."ProdutoId"
 left join "sys_Empresa" emp on emp."Id" = lcd."EmpresaId"
 left join "sys_EstadoMunicipio" sem on sem."Id" = emp."MunicipioId"
 left join "sys_Estado" se on se."Id" = sem."EstadoId"
-inner join (
-    select
-        sw1."DataCriacao",
-        sw1."WorkflowAcaoId",
-        sw1."Referencia"
-    from (
-        select
-            sw."Referencia",
-            max(sw."Id") as "maxid"
-        from "sys_Workflow" sw
-        group by "Referencia"
-    ) dados
-    inner join "sys_Workflow" sw1 on
-        sw1."Referencia" = dados."Referencia"
-        and sw1."Id" = dados."maxid"
-        and sw1."WorkflowAcaoId" in (4,15,22,23,42,49,51)
-) flow on
-    flow."Referencia" = lcd."Guid"
-left join (
-	select
-	sw."Referencia",
-	sw."DataCriacao",
-	sw."Id"
-	from "sys_Workflow" sw
-	inner join (
-		select
-		min(sw2."Id") as "MinId",
-		sw2."Referencia"
-		from
-		"sys_Workflow" sw2
-		where
-		sw2."WorkflowAcaoId" in (16,18)
-		group by sw2."Referencia"
-	)maximo on
-	maximo."MinId" = sw."Id"
-	and  maximo."Referencia" = sw."Referencia"
-)flowinicio on flowinicio."Referencia" = lcd."Guid"
+INNER JOIN LATERAL (
+    SELECT
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE sw."Referencia" = lcd."Guid"
+    ORDER BY sw."Id" DESC
+    LIMIT 1
+) flow 
+ON flow."WorkflowAcaoId" IN (4,15,22,23,42,49,51)
+LEFT JOIN LATERAL (
+    SELECT
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE
+        sw."Referencia" = lcd."Guid"
+        AND sw."WorkflowAcaoId" IN (16,18)
+    ORDER BY sw."Id" DESC
+    LIMIT 1
+) flowinicio ON true
 left join "sys_WorkflowAcao" acao on acao."Id" = flow."WorkflowAcaoId"
 where
 lcd."CargaTipoStatusId" not in (7)
-and extract(year from lcd."DataCriacao") > 2024
+and lcd."DataCriacao" >= DATE '2025-01-01'
 ) dados
