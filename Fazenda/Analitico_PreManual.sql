@@ -1,4 +1,5 @@
 -- dw_fazenda.os_planejamento_pre_manual fonte
+
 CREATE OR REPLACE
 ALGORITHM = UNDEFINED VIEW dw_fazenda.os_planejamento_pre_manual AS with base as (
 select
@@ -10,13 +11,13 @@ select
     fa.DT_ABERTO AS DT_ABERTO,
     fac.OSTALHAO AS OSTALHAO,
     fac.HA_APLICADOS AS HA_APLICADOS,
-    fa.TIPOPLANTIO
+    fa.TIPOPLANTIO AS TIPOPLANTIO
 from
     (dw_fazenda.ft_apontamentos fa
 join dw_fazenda.ft_apt_campos fac on
     ((fac.OSAPONTA = fa.OSAPONTA)))
 where
-    ((fa.COD_ATIVID in (13, 74, 57, 73, 65, 75, 9,18))
+    ((fa.COD_ATIVID in (13, 74, 57, 73, 65, 75, 9, 18))
         and (fa.SITUACAO = 'Fechado'))),
 plantio_74 as (
 select
@@ -118,7 +119,7 @@ plantio_18 as (
 select
     b13.OSAPONTA AS OSAPONTA,
     b13.OSTALHAO AS OSTALHAO,
-    b13.TIPOPLANTIO,
+    b13.TIPOPLANTIO AS TIPOPLANTIO,
     min(b18.DT_ABERTO) AS DT_PLANTIO
 from
     (base b18
@@ -131,8 +132,7 @@ where
 group by
     b13.OSAPONTA,
     b13.OSTALHAO,
-    b13.TIPOPLANTIO
-),
+    b13.TIPOPLANTIO),
 prox_ativ as (
 select
     b1.OSAPONTA AS OSAPONTA_BASE,
@@ -173,8 +173,8 @@ select
     p73.DT_SUCAMENTO AS DT_SUCAMENTO,
     p75.DT_DESSECAMENTO AS DT_DESSECAMENTO,
     p65.DT_SDP AS DT_SDP,
-    p18.DT_PLANTIO,
-    p18.TIPOPLANTIO,
+    p18.DT_PLANTIO AS DT_PLANTIO,
+    p18.TIPOPLANTIO AS TIPOPLANTIO,
     (case
         when ((b.COD_ATIVID = 13)
             and (rp.replan_defpre is null)) then (b.DT_ABERTO + interval 10 day)
@@ -211,37 +211,36 @@ select
         when ((b.COD_ATIVID = 13)
             and (rp.replan_dessecamento is not null)) then rp.replan_dessecamento
     end) AS DT_PLAN_DESSECAMENTO,
-   (case
+    (case
         when ((b.COD_ATIVID = 13)
             and (rp.replan_plantio is null)) then (b.DT_ABERTO + interval 20 day)
         when ((b.COD_ATIVID = 13)
             and (rp.replan_plantio is not null)) then rp.replan_plantio
     end) AS DT_PLAN_PLANTIO
 from
-    base b
+    (((((((((base b
 left join prox_ativ p on
-    p.OSAPONTA_BASE = b.OSAPONTA
+    ((p.OSAPONTA_BASE = b.OSAPONTA)))
 left join plantio_74 p74 on
-    p74.OSAPONTA = b.OSAPONTA
-        and p74.OSTALHAO = b.OSTALHAO
+    (((p74.OSAPONTA = b.OSAPONTA)
+        and (p74.OSTALHAO = b.OSTALHAO))))
 left join plantio_9 p9 on
-    p9.OSAPONTA = b.OSAPONTA
-        and p9.OSTALHAO = b.OSTALHAO
+    (((p9.OSAPONTA = b.OSAPONTA)
+        and (p9.OSTALHAO = b.OSTALHAO))))
 left join plantio_57 p57 on
-    p57.OSAPONTA = b.OSAPONTA
-        and p57.OSTALHAO = b.OSTALHAO
+    (((p57.OSAPONTA = b.OSAPONTA)
+        and (p57.OSTALHAO = b.OSTALHAO))))
 left join replan rp on
-    rp.OSTALHAO = b.OSTALHAO
+    ((rp.OSTALHAO = b.OSTALHAO)))
 left join plantio_73 p73 on
-    p73.OSAPONTA = b.OSAPONTA
-        and p73.OSTALHAO = b.OSTALHAO
+    (((p73.OSAPONTA = b.OSAPONTA)
+        and (p73.OSTALHAO = b.OSTALHAO))))
 left join plantio_65 p65 on
-    p65.OSAPONTA = b.OSAPONTA
-        and p65.OSTALHAO = b.OSTALHAO
+    (((p65.OSAPONTA = b.OSAPONTA)
+        and (p65.OSTALHAO = b.OSTALHAO))))
 left join plantio_75 p75 on
-    p75.OSAPONTA = b.OSAPONTA
-        and p75.OSTALHAO = b.OSTALHAO
+    (((p75.OSAPONTA = b.OSAPONTA)
+        and (p75.OSTALHAO = b.OSTALHAO))))
 left join plantio_18 p18 on
-    p18.OSAPONTA = b.OSAPONTA
-        and p18.OSTALHAO = b.OSTALHAO
-       ;
+    (((p18.OSAPONTA = b.OSAPONTA)
+        and (p18.OSTALHAO = b.OSTALHAO))));
