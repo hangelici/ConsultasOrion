@@ -77,5 +77,5 @@ LEFT JOIN "log_CargaItem" lci ON lci."CargaDadoId" = cf."Id"
 LEFT JOIN "sys_Item" si ON si."Id" = lci."ProdutoId"
 LEFT JOIN "sys_Empresa" emp ON emp."Id" = cf."EmpresaId"
 WHERE
-swa."Id" not  (54,3,1,2,45)
+swa."Id" not in (54,3,1,2,45)
 AND si."ItemGrupoId" = 2
