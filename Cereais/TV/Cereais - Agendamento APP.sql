@@ -1,91 +1,87 @@
--- ### AGENDAMENTO - PAINEL
 WITH cargas_filtradas AS (
-    SELECT
-        lcd."Id",
-        lcd."Guid",
-        lcd."EmpresaId",
-        lcd."DestinoId",
-        lcd."Descarga",
-        lcd."DataCriacao",
-        lcd."DescrLocalEmbarque"
-    FROM "log_CargaDado" lcd
-    WHERE
-        lcd."CargaTipoStatusId" <> 7
-        AND lcd."Descarga"::date < CURRENT_DATE + 2
-        AND lcd."Descarga" NOT IN ('infinity','-infinity')
-
-        AND EXISTS (
-            SELECT 1
-            FROM "sys_Workflow" sw
-            WHERE sw."Referencia" = lcd."Guid"
-            AND sw."WorkflowAcaoId" = 5
-        )
-
-        AND NOT EXISTS (
-            SELECT 1
-            FROM "sys_Workflow" sw
-            WHERE sw."Referencia" = lcd."Guid"
-            AND sw."WorkflowAcaoId" IN (12,13,19,14)
-        )
+SELECT
+    lcd."Id",
+    lcd."Guid",
+    lcd."EmpresaId",
+    lcd."DestinoId",
+    lcd."DataCriacao",
+    lcd."DescrLocalEmbarque",
+    lcd."Descarga"
+FROM "log_CargaDado" lcd
+WHERE
+    lcd."CargaTipoStatusId" <> 7
+    AND lcd."DataCriacao" >= DATE '2025-01-01'
 ),
 workflow_atual AS (
+SELECT
+    cf."Guid",
+    swa."WorkflowAcaoId",
+    swa."DataCriacao"
+FROM cargas_filtradas cf
+JOIN LATERAL (
     SELECT
-        cf."Guid",
         sw."WorkflowAcaoId",
         sw."DataCriacao"
-    FROM cargas_filtradas cf
-    LEFT JOIN LATERAL (
-        SELECT
-            sw."WorkflowAcaoId",
-            sw."DataCriacao"
-        FROM "sys_Workflow" sw
-        WHERE sw."Referencia" = cf."Guid"
-        ORDER BY sw."Id" DESC
-        LIMIT 1
-    ) sw ON true
+    FROM "sys_Workflow" sw
+    WHERE sw."Referencia" = cf."Guid"
+    ORDER BY sw."Id" DESC
+    LIMIT 1
+)swa ON swa."WorkflowAcaoId" IN (4,15,22,23,42,49,51,52,17)
 ),
-workflow_5 AS (
-    SELECT
-        cf."Guid",
+workflow_ag AS (
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."WorkflowAcaoId",
         sw."DataCriacao"
-    FROM cargas_filtradas cf
-    LEFT JOIN LATERAL (
-        SELECT
-            sw."DataCriacao"
-        FROM "sys_Workflow" sw
-        WHERE
-            sw."Referencia" = cf."Guid"
-            AND sw."WorkflowAcaoId" = 5
-        ORDER BY sw."Id" DESC
-        LIMIT 1
-    ) sw ON true
+    FROM "sys_Workflow" sw
+    WHERE sw."WorkflowAcaoId" IN (16,18)
+    ORDER BY sw."Referencia", sw."Id" ASC
+),
+workflow_ag18 AS (
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE sw."WorkflowAcaoId" IN (18)
+    ORDER BY sw."Referencia", sw."Id" DESC
+),
+workflow_ag16 AS (
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE sw."WorkflowAcaoId" IN (16)
+    ORDER BY sw."Referencia", sw."Id" DESC
 )
-SELECT 
-    cf."Id",
-    swa."Descricao" as "Status",
-    emp."NomeFantasia" as "Filial",
-    si."Descricao" as "Produto",
-    lv."Placa",
-    cf."DataCriacao",
-    cf."DescrLocalEmbarque" as "Embarque",
-    sem."Nome"||'-'||se."UF" as "Desembarque",
-    cf."Descarga",
-    (EXTRACT(EPOCH FROM (current_timestamp - wf5."DataCriacao")) / 60)::int as "Min",
-    EXTRACT(DAY FROM (cf."Descarga" - current_timestamp)) as "Dias",
-    case
-        when current_date >= cf."Descarga"::date then 'vermelho'
-        when cf."Descarga"::date - current_date < 2 then 'amarelo'
-        else 'verde'
-    end cor
-FROM cargas_filtradas cf
-LEFT JOIN workflow_atual wa ON wa."Guid" = cf."Guid"
-LEFT JOIN workflow_5 wf5 ON wf5."Guid" = cf."Guid"
-LEFT JOIN "sys_WorkflowAcao" swa ON swa."Id" = wa."WorkflowAcaoId"
-LEFT JOIN "sys_Pessoa" sp ON sp."Id" = cf."DestinoId"
-LEFT JOIN "sys_EstadoMunicipio" sem ON sem."Id" = sp."MunicipioId"
-LEFT JOIN "sys_Estado" se ON se."Id" = sem."EstadoId"
-LEFT JOIN "log_CargaTran" lct ON lct."CargaDadoId" = cf."Id"
-LEFT JOIN "log_Veiculo" lv ON lv."Id" = lct."VeiculoId"
-LEFT JOIN "log_CargaItem" lci ON lci."CargaDadoId" = cf."Id"
-LEFT JOIN "sys_Item" si ON si."Id" = lci."ProdutoId"
-LEFT JOIN "sys_Empresa" emp ON emp."Id" = cf."EmpresaId"
+select
+c."Id",
+c."Guid",
+emp."NomeFantasia" as "Filial",
+se."UF",
+si."Descricao" as "Produto",
+wa."DataCriacao",
+acao."Descricao" as "Status",
+c."DescrLocalEmbarque" as "Embarque",
+case 
+	when wa."WorkflowAcaoId" in (4,15,22,23,42,49,51) then sem."Nome"||'-'||se."UF"
+	else semp."Nome"||'-'||sep."UF"
+end "Desembarque",
+c."Descarga",
+ROUND(EXTRACT(EPOCH from (current_timestamp - ag18."DataCriacao")) / 60,0) as "Min", -- agora para status atual
+ROUND(EXTRACT(EPOCH from (current_timestamp - coalesce(ag16."DataCriacao",ag."DataCriacao"))) / 60,0) as "Min_Total"
+from cargas_filtradas c
+inner join workflow_atual wa ON wa."Guid" = c."Guid"
+inner join "sys_Empresa" emp on emp."Id" = c."EmpresaId"
+inner join "sys_EstadoMunicipio" sem on sem."Id" = emp."MunicipioId"
+inner join "sys_Estado" se on se."Id" = sem."EstadoId"
+inner join "log_CargaItem" lci on lci."CargaDadoId" = c."Id"
+left join "sys_Item" si on si."Id" = lci."ProdutoId"
+inner join "sys_WorkflowAcao" acao on acao."Id" = wa."WorkflowAcaoId"
+left join "sys_Pessoa" sp on sp."Id" = c."DestinoId"
+left join "sys_EstadoMunicipio" semp on semp."Id" = sp."MunicipioId"
+left join "sys_Estado" sep on sep."Id" = semp."EstadoId"
+left join workflow_ag ag on ag."Referencia" = c."Guid"
+left join workflow_ag18 ag18 on ag18."Referencia" = c."Guid"
+left join workflow_ag16 ag16 on ag16."Referencia" = c."Guid"
