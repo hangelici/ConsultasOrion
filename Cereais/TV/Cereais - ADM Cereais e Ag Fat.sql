@@ -69,8 +69,13 @@ case
 	else semp."Nome"||'-'||sep."UF"
 end "Desembarque",
 c."Descarga",
-ROUND(EXTRACT(EPOCH from (current_timestamp - ag18."DataCriacao")) / 60,0) as "Min", -- agora para status atual
-ROUND(EXTRACT(EPOCH from (current_timestamp - coalesce(ag16."DataCriacao",ag."DataCriacao"))) / 60,0) as "Min_Total"
+ROUND(EXTRACT(EPOCH from (current_timestamp - coalesce(ag18."DataCriacao",ag16."DataCriacao"))) / 60,0) as "Min", -- agora para status atual
+ROUND(EXTRACT(EPOCH from (current_timestamp - coalesce(ag16."DataCriacao",ag."DataCriacao"))) / 60,0) as "Min_Total",
+case
+	when ROUND(EXTRACT(EPOCH from (current_timestamp - ag18."DataCriacao")) / 60,0) between 10 and 15 then 'amarelo'
+	when ROUND(EXTRACT(EPOCH from (current_timestamp - ag18."DataCriacao")) / 60,0) > 15 then 'vermelho'
+	else 'verde'
+end cor_status
 from cargas_filtradas c
 inner join workflow_atual wa ON wa."Guid" = c."Guid"
 inner join "sys_Empresa" emp on emp."Id" = c."EmpresaId"
