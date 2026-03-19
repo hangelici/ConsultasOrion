@@ -47,6 +47,7 @@ v_dtlimite DATE;
 v_dtmov DATE;
 v_triangular VARCHAR2(5);
 v_pess_triangular number;
+V_UMID_CTR NUMBER;
 BEGIN
 
    IF UPDATING THEN
@@ -86,7 +87,7 @@ BEGIN
    where contratocfgite.contconf = (CASE WHEN :NEW.PEDIDOCONF = 200 THEN 1 WHEN :NEW.PEDIDOCONF = 204 THEN 7 WHEN :NEW.PEDIDOCONF = 202 THEN 50 ELSE 2 END)
    and contratocfgite.item = v_item
    ;
-
+   
    BEGIN
         SELECT MULTIPLIC 
           INTO V_MULTIPLIC 
@@ -97,6 +98,8 @@ BEGIN
           V_MULTIPLIC := 60;
       END;
 
+
+
    select  TIPOFRETES,OS_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,COALESCE(DOCPENDENTE,'N')
    AS DOCPENDENTE,PERCENTUAL1,PERCENTUAL2, INSECAOTAXA,ESTABORIGEM,DTVECTOORIGEM,REGIAO,COD_PRODUTOR,NOME_PRODUTOR,CNPJF_PRODUTOR,INSCESTAD_PRODUTOR,OS_TRIANGULAR,
    OS_PESS_TRIANGULAR
@@ -104,6 +107,20 @@ BEGIN
     v_COD_PRODUTOR,v_NOME_PRODUTOR,v_CNPJF_PRODUTOR,v_INSCESTAD_PRODUTOR,v_triangular,v_pess_triangular
     from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
+
+   IF P_INSECAOTAXA = 'S' THEN
+   BEGIN
+    SELECT COD_UMIDADE
+        INTO V_UMID_CTR
+    FROM U_TABUMIFIL_ITE
+    WHERE U_TABUMIFIL_ITE.ESTAB = :NEW.ESTAB
+    AND U_TABUMIFIL_ITE.CONFIG_CONTRATO = CONTRATOCONF
+    AND U_TABUMIFIL_ITE.ITEM = ITEM;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            V_UMID_CTR := NULL;
+   END;
+   END IF;
 
     BEGIN
     IF  :NEW.DTPREVISAO < TRUNC(CURRENT_DATE)
@@ -123,12 +140,18 @@ BEGIN
     END IF;
     END;
 
+    BEGIN
+    IF v_prazo IS NOT NULL AND v_prazo < TRUNC(SYSDATE) THEN
+        v_prazo := NULL;
+    END IF;
+    END;
+    
    INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.numintermediario,contrato.endalternativo,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
    contrato.safra,contrato.valorprod,contrato.valortotal,contrato.moeda,contrato.observacoes,contrato.prioridade,contrato.padrao,contrato.saldovalor,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,
    contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,moedadia)
 
    VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(v_prazo,prazopagamento),:new.userid,
-   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,'A',:new.DTPREVISAO,:new.DTVALIDADE,
+   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,'A',TO_DATE('01/01/2099'),:new.DTVALIDADE,
    v_dtmov,v_dtlimite,v_dtlimite,to_date(CURRENT_DATE),0,:new.kmfrete,v_moeda_data);
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
@@ -174,7 +197,7 @@ BEGIN
    VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN coalesce(v_prazo,prazopagamento) ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
    INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,
-   contrato_edit,NRTICKET,INSECAOTAXA,ESTABORIGEM, ATIVO_OS,REGIAO,COD_PRODUTOR,NOME_PRODUTOR,CNPJF_PRODUTOR,INSCESTAD_PRODUTOR,OS_TRIANGULAR,OS_PESS_TRIANGULAR)   
+   contrato_edit,NRTICKET,INSECAOTAXA,ESTABORIGEM, ATIVO_OS,REGIAO,COD_PRODUTOR,NOME_PRODUTOR,CNPJF_PRODUTOR,INSCESTAD_PRODUTOR,OS_TRIANGULAR,OS_PESS_TRIANGULAR,OS_TABUMIDADE)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
    TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,
   -- 'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
@@ -183,7 +206,7 @@ BEGIN
    --'Sem_Padrao',
    'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET, P_INSECAOTAXA,P_ESTABORIGEM,
    (case when P_ATIVO = 'N' then 'A'  when P_ATIVO = null then 'I' when P_ATIVO = 'S' then 'I' else 'I' end),v_regiao,
-   v_COD_PRODUTOR,v_NOME_PRODUTOR,v_CNPJF_PRODUTOR,v_INSCESTAD_PRODUTOR,v_triangular,v_pess_triangular
+   v_COD_PRODUTOR,v_NOME_PRODUTOR,v_CNPJF_PRODUTOR,v_INSCESTAD_PRODUTOR,v_triangular,v_pess_triangular,V_UMID_CTR
    );   
 
    INSERT INTO u_logpedctr ( u_logpedctr_id,estab,serie_ped,pedido,confctr,contrato,GERADO,EXCLUIR,NUMEROCM,QUANTIDADE) VALUES 
