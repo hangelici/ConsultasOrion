@@ -6,6 +6,7 @@ CONF_DEST NUMBER;
 V_NFDEVOL NUMBER;
 V_NFORI NUMBER;
 V_ESTABORI NUMBER;
+V_VALIDA NUMBER;
 BEGIN
 
     --- VERIFICAR SE A CONFIG DE DEVOL É 383 OU 399
@@ -36,7 +37,7 @@ BEGIN
 
         IF NVL(V_NFORI,0) <> 0 THEN
 
-           BEGIN
+           /*BEGIN
                 SELECT NF_DEVOLUCAO
                 INTO V_NFDEVOL
                 FROM U_DESCARGA_TRADING
@@ -45,9 +46,26 @@ BEGIN
             EXCEPTION
                 WHEN NO_DATA_FOUND THEN
                     V_NFDEVOL := NULL;
+            END;*/
+            
+            BEGIN
+                SELECT 1
+                INTO V_VALIDA
+                FROM DUAL
+                WHERE EXISTS(
+                    SELECT 1 
+                    FROM U_DESCARGA_TRADING
+                    WHERE U_DESCARGA_TRADING.ESTAB = V_ESTABORI
+                      AND U_DESCARGA_TRADING.NF = V_NFORI
+                      AND NVL(U_DESCARGA_TRADING.NF_DEVOLUCAO,0) <> 0
+                      AND U_DESCARGA_TRADING.CHAVEACESSO IS NOT NULL
+                ); 
+                EXCEPTION
+                WHEN NO_DATA_FOUND THEN
+                    V_VALIDA := 0;
             END;
 
-            IF NVL(V_NFDEVOL, 0) <> 0 THEN
+            IF NVL(V_VALIDA, 0) <> 0 THEN
                 RAISE_APPLICATION_ERROR(
                     -20000,
                     'Essa Nota já tem NF de Devolução vinculada na Descarga Trading'
