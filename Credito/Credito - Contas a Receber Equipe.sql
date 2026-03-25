@@ -1,73 +1,22 @@
-WITH DPL AS
-    (SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        (VALOR) AS VALOR
-    FROM PRDUPRED
-    
+WITH DPL AS (
+    SELECT EMPRESA,DUPREC,SEQRECBTO,(VALOR) AS VALOR FROM PRDUPRED
     UNION ALL
-    
-    SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        (VLRCHEQREC) AS VALOR
-    FROM PRDURECH
-    
+    SELECT EMPRESA,DUPREC,SEQRECBTO,(VLRCHEQREC) AS VALOR FROM PRDURECH
     UNION ALL
-    
-    SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        VALOR
-    FROM PRDUREDUP
-    
+    SELECT EMPRESA,DUPREC,SEQRECBTO,VALOR FROM PRDUREDUP 
     UNION ALL
-    
-    SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        VALOR
-    FROM PRDURECAR
-    
+    SELECT EMPRESA,DUPREC,SEQRECBTO,VALOR FROM PRDURECAR
     UNION ALL
-    
-    SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        VALOR
-    FROM PRDUREOUT
-    
+    SELECT EMPRESA,DUPREC,SEQRECBTO,VALOR FROM PRDUREOUT 
     UNION ALL
-    
-    SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        VALOR
-    FROM PRDURECM
-    WHERE TROCO = 'N'
-    ),
-    
-BAIXAS_DPL AS
-    (SELECT
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO,
-        SUM(VALOR) AS VALOR
-    FROM DPL
-    GROUP BY
-        EMPRESA,
-        DUPREC,
-        SEQRECBTO
-    ),
-    
+    SELECT EMPRESA,DUPREC,SEQRECBTO,VALOR FROM PRDURECM WHERE TROCO = 'N'
+),
+BAIXAS_DPL AS (
+    SELECT EMPRESA,DUPREC,SEQRECBTO, SUM(VALOR) AS VALOR FROM DPL
+    GROUP BY EMPRESA,DUPREC,SEQRECBTO
+),    
 BAIXAS AS
-    (SELECT
+    (SELECT 
         PRDUPREC.EMPRESA,
         PRDUPREC.DUPREC,
         SUM(BAIXAS_DPL.VALOR) AS VLR,
@@ -85,8 +34,7 @@ BAIXAS AS
     GROUP BY
         PRDUPREC.EMPRESA,
         PRDUPREC.DUPREC
-    ),
-    
+),    
 REAJ_ANT AS
     (SELECT
         ESTAB,
@@ -98,7 +46,6 @@ REAJ_ANT AS
     FROM PDUPRECREAJ
     WHERE DTREAJUSTE <= (:DTBASE)
     ),
-    
 REAJ_MAX AS
     (SELECT
         ESTAB,
@@ -111,7 +58,6 @@ REAJ_MAX AS
     WHERE
         DTREAJUSTE >= (:DTBASE)
     ),
-    
 DUP_REAJ AS
     (SELECT 
         RM.ESTAB,
@@ -137,24 +83,185 @@ DUP_REAJ AS
                 ON  RM.ESTAB = RA.ESTAB
                 AND RM.DUPREC = RA.DUPREC
     ),
+BAIXAS_CM AS (
+    SELECT ESTABACERTADO,SEQACERTADA,NUMEROCM,SUM(VALOR) AS VLR FROM CONTAMOVLANAC
+    WHERE TIPO = 'B' AND CONTAMOVLANAC.DTACERTO <= (:DTBASE)
+    GROUP BY ESTABACERTADO,SEQACERTADA,NUMEROCM
+    ),
+CTRNOTA AS (
+    SELECT
+    CONTRATONFITE.ESTAB,
+    CONTRATONFITE.CONTRATO,
+    CONTRATONFITE.SEQITEM,
+    CASE WHEN NAT.TIPODCTO IN ('N','X','A','T') AND NATAPARTIRDE.TIPOBAIXA IN ('A','V') AND NFCAB.NOTACONF NOT IN (291) AND NATAPARTIRDE.OPERACAO NOT IN ('N','R') THEN 'BAIXA' ELSE 'N' END TIPO,
+    CASE 
+        WHEN NAT.TIPODCTO IN ('N','X','A','T') AND NATAPARTIRDE.TIPOBAIXA IN ('A','V') AND NFCAB.NOTACONF NOT IN (291) AND NATAPARTIRDE.OPERACAO NOT IN ('N','R') THEN CONTRATONFITE.VALOR
+        ELSE 0
+    END BAIXADO,
+    CASE 
+        WHEN (NAT.TIPODCTO = 'D' OR NFCFG.NOTACONF IN (1041)) AND NATAPARTIRDE.TIPOBAIXA IN ('A','V') AND NATAPARTIRDE.OPERACAO NOT IN ('N','R') THEN CONTRATONFITE.VALOR
+        ELSE 0
+    END DEVOLIDO,
+    CASE 
+        WHEN NAT.TIPODCTO IN ('N','X','A') AND NATAPARTIRDE.TIPOBAIXA IN ('A','V') AND NFCFG.NOTACONF IN (291) AND NATAPARTIRDE.OPERACAO NOT IN ('N','R') THEN CONTRATONFITE.VALOR
+        ELSE 0
+    END CANCELADO,
+    CASE 
+        WHEN NAT.TIPODCTO IN ('N','X','A') AND NATAPARTIRDE.TIPOBAIXA IN ('A','V') AND NFCFG.NOTACONF IN (291) AND NATAPARTIRDE.OPERACAO NOT IN ('N','R') THEN CONTRATONFITE.VALOR
+        ELSE 0
+    END CANCELADO_CALC
+    FROM CONTRATONFITE
+    INNER JOIN CONTRATO ON CONTRATO.ESTAB = CONTRATONFITE.ESTAB AND CONTRATO.CONTRATO = CONTRATONFITE.CONTRATO
+    INNER JOIN CONTRATOITE ON 
+        CONTRATOITE.ESTAB = CONTRATONFITE.ESTAB
+        AND CONTRATOITE.CONTRATO = CONTRATONFITE.CONTRATO
+        AND CONTRATONFITE.SEQITEM = CONTRATONFITE.SEQITEM
+    INNER JOIN NFCAB ON NFCAB.ESTAB = CONTRATONFITE.ESTABNOTA AND NFCAB.SEQNOTA = CONTRATONFITE.SEQNOTA
+    INNER JOIN NFCFG ON NFCFG.NOTACONF = NFCAB.NOTACONF
+    INNER JOIN NATOPERACAO NAT ON NAT.NATUREZADAOPERACAO = NFCFG.NATUREZADAOPERACAO AND NAT.ENTRADASAIDA = NFCFG.ENTRADASAIDA 
+    INNER JOIN CONTRATOCFG ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF    
+    INNER JOIN CONTRATOCFG_U ON CONTRATOCFG_U.CONTCONF = CONTRATO.CONTCONF
+    LEFT JOIN U_TIPOCTR ON U_TIPOCTR.U_TIPOCTR_ID = CONTRATOCFG_U.U_TIPOCTR_ID  
+    LEFT JOIN NFCFG_U U ON U.NOTACONF = NFCFG.NOTACONF
+    LEFT JOIN U_TIPOOP P ON U.U_TIPOOP_ID = P.U_TIPOOP_ID
+    INNER JOIN NATAPARTIRDE ON
+        NATAPARTIRDE.NATUREZADAOPERACAO = NAT.NATUREZADAOPERACAO
+        AND NATAPARTIRDE.ENTRADASAIDA = NAT.ENTRADASAIDA
+        AND NATAPARTIRDE.NATOPERORIGEM = CONTRATOCFG.NATUREZA--IN ('CO','CU')
+        AND NATAPARTIRDE.ENTRADASAIDAORIGEM IN ('S','E')
+    WHERE CONTRATO.ATIVO = 'A'
+     <#if NUMEROCM?has_content>  
+        AND CONTRATO.NUMEROCM IN (:NUMEROCM)
+    </#if>
+),
+BAIXAS_CTR AS (
+    SELECT ESTAB,CONTRATO,SEQITEM,SUM(BAIXADO) AS BAIXADO,SUM(DEVOLIDO) AS DEVOLIDO,SUM(CANCELADO) AS CANCELADO FROM CTRNOTA
+    GROUP BY ESTAB, CONTRATO, SEQITEM
+),
+CANC AS (
+    SELECT CONTRATOCANC.ESTAB,CONTRATOCANC.CONTRATO,CONTRATOCANC.SEQITEM,SUM(CONTRATOCANC.VALOR) AS CANC
+    FROM CONTRATOCANC
+    INNER JOIN CONTRATO ON CONTRATO.ESTAB = CONTRATOCANC.ESTAB AND CONTRATO.CONTRATO = CONTRATOCANC.CONTRATO
+    INNER JOIN CONTRATOCFG ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF    
+    INNER JOIN CONTRATOCFG_U ON CONTRATOCFG_U.CONTCONF = CONTRATO.CONTCONF
+    LEFT JOIN U_TIPOCTR ON U_TIPOCTR.U_TIPOCTR_ID = CONTRATOCFG_U.U_TIPOCTR_ID 
+    GROUP BY CONTRATOCANC.ESTAB, CONTRATOCANC.CONTRATO,CONTRATOCANC.SEQITEM
+),
+SALDO_CTR AS (
+    SELECT
+    CONTRATO.NUMEROCM,
+    SUM(ARREDONDAR(CONTRATOITE.VALORTOTAL - NVL(BAIXAS_CTR.BAIXADO,0) - NVL(BAIXAS_CTR.CANCELADO,0) + NVL(BAIXAS_CTR.DEVOLIDO,0) - NVL(CANC.CANC,0), 0)) VLRSALDO
+    FROM CONTRATO
+    INNER JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB = CONTRATO.ESTAB
+    INNER JOIN CONTRATOITE ON
+        CONTRATOITE.ESTAB = CONTRATO.ESTAB
+        AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
+    LEFT JOIN BAIXAS_CTR ON
+        BAIXAS_CTR.ESTAB = CONTRATOITE.ESTAB
+        AND BAIXAS_CTR.CONTRATO = CONTRATOITE.CONTRATO
+        AND BAIXAS_CTR.SEQITEM = CONTRATOITE.SEQITEM
+    LEFT JOIN CANC ON 
+        CANC.ESTAB = CONTRATOITE.ESTAB 
+        AND CANC.CONTRATO = CONTRATOITE.CONTRATO
+        AND CANC.SEQITEM = CONTRATOITE.SEQITEM
+    WHERE CONTRATO.ATIVO = 'A' AND U_TEMPRESA.GRAOS ='S'
+    GROUP BY CONTRATO.NUMEROCM
+),
+BAIXAS_DUPPAG AS (
+    SELECT
+    EMPRESA,
+    DUPPAG,
+    FORNECEDOR,
+    SUM(VALOR) AS VLR,
+    SUM(PPDUPPAG.VALOR * CASE WHEN PPDUPPAG.TIPOPAG IN ('P','J') THEN 1 ELSE -1 END) AS PAGO
+    FROM PPDUPPAG
 
-BAIXAS_CM AS
-    (SELECT
-        ESTABACERTADO,
-        SEQACERTADA,
-        NUMEROCM,
-        SUM(VALOR) AS VLR
-    FROM CONTAMOVLANAC
+    WHERE TIPOPAG = 'P'
+    AND DTPAGTO <= :DTBASE
+    <#if NUMEROCM?has_content>  
+        AND PPDUPPAG.FORNECEDOR IN (:NUMEROCM)
+    </#if>
+   AND 
+        (
+            EXISTS (
+                SELECT
+                1
+                FROM PPDUPPAD
+                 WHERE
+                 (PPDUPPAD.EMPRESA = PPDUPPAG.EMPRESA)
+                           AND (PPDUPPAD.ESTABFORNECEDOR = PPDUPPAG.ESTABFORNECEDOR)
+                           AND (PPDUPPAD.FORNECEDOR = PPDUPPAG.FORNECEDOR)
+                           AND (PPDUPPAD.DUPPAG = PPDUPPAG.DUPPAG)
+                           AND (PPDUPPAD.SEQPAGTODU = PPDUPPAG.SEQPAGTODU)
+                )
+             OR
+             EXISTS (
+                 SELECT
+                 1
+                 FROM PPADUCM
+                 WHERE
+                 (PPADUCM.EMPRESA = PPDUPPAG.EMPRESA)
+                               AND (PPADUCM.ESTABFORNECEDOR = PPDUPPAG.ESTABFORNECEDOR)
+                               AND (PPADUCM.FORNECEDOR = PPDUPPAG.FORNECEDOR)
+                               AND (PPADUCM.DUPPAG = PPDUPPAG.DUPPAG)
+                               AND (PPADUCM.SEQPAGTODU = PPDUPPAG.SEQPAGTODU)
+         
+                )
+            OR
+            EXISTS (
+                SELECT
+                1 
+                FROM PPDUPPADUP
+                WHERE (PPDUPPADUP.EMPRESA         = PPDUPPAG.EMPRESA)
+                        AND (PPDUPPADUP.ESTABFORNECEDOR = PPDUPPAG.ESTABFORNECEDOR)
+                        AND (PPDUPPADUP.FORNECEDOR         = PPDUPPAG.FORNECEDOR)
+                        AND (PPDUPPADUP.DUPPAG             = PPDUPPAG.DUPPAG)
+                        AND (PPDUPPADUP.SEQPAGTODU         = PPDUPPAG.SEQPAGTODU)
+                )
+            OR
+            EXISTS (
+                SELECT
+                1
+                FROM PPADUCHE
+                WHERE (PPADUCHE.EMPRESA = PPDUPPAG.EMPRESA)
+                            AND (PPADUCHE.ESTABFORNECEDOR = PPDUPPAG.ESTABFORNECEDOR)
+                            AND (PPADUCHE.FORNECEDOR = PPDUPPAG.FORNECEDOR)
+                            AND (PPADUCHE.DUPPAG = PPDUPPAG.DUPPAG)
+                            AND (PPADUCHE.SEQPAGTODU = PPDUPPAG.SEQPAGTODU)
+            
+                )
+            OR
+            EXISTS (
+                SELECT
+                1
+                FROM PPADUCHR
+                WHERE (PPADUCHR.EMPRESA = PPDUPPAG.EMPRESA)
+                            AND (PPADUCHR.ESTABFORNECEDOR = PPDUPPAG.ESTABFORNECEDOR)
+                            AND (PPADUCHR.FORNECEDOR = PPDUPPAG.FORNECEDOR)
+                            AND (PPADUCHR.DUPPAG = PPDUPPAG.DUPPAG)
+                            AND (PPADUCHR.SEQPAGTODU = PPDUPPAG.SEQPAGTODU)
+                )
+        )
+    
+    GROUP BY EMPRESA,DUPPAG,FORNECEDOR
+),
+SALDO_PAG AS (
+    SELECT
+    PDUPPAGA.FORNECEDOR,
+    SUM(PDUPPAGA.VALOR - NVL(PDUPPAGA.DESCPEND,0) - NVL(BAIXAS_DUPPAG.VLR,0)) SALDO_PAGAR
+    FROM PDUPPAGA
+    LEFT JOIN BAIXAS_DUPPAG ON
+			BAIXAS_DUPPAG.EMPRESA = PDUPPAGA.EMPRESA
+			AND BAIXAS_DUPPAG.DUPPAG = PDUPPAGA.DUPPAG
+			AND BAIXAS_DUPPAG.FORNECEDOR = PDUPPAGA.FORNECEDOR
     WHERE
-            TIPO = 'B'
-        AND CONTAMOVLANAC.DTACERTO <= (:DTBASE)
-    GROUP BY
-        ESTABACERTADO,
-        SEQACERTADA,
-        NUMEROCM
-    )
-
-SELECT
+    0=0
+     <#if NUMEROCM?has_content>  
+        AND PDUPPAGA.FORNECEDOR IN (:NUMEROCM)
+    </#if>
+    GROUP BY PDUPPAGA.FORNECEDOR
+)
+SELECT 
     DADOS1.ESTAB,
     DADOS1.TIPO_FILIAL,
     DADOS1.FILIAL,
@@ -180,143 +287,8 @@ SELECT
         ELSE DADOS1.VALOR
     END
     ) AS VALOR,
-    /*
-    case when TIPO_DOC in ('ACB','AC','DDVE') THEN DADOS1.juros *-1 ELSE DADOS1.juros END juros,
-    */
-(case when TIPO_DOC in ('ACB','AC','DDVE','AC','ACB','ACC','ACV','DUPP','IMEC','TFDP') THEN DADOS1.SALDO *-1 ELSE DADOS1.SALDO END) SALDO,/*+
-(case when TIPO_DOC in ('ACB','AC','DDVE') THEN DADOS1.juros *-1 ELSE DADOS1.juros END) SALDO,*/
-/*(select
-((sum(valor) - sum(vlr_dv)) - sum(vlr_bx)) as valor
-from(
-
-select
-nfcab.estab,
-nfcab.seqnota,
-nfitem.seqnotaitem,
-sum(nfitem.quantidade*nfitem.valorunitario) as valor,
-coalesce(qtd_bx,0)*nfitem.valorunitario as vlr_bx,
-coalesce(qtd_dv,0)*nfitem.valorunitario as vlr_dv
-
-from nfcab
-
-inner join nfitem on 
-    nfitem.estab = nfcab.estab
-    and nfitem.seqnota = nfcab.seqnota
-    
-inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
-inner join nfcfg_u on nfcfg_u.notaconf = nfcfg.notaconf
-inner join u_tipoop on u_tipoop.u_tipoop_id = nfcfg_u.u_tipoop_id
-
-inner join nfcabagrfin on
-    nfcabagrfin.estab = nfcab.estab
-    and nfcabagrfin.seqnota = nfcab.seqnota
-    
-inner join agrfinduprec on 
-    agrfinduprec.estab = nfcabagrfin.estab
-    and agrfinduprec.seqpagamento = nfcabagrfin.seqpagamento
-    
-inner join pduprec on
-    pduprec.empresa = agrfinduprec.estab
-    and pduprec.duprec = agrfinduprec.duprec
-    
-left join
-    (
-    select
-    nfitemapartirde.estaborigem,
-    nfitemapartirde.seqnotaorigem,
-    nfitemapartirde.seqnotaitemorigem,
-    sum(nfitemapartirde.quantidade)qtd_bx
-    from nfcab 
-    
-    inner join nfitem on 
-    nfitem.estab = nfcab.estab
-    and nfitem.seqnota = nfcab.seqnota
-    
-    inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
-    inner join nfcfg_u on nfcfg_u.notaconf = nfcfg.notaconf
-    inner join u_tipoop on u_tipoop.u_tipoop_id = nfcfg_u.u_tipoop_id
-    
-    inner join nfitemapartirde on
-        nfitemapartirde.estab = nfitem.estab
-        and nfitemapartirde.seqnota = nfitem.seqnota
-        and nfitemapartirde.seqnotaitem = nfitem.seqnotaitem
-        
-    
-    where
-    u_tipoop.tipoop in ('RF')
-    
-    group by
-    nfitemapartirde.estaborigem,
-    nfitemapartirde.seqnotaorigem,
-    nfitemapartirde.seqnotaitemorigem
-    )remessa on
-    remessa.estaborigem = nfitem.estab
-    and remessa.seqnotaorigem = nfitem.seqnota
-    and remessa.seqnotaitemorigem = nfitem.seqnotaitem
-    
-left join
-    (
-    select
-    nfitemapartirde.estaborigem,
-    nfitemapartirde.seqnotaorigem,
-    nfitemapartirde.seqnotaitemorigem,
-    sum(nfitemapartirde.quantidade)qtd_dv
-    from nfcab 
-    
-    inner join nfitem on 
-    nfitem.estab = nfcab.estab
-    and nfitem.seqnota = nfcab.seqnota
-    
-    inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
-    inner join nfcfg_u on nfcfg_u.notaconf = nfcfg.notaconf
-    inner join u_tipoop on u_tipoop.u_tipoop_id = nfcfg_u.u_tipoop_id
-    
-    inner join nfitemapartirde on
-        nfitemapartirde.estab = nfitem.estab
-        and nfitemapartirde.seqnota = nfitem.seqnota
-        and nfitemapartirde.seqnotaitem = nfitem.seqnotaitem
-        
-    
-    where
-    u_tipoop.tipoop in ('DF-V')
-    
-    group by
-    nfitemapartirde.estaborigem,
-    nfitemapartirde.seqnotaorigem,
-    nfitemapartirde.seqnotaitemorigem
-    )devol on
-    devol.estaborigem = nfitem.estab
-    and devol.seqnotaorigem = nfitem.seqnota
-    and devol.seqnotaitemorigem = nfitem.seqnotaitem
-
-where
-nfcab.status <> 'C'
-and u_tipoop.tipoop in ('VF')
---and pduprec.duprec = '155803-1/1'
---and nfcab.estab = 46 
---and nfcab.dtemissao between '01/11/2023' and '30/11/2023'
-
-and (   (nfitem.quantidade -  coalesce(qtd_dv,0)) - coalesce(qtd_bx,0)) > 0
-and 
-(pduprec.empresa = dados1.estab
-and pduprec.duprec = dados1.documento 
-)
-
-
-group by
-nfcab.estab,
-nfcab.seqnota,
-nfitem.seqnotaitem,
-qtd_bx,
-qtd_dv,
-nfitem.valorunitario
-
-)dados
-
-) as saldo_remessa,*/
-
---case when TIPO_DOC in ('ACB','AC','DDVE') THEN DADOS1.saldo_atual *-1 ELSE DADOS1.saldo_atual END saldo_atual,
-(DADOS1.saldo_ctr*-1)saldo_ctr,
+(case when TIPO_DOC in ('ACB','AC','DDVE','AC','ACB','ACC','ACV','DUPP','IMEC','TFDP') THEN DADOS1.SALDO *-1 ELSE DADOS1.SALDO END) SALDO,
+(SALDO_CTR.VLRSALDO*-1)saldo_ctr,
 DADOS1.obs,
 DADOS1.situacao,
 TO_CHAR(DADOS1.DTPROVAVELPAGAMENTO,'DD/MM/YYYY') AS DTPROVAVELPAGAMENTO,
@@ -326,6 +298,8 @@ DADOS1.filial_rtv,
 DADOS1.consultor,
 PRODUTOR.saldoprod_sc,
 PRODUTOR.saldoprod_vlr
+,SALDO_PAG.SALDO_PAGAR
+,DADOS1.CTACTB
 ,dados1.fat_agrupa
 ,coalesce(to_char(to_date(DADOS1.dtreajuste, 'DD/MM/YY')), to_char(to_date(dados1.dtvencto, 'DD/MM/YY'))) DTREAJUSTE
 ,JUROS
@@ -345,8 +319,7 @@ DADOS.CLIENTE,
 DADOS.TIPO_DOC,
 dados.desc_tipo,
 DADOS.DOCUMENTO,
-  dados.status,
---(CASE WHEN DADOS.CULTURA = 'FARMTECH' THEN 'BOLETO FARMTECH' ELSE dados.status END) AS STATUS,
+dados.status,
 DADOS.PARCELA,
 DADOS.DTEMISSAO,
 DADOS.ANO,
@@ -372,35 +345,12 @@ OCORRENCIAFINAN.obs as obs,
 ocorrenciatipo.descricao as situacao,
 OCORRENCIAFINAN.DTPROVAVELPAGAMENTO,
 DADOS.conceito_credito,
---DADOS.limite_credito,
---DADOS.vlrlimite,
---DADOS.dtvigenciafim as vencimento_limite,
 DADOS.filial_rtv,
 DADOS.consultor,
-DADOS.CULTURA,
-(
-select distinct
-sum(coalesce(NVLRSALDO,0)) as saldo_valor
-from contrato
-INNER JOIN U_TEMPRESA
-    ON  CONTRATO.ESTAB = U_TEMPRESA.ESTAB
-
-inner join contratoite on
-    contratoite.estab = contrato.estab
-    and contratoite.contrato = contrato.contrato
-    
-    
-INNER JOIN TABLE (PCONTRATOSALDO( CONTRATO.ESTAB,
-                 CURRENT_DATE, CONTRATO.CONTRATO, CONTRATO.CONTRATO,
-                 CONTRATOITE.SEQITEM, CONTRATOITE.SEQITEM, NULL, NULL, NULL,
-                 NULL, NULL)) PSALDO
-    ON (0=0)
-    where
-    contrato.numerocm = dados.NUMEROCM /*AND CONTRATO.ESTAB = DADOS.ESTAB*/ AND CONTRATO.ATIVO = 'A' AND U_TEMPRESA.GRAOS = 'S'
-)saldo_ctr
+DADOS.CULTURA
 ,dados.fat_agrupa
 ,dados.dtreajuste
-
+,DADOS.CTACTB
 from(
 
 select
@@ -408,14 +358,14 @@ select
 filial.estab,
 filial.reduzido as filial,
 contamov.numerocm,
-case when coalesce(endereco.cnpjf,contamov.cnpjf) >11 then 'PJ' ELSE 'PF' end PF_PJ,
+case when NVL(endereco.cnpjf,contamov.cnpjf) >11 then 'PJ' ELSE 'PF' end PF_PJ,
 case when contamov.revenda = 'S' THEN 'Revenda'
     when contamov.produtor = 'S' THEN 'Produtor'
     when conceito.conceito = 96 then 'Fornecedor'
-    WHEN coalesce(endereco.nome,contamov.nome) like '%USINA%' THEN 'USINA'
-    when coalesce(endereco.cnpjf,contamov.cnpjf) > 11 then 'PJ' ELSE 'PF'
+    WHEN NVL(endereco.nome,contamov.nome) like '%USINA%' THEN 'USINA'
+    when NVL(endereco.cnpjf,contamov.cnpjf) > 11 then 'PJ' ELSE 'PF'
     end tipo_cliente,
-coalesce(endereco.cnpjf,contamov.cnpjf)cnpjf,
+NVL(endereco.cnpjf,contamov.cnpjf)cnpjf,
 contamov.nome as cliente,
 'DPL' AS TIPO_DOC,
 'DUPLICATA' as desc_tipo,
@@ -430,24 +380,14 @@ arredondar(CAST(:DTBASE AS DATE) - pduprec.dtvencto ,0) AS ATRASO,
 limcred.descricao as cultura,
 pduprec.valorfatura as valor,
 pduprec.juros,
-/*arredondar(
-divide(
-divide(
-   arredondar(CAST(:DTBASE AS DATE) -  pduprec.dtvencto,0)*pconfpad.juromensal,
-    30)*pduprec.valor,100),2) as juros,*/
-    
-    
-COALESCE(VALORREAJ,PDUPREC.VALOR) - COALESCE(BAIXAS.REC,0) AS SALDO,
-  --coalesce(PSALDODUPREC.PNSALDODUPREC,0) as saldo,--- coalesce(pduprec.desconto,0) as saldo,
+CASE WHEN NVL(pduprec.situacao,0) <> 39 THEN NVL(VALORREAJ,PDUPREC.VALOR) - NVL(BAIXAS.REC,0) ELSE NVL(VALORREAJ,PDUPREC.VALOR) - NVL(PDUPREC.DESCONTO,0) END AS SALDO,
 conceito.descricao as conceito_credito,
---limcred.descricao as limite_credito,
---pessoalimcred.vlrlimite,
---to_char(pessoalimcred.dtvigenciafim,'DD/MM/YYYY')dtvigenciafim,
 filialrtv.reduzido as filial_rtv,
 rtv.nome as consultor,
 ocorrenciaduprec.idocorrencia,
 PBLOQDIV.fatura as fat_agrupa,
-dtreajuste AS  dtreajuste--dtreaj_ori AS  dtreajuste
+dtreajuste AS  dtreajuste,
+NVL(PANALITI.CTACTB,AUX.CTACTB) AS CTACTB
 from pduprec
 
 inner join filial on filial.estab = pduprec.empresa
@@ -460,10 +400,6 @@ left join conceitopessoa on conceitopessoa.numerocm=contamov.numerocm
 left join conceito on conceito.conceito=conceitopessoa.conceito
 
 left join limcred on limcred.id =  pduprec.limcred_id
-/*
-left join pessoalimcred on 
-    pessoalimcred.numerocm = contamov.numerocm
-    and pessoalimcred.limcred_id = pduprec.limcred_id*/
     
 LEFT join contamov rtv on rtv.numerocm = pduprec.represent
 left join contamovfuncionario on contamovfuncionario.numerocm = rtv.numerocm
@@ -478,8 +414,6 @@ LEFT JOIN DUP_REAJ ON
     DUP_REAJ.ESTAB = PDUPREC.EMPRESA
     AND DUP_REAJ.DUPREC = PDUPREC.DUPREC
   
---left JOIN TABLE( PSALDODUPREC_TESTE(PDUPREC.EMPRESA, PDUPREC.DUPREC, NULL, :DTBASE))PSALDODUPREC
- --        ON 0=0  
         
 LEFT JOIN ( SELECT  OCORRENCIADUPREC.ESTAB,
                            OCORRENCIADUPREC.DUPREC,
@@ -522,25 +456,25 @@ left join
     )reaj on
     reaj.estab = pduprec.empresa
     and reaj.duprec = pduprec.duprec
-        
-where
---pduprec.quitada = 'N'
- ARREDONDAR(COALESCE(VALORREAJ,PDUPREC.VALOR) - COALESCE(BAIXAS.REC,0) -  COALESCE(DESCPEND,0) ,0) > 0
-  AND  ((COALESCE(VALORREAJ,PDUPREC.VALOR)  - COALESCE(BAIXAS.REC,0)) - COALESCE(PDUPREC.DESCONTO,0)) <> 0
-   AND PDUPREC.DUPREC <> ('84388-1') 
-  and coalesce(pduprec.situacao,0) <> 39
-  -- (coalesce(PSALDODUPREC.PNSALDODUPREC,0)  > 0) --- COALESCE(PDUPREC.DESCONTO,0) ) > 0 
-  --AND PDUPREC.QUITADA <> 'S'
-  --and filial.estab <> 11
---<#if ESTAB?has_content>
-	AND (0 in (:ESTAB) OR FILIAL.ESTAB IN (:ESTAB))
---</#if>
+    
+  LEFT JOIN PANALITI ON
+    PANALITI.EMPRESA = FILIAL.EMPRESA
+    AND PANALITI.ANALITICA = PDUPREC.ANALITICA
+    
+    LEFT JOIN PANALITI AUX ON
+    AUX.EMPRESA = 1
+    AND AUX.ANALITICA = PDUPREC.ANALITICA
   
+where
+ ARREDONDAR(NVL(VALORREAJ,PDUPREC.VALOR) - NVL(BAIXAS.REC,0) -  NVL(DESCPEND,0) ,0) > 0
+ AND  ((NVL(VALORREAJ,PDUPREC.VALOR)  - NVL(BAIXAS.REC,0)) - NVL(PDUPREC.DESCONTO,0)) <> 0
+AND PDUPREC.DUPREC <> ('84388-1') 
+--and coalesce(pduprec.situacao,0) <> 39
+AND (0 in (:ESTAB) OR FILIAL.ESTAB IN (:ESTAB))
 AND PDUPREC.DTEMISSAO BETWEEN :DTINI AND :DTFIM
 AND PDUPREC.DTVENCTO BETWEEN :DTINIVENC AND :DTFIMVENC
---  and (U_TEMPRESA.graos = 'S' or U_TEMPRESA.insumos = 'S')
- -- AND (conceito.conceito <> 96)
- <#if REPRESENT?has_content>  
+
+<#if REPRESENT?has_content>  
 AND PDUPREC.REPRESENT IN (:REPRESENT)
  </#if>
   
@@ -548,7 +482,7 @@ AND PDUPREC.REPRESENT IN (:REPRESENT)
 	AND PDUPREC.CLIENTE IN (:NUMEROCM)
 </#if>
   
-    and 
+and 
 filial.empresa in 
 (
 select distinct
@@ -614,7 +548,8 @@ FILIALRTV.REDUZIDO AS FILIAL_RTV,
 RTV.NOME AS CONSULTOR,
 NULL AS IDOCORRENCIA,
 NULL AS FAT_AGRUPA,
-NULL DTREAJUSTE
+NULL DTREAJUSTE,
+NVL(PANALITI.CTACTB,AUX.CTACTB) AS CTACTB
 FROM PCHEQREC
 
 LEFT JOIN PREPRESE
@@ -635,6 +570,15 @@ LEFT JOIN CONTAMOV RTV ON RTV.NUMEROCM = PCHEQREC.REPRESENTANTE
 LEFT JOIN CONTAMOVFUNCIONARIO ON CONTAMOVFUNCIONARIO.NUMEROCM = RTV.NUMEROCM
 LEFT JOIN FILIAL FILIALRTV ON FILIALRTV.ESTAB = CONTAMOVFUNCIONARIO.LOCALTRABALHO
 
+LEFT JOIN PANALITI ON
+    PANALITI.EMPRESA = FILIAL.EMPRESA
+    AND PANALITI.ANALITICA = PCHEQREC.ANALITICA
+    
+    LEFT JOIN PANALITI AUX ON
+    AUX.EMPRESA = 1
+    AND AUX.ANALITICA = PCHEQREC.ANALITICA
+  
+  
 WHERE
 PCHEQREC.SEQLANCATRAN IS NULL
 AND PCHEQREC.DTEMISSAO BETWEEN :DTINI AND :DTFIM
@@ -643,9 +587,9 @@ AND PCHEQREC.DTLANCA IS NULL
 AND PCHEQREC.EMPRESA <> 800
 AND PCHEQREC.SITUACAO  in (12,10)
 
- <#if REPRESENT?has_content>  
+<#if REPRESENT?has_content>  
 AND PCHEQREC.REPRESENTANTE IN (:REPRESENT)
- </#if>
+</#if>
   
  <#if NUMEROCM?has_content>  
 	AND CONTAMOV.NUMEROCM IN (:NUMEROCM)
@@ -675,185 +619,11 @@ OR
 )
   
   
-    -- gerencial farmtech não tem baixa: é o desconto
-UNION ALL  
-  
-select
-'A RECEBER' AS TIPO,
-filial.estab,
-filial.reduzido as filial,
-contamov.numerocm,
-case when coalesce(endereco.cnpjf,contamov.cnpjf) >11 then 'PJ' ELSE 'PF' end PF_PJ,
-case when contamov.revenda = 'S' THEN 'Revenda'
-    when contamov.produtor = 'S' THEN 'Produtor'
-    when conceito.conceito = 96 then 'Fornecedor'
-    WHEN coalesce(endereco.nome,contamov.nome) like '%USINA%' THEN 'USINA'
-    when coalesce(endereco.cnpjf,contamov.cnpjf) > 11 then 'PJ' ELSE 'PF'
-    end tipo_cliente,
-coalesce(endereco.cnpjf,contamov.cnpjf)cnpjf,
-contamov.nome as cliente,
-'DPL' AS TIPO_DOC,
-'DUPLICATA' as desc_tipo,
-pduprec.duprec as documento,
- psituaca.descricao as status,
-pduprec.nroparcela as parcela,
-to_char(pduprec.dtemissao,'DD/MM/YYYY') AS dtemissao,
-extract(year from pduprec.dtemissao) as ano,
-extract(month from pduprec.dtemissao) as mes,
-to_char(pduprec.dtvencto,'DD/MM/YYYY')dtvencto,
-arredondar(CAST(:DTBASE AS DATE) - pduprec.dtvencto ,0) AS ATRASO,
-limcred.descricao as cultura,
-pduprec.valorfatura as valor,
-pduprec.juros,
-/*arredondar(
-divide(
-divide(
-   arredondar(CAST(:DTBASE AS DATE) -  pduprec.dtvencto,0)*pconfpad.juromensal,
-    30)*pduprec.valor,100),2) as juros,*/
-    
-    
- (PDUPREC.VALOR - COALESCE(PDUPREC.DESCONTO,0)) as saldo,
---COALESCE(VALORREAJ,PDUPREC.VALOR) - COALESCE(BAIXAS.REC,0) AS SALDO,
-  --coalesce(PSALDODUPREC.PNSALDODUPREC,0) as saldo,--- coalesce(pduprec.desconto,0) as saldo,
-conceito.descricao as conceito_credito,
---limcred.descricao as limite_credito,
---pessoalimcred.vlrlimite,
---to_char(pessoalimcred.dtvigenciafim,'DD/MM/YYYY')dtvigenciafim,
-filialrtv.reduzido as filial_rtv,
-rtv.nome as consultor,
-ocorrenciaduprec.idocorrencia,
-PBLOQDIV.fatura as fat_agrupa,
-dtreajuste AS  dtreajuste--dtreaj_ori AS  dtreajuste
-from pduprec
-
-inner join filial on filial.estab = pduprec.empresa
-inner join contamov on contamov.numerocm = pduprec.cliente
-left join endereco on 
-    endereco.numerocm = pduprec.cliente
-    and endereco.seqendereco = pduprec.seqendereco
-left join conceitopessoa on conceitopessoa.numerocm=contamov.numerocm
-
-left join conceito on conceito.conceito=conceitopessoa.conceito
-
-left join limcred on limcred.id =  pduprec.limcred_id
-/*
-left join pessoalimcred on 
-    pessoalimcred.numerocm = contamov.numerocm
-    and pessoalimcred.limcred_id = pduprec.limcred_id*/
-    
-LEFT join contamov rtv on rtv.numerocm = pduprec.represent
-left join contamovfuncionario on contamovfuncionario.numerocm = rtv.numerocm
-
-left join filial filialrtv on filialrtv.estab = contamovfuncionario.localtrabalho
-/*
-  LEFT JOIN BAIXAS ON
-    BAIXAS.EMPRESA = PDUPREC.EMPRESA
-    AND BAIXAS.DUPREC = PDUPREC.DUPREC
-*/
-LEFT JOIN DUP_REAJ ON
-    DUP_REAJ.ESTAB = PDUPREC.EMPRESA
-    AND DUP_REAJ.DUPREC = PDUPREC.DUPREC
-  
---left JOIN TABLE( PSALDODUPREC_TESTE(PDUPREC.EMPRESA, PDUPREC.DUPREC, NULL, :DTBASE))PSALDODUPREC
- --        ON 0=0  
-        
-LEFT JOIN ( SELECT  OCORRENCIADUPREC.ESTAB,
-                           OCORRENCIADUPREC.DUPREC,
-                           MAX(OCORRENCIADUPREC.IDOCORRENCIA)IDOCORRENCIA
-                           
-     
-
-         FROM OCORRENCIADUPREC
-
-        INNER JOIN OCORRENCIAFINAN ON ocorrenciafinan.idocorrencia = ocorrenciaduprec.idocorrencia
-
-        GROUP BY OCORRENCIADUPREC.ESTAB,OCORRENCIADUPREC.DUPREC
-
-        ) OCORRENCIADUPREC
-
-         ON OCORRENCIADUPREC.ESTAB = PDUPREC.EMPRESA
-         AND OCORRENCIADUPREC.duprec = PDUPREC.DUPREC
-
-left join psituaca on psituaca.situacao = pduprec.situacao                             
-     inner JOIN PCONFPAD ON
-        PCONFPAD.EMPRESA = filial.estab            
-        
-        left join u_tempresa on u_tempresa.estab = filial.estab
-        
-left join PBLOQDIV on
-  	PBLOQDIV.empresa = pduprec.empresa
-  and PBLOQDIV.duprec = pduprec.duprec
-  
-left join
-    (select
-    estab,
-    duprec,
-    max(DTBASEJUROS)dtreajuste,
-    min(DTVENCREAJ)dtreaj_ori
-    from pduprecreaj
-    
-    group by
-    estab,
-    duprec
-    )reaj on
-    reaj.estab = pduprec.empresa
-    and reaj.duprec = pduprec.duprec
-        
-where
---pduprec.quitada = 'N'
- (PDUPREC.VALOR - COALESCE(PDUPREC.DESCONTO,0)) > 0
- --ARREDONDAR(COALESCE(VALORREAJ,PDUPREC.VALOR) - COALESCE(BAIXAS.REC,0),0) > 0
- and pduprec.situacao = 39
-   AND PDUPREC.DUPREC <> ('84388-1') 
-  -- (coalesce(PSALDODUPREC.PNSALDODUPREC,0)  > 0) --- COALESCE(PDUPREC.DESCONTO,0) ) > 0 
-  --AND PDUPREC.QUITADA <> 'S'
-  --and filial.estab <> 11
---<#if ESTAB?has_content>
-	AND (0 in (:ESTAB) OR FILIAL.ESTAB IN (:ESTAB))
---</#if>
-  
-AND PDUPREC.DTEMISSAO BETWEEN :DTINI AND :DTFIM
-AND PDUPREC.DTVENCTO BETWEEN :DTINIVENC AND :DTFIMVENC
---  and (U_TEMPRESA.graos = 'S' or U_TEMPRESA.insumos = 'S')
- -- AND (conceito.conceito <> 96)
- <#if REPRESENT?has_content>  
-AND PDUPREC.REPRESENT IN (:REPRESENT)
- </#if>
-  
- <#if NUMEROCM?has_content>  
-	AND PDUPREC.CLIENTE IN (:NUMEROCM)
-</#if>
-  
-    and 
-filial.empresa in 
-(
-select distinct
-empresa
-from filial
-
-where
-(0 in (:ESTAB) OR filial.estab in (:ESTAB))
-and
-filial.empresa in
-(
-select DISTINCT
-empresa
-from filial
-
-where
-(:EMPRESA = 1 and EMPRESA >=1)
-OR
-(:EMPRESA = 2 and EMPRESA <100)
-)
-)
-
-  
 )dados
 
 LEFT JOIN OCORRENCIAFINAN ON ocorrenciafinan.idocorrencia = DADOS.idocorrencia
 left join ocorrenciatipo on ocorrenciatipo.id = OCORRENCIAFINAN.idtipo
 LEFT JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB = DADOS.ESTAB
-
 
 UNION ALL
 
@@ -902,30 +672,10 @@ DADOS.conceito_credito,
 --DADOS.vencimento_limite,
 DADOS.filial_rtv,
 DADOS.consultor,
-DADOS.CULTURA,
-(
-select distinct
-sum(coalesce(NVLRSALDO,0)) as saldo_valor
-from contrato
-INNER JOIN U_TEMPRESA
-    ON  CONTRATO.ESTAB = U_TEMPRESA.ESTAB
-
-inner join contratoite on
-    contratoite.estab = contrato.estab
-    and contratoite.contrato = contrato.contrato
-    
-    
-INNER JOIN TABLE (PCONTRATOSALDO( CONTRATO.ESTAB,
-                 CURRENT_DATE, CONTRATO.CONTRATO, CONTRATO.CONTRATO,
-                 CONTRATOITE.SEQITEM, CONTRATOITE.SEQITEM, NULL, NULL, NULL,
-                 NULL, NULL)) PSALDO
-    ON (0=0)
-    where
-    contrato.numerocm = dados.NUMEROCM /*AND CONTRATO.ESTAB = DADOS.ESTAB*/ AND CONTRATO.ATIVO = 'A' AND U_TEMPRESA.GRAOS = 'S'
-)saldo_ctr
+DADOS.CULTURA
 , null fat_agrupa
 ,null dtreajuste
-
+,CTACTB
 FROM(
 
 select
@@ -957,21 +707,13 @@ TO_CHAR(CONTAMOVLAN.VENCIMENTO,'DD/MM/YYYY') DTVENCTO,
 arredondar(CAST(:DTBASE AS DATE) - CONTAMOVLAN.VENCIMENTO,0) AS ATRASO,
 contamovlan.valor,
 contamovlan.juros,
-/*arredondar(
-divide(
-divide(
-   arredondar(CAST(:DTBASE AS DATE) - CONTAMOVLAN.VENCIMENTO,0)*pconfpad.juromensal,
-    30)*contamovlan.valor,100),2) as juros,*/
 CONTAMOVLAN.VALOR - COALESCE(BAIXAS_CM.VLR,0) AS SALDO,
-  --PSALDOCONTAMOVLAN(CONTAMOVLAN.NUMEROCM, CONTAMOVLAN.ESTAB, CONTAMOVLAN.SEQCM, :DTBASE) as saldo,
 conceito.descricao as conceito_credito,
---'GERAL' LIMITE_CREDITO,
---pessoalimcred.vlrlimite,
---TO_CHAR(pessoalimcred.vencimento_limite,'DD/MM/YYYY')vencimento_limite,
 COALESCE(filialrtv.reduzido,'S/RTV') as filial_rtv,
 COALESCE(rtv.nome,'S/RTV') as consultor,
 ocorrenciacontamov.IDOCORRENCIA,
-  '' as cultura
+  '' as cultura,
+  contamovtp.CTAPAD AS CTACTB
 from CONTAMOVLAN
 
 inner join filial on filial.estab = contamovlan.estab
@@ -988,21 +730,7 @@ left join conceito on conceito.conceito=conceitopessoa.conceito
 left join contamovtp on
     contamovtp.tipo = CONTAMOVLAN.tipo
     and contamovtp.DEBCRED = CONTAMOVLAN.DEBCRED
-/*
-left join 
-    (
-    SELECT
-    NUMEROCM,
-    DTVIGENCIAFIM AS vencimento_limite,
-    SUM(VLRLIMITE)VLRLIMITE
-    FROM pessoalimcred
-    GROUP BY
-    NUMEROCM,
-    DTVIGENCIAFIM
-    
-    )
-    pessoalimcred on 
-    pessoalimcred.numerocm = CONTAMOVLAN.numerocm*/
+
     
 LEFT JOIN AGRFINCTAMOV ON AGRFINCTAMOV.ESTAB = CONTAMOVLAN.ESTAB
                             AND AGRFINCTAMOV.NUMEROCM = CONTAMOVLAN.NUMEROCM
@@ -1052,19 +780,16 @@ left join filial filialrtv on filialrtv.estab = contamovfuncionario.localtrabalh
     
 WHERE 
  ARREDONDAR(CONTAMOVLAN.VALOR - COALESCE(BAIXAS_CM.VLR,0),0) > 0
-  --PSALDOCONTAMOVLAN(CONTAMOVLAN.NUMEROCM, CONTAMOVLAN.ESTAB, CONTAMOVLAN.SEQCM, :DTBASE) > 0 --AND CONTAMOVLAN.SITUACAO <> 'B'
-  --and filial.estab <> 11
+
   AND (CONTAMOVLAN.DEBCRED = 'D' OR (CONTAMOVLAN.DEBCRED = 'C' AND CONTAMOVLAN.TIPO IN ('ACB','AC','DDVE','AC','ACB','ACC','ACV','DUPP','IMEC','TFDP')))
 and CONTAMOVLAN.TIPO not in ('ACT','AV','DDCO','JCSB')
   AND CONTAMOVLAN.TIPO NOT IN ('ACT','TACT','ACCR')
- -- AND CONTAMOVLAN.ESTAB < 800
--- <#if ESTAB?has_content>
-	AND (0 IN (:ESTAB) OR FILIAL.ESTAB IN (:ESTAB))
---</#if>
+AND (0 IN (:ESTAB) OR FILIAL.ESTAB IN (:ESTAB))
+
   
 AND CONTAMOVLAN.DTMOVTO BETWEEN :DTINI AND :DTFIM
 AND CONTAMOVLAN.VENCIMENTO BETWEEN :DTINIVENC AND :DTFIMVENC
- -- AND (conceito.conceito <> 96)
+
   <#if REPRESENT?has_content>  
     AND NFCAB.REPRESENT IN (:REPRESENT)
   </#if>
@@ -1073,7 +798,6 @@ AND CONTAMOVLAN.VENCIMENTO BETWEEN :DTINIVENC AND :DTFIMVENC
 	AND CONTAMOV.NUMEROCM IN (:NUMEROCM)
 </#if>
 
---and (U_TEMPRESA.graos = 'S' or U_TEMPRESA.insumos = 'S')
   
     and 
 filial.empresa in 
@@ -1103,10 +827,11 @@ OR
 LEFT JOIN OCORRENCIAFINAN ON ocorrenciafinan.idocorrencia = DADOS.idocorrencia
 left join ocorrenciatipo on ocorrenciatipo.id = OCORRENCIAFINAN.idtipo
 LEFT JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB = DADOS.ESTAB
-
+  
 
 )dados1
-
+LEFT JOIN SALDO_PAG ON SALDO_PAG.FORNECEDOR = DADOS1.NUMEROCM
+LEFT JOIN SALDO_CTR ON SALDO_CTR.NUMEROCM = DADOS1.NUMEROCM 
 left join
     (
 WITH ITEM_COTACAO AS 
@@ -1181,6 +906,5 @@ GROUP BY
 DADOS.NUMEROCM
   
     )PRODUTOR ON
-   -- PRODUTOR.ESTAB = DADOS1.ESTAB
-    --AND 
+   
     PRODUTOR.NUMEROCM = DADOS1.NUMEROCM
