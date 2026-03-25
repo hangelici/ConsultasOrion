@@ -41,6 +41,7 @@ v_dtlimite DATE;
 v_dtmov DATE;
 v_triangular varchar2(5);
 v_pess_triangular number;
+v_regiao varchar2(100);
 BEGIN
 
    IF UPDATING THEN
@@ -86,9 +87,9 @@ BEGIN
 
    select
       TIPOFRETES,OS_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,COALESCE(QTRIGO,'Sem_Padrao'),CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,
-      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM,OS_TRIANGULAR,OS_PESS_TRIANGULAR
+      NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,DTVECTOORIGEM,OS_TRIANGULAR,OS_PESS_TRIANGULAR,regiao
       INTO TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,QTRIGO,CORRETOR1,CORRETOR2,VLRCORRETOR1,VLRCORRETOR2,NRTICKET,CONTCONF,PERCENTUAL1,PERCENTUAL2,v_prazo,v_triangular,
-      v_pess_triangular
+      v_pess_triangular,v_regiao
    from pedcab_u
    where pedcab_u.estab=:NEW.ESTAB and pedcab_u.serie=:NEW.SERIE and pedcab_u.numero=:NEW.NUMERO; 
 
@@ -169,14 +170,16 @@ BEGIN
    VALUES (:NEW.ESTAB,CONTRATOD,1,(CASE WHEN P_NUMDIASPGTO IS NULL THEN COALESCE(v_prazo,prazopagamento) ELSE NULL END),ARREDONDAR((VALOR),2),P_NUMDIASPGTO);
 
    INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,
-   contrato_edit,NRTICKET,OS_TRIANGULAR,OS_PESS_TRIANGULAR)   
+   contrato_edit,NRTICKET,OS_TRIANGULAR,OS_PESS_TRIANGULAR,regiao,QTDORI)   
    VALUES (:NEW.ESTAB,CONTRATOD,'Pendente','0 - Em Análise','Contrato Automático Do Pedido: '||:NEW.NUMERO,
    TIPOFRETES,V_TIPOENTREGA,TIPOPGTO,TIPOPESSOA,
   -- 'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
    :new.DTPREVISAO,
    QTRIGO,
    --'Sem_Padrao',
-   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET,v_triangular,v_pess_triangular);   
+   'N','0 - A Faturar',to_date(CURRENT_DATE),'N',NRTICKET,v_triangular,v_pess_triangular,v_regiao,
+   QUANTIDADE
+   );   
 
    INSERT INTO u_logpedctr ( u_logpedctr_id,estab,serie_ped,pedido,confctr,contrato,GERADO,EXCLUIR,NUMEROCM,QUANTIDADE) VALUES 
    (OS_GEN_LOGPEDCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.SERIE,:NEW.NUMERO,CONTRATOCONF,CONTRATOD,'S','N',:NEW.PESSOA,QUANTIDADE); 
