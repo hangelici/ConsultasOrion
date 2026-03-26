@@ -353,7 +353,7 @@ select
     (case
         when ((c.DT_REPLANTIO is null)
             and (c.COD_ATIVID = 18)
-                and (c.DT_ABERTO_PROX_ATIV is null)) then round(((c.AREA_TOTAL * calc_replantio.HORASHA) / 8), 2)
+                and (c.DT_REPLANTIO is null)) then round(((c.AREA_TOTAL * calc_replantio.HORASHA) / 8), 2)
         when (c.COD_ATIVID = 83) then round(((c.AREA_TOTAL * calc_replantio.HORASHA) / 8), 2)
         else NULL
     end) AS diaria_replantio,
