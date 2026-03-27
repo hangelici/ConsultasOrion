@@ -1,337 +1,245 @@
-with peso as (
-   select  romapeso.*,
-          contamov.nome as nomeforn,
-          itemagro.descricao as nomeitem,
-          transp.nome as nomeprestador,
-          terceiros.nome as nometerceiros,
-          cast('' as varchar(20)) as autorizado,
-          cast('' as varchar(20)) as autorizadoromaquali,
-          ( romapeso.pesototal - romapeso.tara ) as pesoliquido,
-          romacfg.obrigaph
-     from romapeso
-    inner join romacfg
-   on romacfg.romaneioconfig = romapeso.romaneioconfig
-     left join contamov
-   on ( contamov.numerocm = romapeso.numerocm )
-     left join contamov transp
-   on ( transp.numerocm = romapeso.prestador )
-     left join contamov terceiros
-   on ( terceiros.numerocm = romapeso.terceiros )
-     left join itemagro
-   on ( itemagro.item = romapeso.item )
-    -- USUARIO DA TELA
-     left join pusers
-   on ( pusers.userid = :USERID )
-    where not exists (
-      select 1
-        from romapesofat
-       where romapesofat.estab = romapeso.estab
-         and romapesofat.placa = romapeso.placa
-         and romapesofat.sequencia = romapeso.sequencia
-         and romapesofat.numerocm = romapeso.numerocm
-   )
-      and romapeso.estab = :ESTAB
-      /*Se estiver para visualizar todas as leituras de peso*/
-      and ( ( pusers.visuleitpeso = 'S' )
-       or
-       /* ou o usuário só pode ver suas leituras de peso*/ ( ( romapeso.userid = :USERID )
-      and ( pusers.visuleitpeso = 'N' ) ) )
-),leitura as (
-   select l.estab,
-          l.placa,
-          l.sequencia,
-          sum(
-             case
-                when coalesce(
-                   l.liberado,
-                   'N'
-                ) = 'S' then
-                   1
-                else
-                   0
-             end
-          ) libe,
-          sum(
-             case
-                when coalesce(
-                   l.liberado,
-                   'N'
-                ) = 'N' then
-                   1
-                else
-                   0
-             end
-          ) bloq,
-          sum(
-             case
-                when coalesce(
-                   l.liberado,
-                   'N'
-                ) = 'C' then
-                   1
-                else
-                   0
-             end
-          ) canc,
-          max(
-             case
-                when l.tipoliberacao = 'E' then
-                   1
-             end
-          ) tem_liberacao
-     from leituraaut l
-    inner join peso
-   on peso.estab = l.estab
-      and peso.placa = l.placa
-      and peso.sequencia = l.sequencia
-      and ( ( l.id = peso.idpesototalmanual )
-       or ( l.id = peso.idtaramanual )
-       or ( l.id = peso.idautorizacaopeso )
-       or ( l.id = peso.idautorizacaodescont )
-       or ( l.id = peso.idautorizaembarque ) )
-    group by l.estab,
-             l.placa,
-             l.sequencia
-),info_descto as (
-   select r.estab,
-          r.placa,
-          r.sequencia,
-          max(
-             case
-                when r.obrigatorio = 'S' then
-                   'S'
-             end
-          ) obrdesctos,
-          max(
-             case
-                when r.obrigatorio = 'S'
-                   and r.reftabela = 0 then
-                   'N'
-             end
-          ) desctosok
-     from romapesodesc r
-    inner join peso
-   on peso.estab = r.estab
-      and peso.placa = r.placa
-      and peso.sequencia = r.sequencia
-    group by r.estab,
-             r.placa,
-             r.sequencia
-),qualidade as (
-   select distinct q.estab,
-                   q.placa,
-                   q.sequencia,
-                   max(
-                      case
-                         when alterougrau = 'N' then
-                            1
-                         else
-                            0
-                      end
-                   ) as qualidadeok,
-                   max(
-                      case
-                         when a.autorizado <> 'S' then
-                            1
-                      end
-                   ) qualidade_pendente,
-                   max(a.autorizado) autorizado
-     from romapesoqualidade q
-    inner join peso
-   on peso.estab = q.estab
-      and peso.placa = q.placa
-      and peso.sequencia = q.sequencia
-     left join autoromaquali a
-   on a.sequencia = q.seqautorizacao
-    group by q.estab,
-             q.placa,
-             q.sequencia
-),class_semente as (
-   select distinct c.estab,
-                   c.placa,
-                   c.sequencia
-     from romapesoclass c
-    inner join romaclassnome n
-   on n.classificacao = c.classificacao
-    inner join peso
-   on peso.estab = c.estab
-      and peso.placa = c.placa
-      and peso.sequencia = c.sequencia
-    where c.percentual > 0
-      and n.semente = 'S'
-),peso_final as (
-   select peso.*,
-          info_descto.obrdesctos,
-          NVL(info_descto.desctosok,'S') AS desctosok,
-          case
-             when qualidade.qualidadeok = 1 then
-                'N'
-             else
-                'S'
-          end as qualidadeok,
-          nvl(leitura.libe,0)libe,
-          nvl(leitura.bloq,0)bloq,
-          nvl(leitura.canc,0)canc,
-          qualidade.autorizado as qualidadeaprova,
-          leitura.tem_liberacao,
-          qualidade.qualidade_pendente,
-          case
-             when class_semente.estab is not null then
-                1
-          end as tem_semente
-     from peso
-     left join info_descto
-   on info_descto.estab = peso.estab
-      and info_descto.placa = peso.placa
-      and info_descto.sequencia = peso.sequencia
-     left join qualidade
-   on qualidade.estab = peso.estab
-      and qualidade.placa = peso.placa
-      and qualidade.sequencia = peso.sequencia
-     left join leitura
-   on leitura.estab = peso.estab
-      and leitura.placa = peso.placa
-      and leitura.sequencia = peso.sequencia
-     left join class_semente
-   on class_semente.estab = peso.estab
-      and class_semente.placa = peso.placa
-      and class_semente.sequencia = peso.sequencia
-),dados as (
-   select
-    ----- 1 VALIDAÇÃO DA VSCONSULTA
-    peso_final.*
-     from peso_final
-    where ( peso_final.pesototal = 0
-       or peso_final.tara = 0
-       or peso_final.salvalepesosemroma = 'S'
-       or peso_final.numerocm is null )
-   union all
-   select
-    ----- 2 VALIDAÇÃO DA VSCONSULTA
-    peso_final.*
-     from peso_final
-    where ( peso_final.idautorizacaopeso > 0
-       or peso_final.idautorizacaodescont > 0 )
-      and peso_final.tem_liberacao = 1
-   union all
-   select
-    ----- 3 VALIDAÇÃO DA VSCONSULTA
-    peso_final.*
-     from peso_final
-    where peso_final.qualidade_pendente = 1
-      and peso_final.tem_semente = 1
-   union all
-   select
-    ----- 4 VALIDAÇÃO DA VSCONSULTA
-    peso_final.*
-     from peso_final
-    where peso_final.pesototal > 0
-      and peso_final.tara > 0
-      and peso_final.obrigaph = 'L'
-      and peso_final.phoriginal < 0
-)
-select estab,
-       placa,
-       sequencia,
-       numerocm,
-       item,
-       obs,
-       dtpeso,
-       pesototal,
-       tara,
-       ticketbalanca,
-       prestador,
-       qualcontrato,
-       seqendereco,
-       terceiros,
-       horapesotot,
-       horapesotara,
-       tiporoma,
-       seqimp,
-       seqenderecoter,
-       areacampo,
-       dtpesotara,
-       seqprog,
-       manualpeso,
-       manualtara,
-       romaneioconfig,
-       codbarrasprodutor,
-       userid,
-       nfprodutor,
-       serienfprodutor,
-       phoriginal,
-       nrovagao,
-       motorista,
-       ufplaca,
-       pesoorigem,
-       mand_amostra1,
-       mand_amostra2,
-       mand_amostra3,
-       mand_media,
-       fototara,
-       placa1,
-       placa2,
-       tpveic,
-       safra,
-       tirouamostra,
-       amospend_id,
-       local,
-       percsemaprov,
-       fn,
-       gercevada,
-       salvalepesosemroma,
-       possiveltara,
-       idpesototalmanual,
-       idtaramanual,
-       campo,
-       variedade,
-       cultura,
-       mand_amostra4,
-       mand_amostra5,
-       mand_amostra6,
-       idautorizacaopeso,
-       pesograointarroz,
-       pesograoquearroz,
-       pesocascaarroz,
-       pesofareloarroz,
-       dtnfprodutor,
-       chaveacessonfp,
-       cod_motorista,
-       idautorizacaodescont,
-       ultalt,
-       seqrelacionada,
-       sincronizado,
-       seqimpoffline,
-       alertarecolhimento,
-       idautorizaembarque,
-       geroufinanceiro,
-       roma_campo,
-       seqnotatransp,
-       estabnotatransp,
-       cod_roma_cotton,
-       safra_cotton,
-       estab_cotton,
-       finalidadetipo,
-       rfid,
-       statussync,
-       guid,
-       calcfreteloc,
-       u_ph,
-       u_fn,
-       nomeforn,
-       nomeitem,
-       nomeprestador,
-       nometerceiros,
-       idpesototalmanual as idpesototalmanual_1,
-       idtaramanual as idtaramanual_1,
-       autorizado,
-       autorizadoromaquali,
-       pesoliquido,
-       obrdesctos,
-       desctosok,
-       qualidadeok,
-       libe,
-       bloq,
-       canc,
-       qualidadeaprova
-  from dados"
+SELECT /*+ 
+    GATHER_PLAN_STATISTICS
+    QB_NAME(MAIN_QB)
+    LEADING(peso)
+    USE_NL(info_descto qualidade leitura class_semente)
+*/
+
+peso.estab,
+peso.placa,
+peso.sequencia,
+peso.numerocm,
+peso.item,
+peso.obs,
+peso.dtpeso,
+peso.pesototal,
+peso.tara,
+peso.ticketbalanca,
+peso.prestador,
+peso.qualcontrato,
+peso.seqendereco,
+peso.terceiros,
+peso.horapesotot,
+peso.horapesotara,
+peso.tiporoma,
+peso.seqimp,
+peso.seqenderecoter,
+peso.areacampo,
+peso.dtpesotara,
+peso.seqprog,
+peso.manualpeso,
+peso.manualtara,
+peso.romaneioconfig,
+peso.codbarrasprodutor,
+peso.userid,
+peso.nfprodutor,
+peso.serienfprodutor,
+peso.phoriginal,
+peso.nrovagao,
+peso.motorista,
+peso.ufplaca,
+peso.pesoorigem,
+peso.mand_amostra1,
+peso.mand_amostra2,
+peso.mand_amostra3,
+peso.mand_media,
+peso.fototara,
+peso.placa1,
+peso.placa2,
+peso.tpveic,
+peso.safra,
+peso.tirouamostra,
+peso.amospend_id,
+peso.local,
+peso.percsemaprov,
+peso.fn,
+peso.gercevada,
+peso.salvalepesosemroma,
+peso.possiveltara,
+peso.idpesototalmanual,
+peso.idtaramanual,
+peso.campo,
+peso.variedade,
+peso.cultura,
+peso.mand_amostra4,
+peso.mand_amostra5,
+peso.mand_amostra6,
+peso.idautorizacaopeso,
+peso.pesograointarroz,
+peso.pesograoquearroz,
+peso.pesocascaarroz,
+peso.pesofareloarroz,
+peso.dtnfprodutor,
+peso.chaveacessonfp,
+peso.cod_motorista,
+peso.idautorizacaodescont,
+peso.ultalt,
+peso.seqrelacionada,
+peso.sincronizado,
+peso.seqimpoffline,
+peso.alertarecolhimento,
+peso.idautorizaembarque,
+peso.geroufinanceiro,
+peso.roma_campo,
+peso.seqnotatransp,
+peso.estabnotatransp,
+peso.cod_roma_cotton,
+peso.safra_cotton,
+peso.estab_cotton,
+peso.finalidadetipo,
+peso.rfid,
+peso.statussync,
+peso.guid,
+peso.calcfreteloc,
+peso.u_ph,
+peso.u_fn,
+peso.nomeforn,
+peso.nomeitem,
+peso.nomeprestador,
+peso.nometerceiros,
+
+-- duplicados
+peso.idpesototalmanual AS idpesototalmanual_1,
+peso.idtaramanual AS idtaramanual_1,
+
+-- calculados
+CAST('' AS VARCHAR2(20)) AS autorizado,
+CAST('' AS VARCHAR2(20)) AS autorizadoromaquali,
+peso.pesoliquido,
+info_descto.obrdesctos,
+NVL(info_descto.desctosok,'S') AS desctosok,
+
+CASE 
+    WHEN qualidade.qualidadeok = 1 THEN 'N'
+    ELSE 'S'
+END AS qualidadeok,
+
+NVL(leitura.libe,0) AS libe,
+NVL(leitura.bloq,0) AS bloq,
+NVL(leitura.canc,0) AS canc,
+qualidade.autorizado AS qualidadeaprova
+
+FROM (
+
+    SELECT /*+ 
+        QB_NAME(PESO_QB)
+        MATERIALIZE
+        NO_MERGE
+        INDEX_RS_ASC(rp IDX_ROMAPESO_ESTAB)
+    */
+        rp.*,
+        cm.nome AS nomeforn,
+        ia.descricao AS nomeitem,
+        transp.nome AS nomeprestador,
+        terceiros.nome AS nometerceiros,
+        (rp.pesototal - rp.tara) AS pesoliquido,
+        rc.obrigaph
+    FROM romapeso rp
+    INNER JOIN romacfg rc
+        ON rc.romaneioconfig = rp.romaneioconfig
+    LEFT JOIN contamov cm
+        ON cm.numerocm = rp.numerocm
+    LEFT JOIN contamov transp
+        ON transp.numerocm = rp.prestador
+    LEFT JOIN contamov terceiros
+        ON terceiros.numerocm = rp.terceiros
+    LEFT JOIN itemagro ia
+        ON ia.item = rp.item
+    LEFT JOIN pusers pu
+        ON pu.userid = :USERID
+    WHERE 
+        rp.estab = :ESTAB
+        AND NOT EXISTS (
+            SELECT /*+ USE_NL */ 1
+            FROM romapesofat rf
+            WHERE rf.estab = rp.estab
+              AND rf.placa = rp.placa
+              AND rf.sequencia = rp.sequencia
+              AND rf.numerocm = rp.numerocm
+        )
+        AND (
+            pu.visuleitpeso = 'S'
+            OR (rp.userid = :USERID AND pu.visuleitpeso = 'N')
+        )
+
+) peso
+
+LEFT JOIN (
+    SELECT /*+ MATERIALIZE */
+        r.estab,r.placa,r.sequencia,
+        MAX(CASE WHEN r.obrigatorio='S' THEN 'S' END) obrdesctos,
+        MAX(CASE WHEN r.obrigatorio='S' AND r.reftabela=0 THEN 'N' END) desctosok
+    FROM romapesodesc r
+    GROUP BY r.estab,r.placa,r.sequencia
+) info_descto
+ON info_descto.estab = peso.estab
+AND info_descto.placa = peso.placa
+AND info_descto.sequencia = peso.sequencia
+
+LEFT JOIN (
+    SELECT /*+ MATERIALIZE */
+        q.estab,q.placa,q.sequencia,
+        MAX(CASE WHEN alterougrau='N' THEN 1 ELSE 0 END) qualidadeok,
+        MAX(CASE WHEN a.autorizado <> 'S' THEN 1 END) qualidade_pendente,
+        MAX(a.autorizado) autorizado
+    FROM romapesoqualidade q
+    LEFT JOIN autoromaquali a
+        ON a.sequencia = q.seqautorizacao
+    GROUP BY q.estab,q.placa,q.sequencia
+) qualidade
+ON qualidade.estab = peso.estab
+AND qualidade.placa = peso.placa
+AND qualidade.sequencia = peso.sequencia
+
+LEFT JOIN (
+    SELECT /*+ MATERIALIZE */
+        l.estab,l.placa,l.sequencia,
+        SUM(CASE WHEN NVL(l.liberado,'N')='S' THEN 1 ELSE 0 END) libe,
+        SUM(CASE WHEN NVL(l.liberado,'N')='N' THEN 1 ELSE 0 END) bloq,
+        SUM(CASE WHEN NVL(l.liberado,'N')='C' THEN 1 ELSE 0 END) canc,
+        MAX(CASE WHEN l.tipoliberacao='E' THEN 1 END) tem_liberacao
+    FROM leituraaut l
+    GROUP BY l.estab,l.placa,l.sequencia
+) leitura
+ON leitura.estab = peso.estab
+AND leitura.placa = peso.placa
+AND leitura.sequencia = peso.sequencia
+
+LEFT JOIN (
+    SELECT /*+ MATERIALIZE */
+        c.estab,c.placa,c.sequencia
+    FROM romapesoclass c
+    INNER JOIN romaclassnome n
+        ON n.classificacao = c.classificacao
+    WHERE c.percentual > 0
+      AND n.semente = 'S'
+    GROUP BY c.estab,c.placa,c.sequencia
+) class_semente
+ON class_semente.estab = peso.estab
+AND class_semente.placa = peso.placa
+AND class_semente.sequencia = peso.sequencia
+
+WHERE
+(
+    peso.pesototal = 0
+    OR peso.tara = 0
+    OR peso.salvalepesosemroma = 'S'
+    OR peso.numerocm IS NULL
+
+    OR (
+        (peso.idautorizacaopeso > 0 OR peso.idautorizacaodescont > 0)
+        AND leitura.tem_liberacao = 1
+    )
+
+    OR (
+        qualidade.qualidade_pendente = 1
+        AND class_semente.estab IS NOT NULL
+    )
+
+    OR (
+        peso.pesototal > 0
+        AND peso.tara > 0
+        AND peso.obrigaph = 'L'
+        AND peso.phoriginal < 0
+    )
+);
