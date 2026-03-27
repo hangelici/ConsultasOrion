@@ -1,5 +1,5 @@
-with peso /*+ MATERIALIZE */ as (
-   select romapeso.*,
+with peso as (
+   select  romapeso.*,
           contamov.nome as nomeforn,
           itemagro.descricao as nomeitem,
           transp.nome as nomeprestador,
@@ -21,7 +21,7 @@ with peso /*+ MATERIALIZE */ as (
    on ( itemagro.item = romapeso.item )
     -- USUARIO DA TELA
      left join pusers
-   on ( pusers.userid = :userid )
+   on ( pusers.userid = :USERID )
     where not exists (
       select 1
         from romapesofat
@@ -30,11 +30,11 @@ with peso /*+ MATERIALIZE */ as (
          and romapesofat.sequencia = romapeso.sequencia
          and romapesofat.numerocm = romapeso.numerocm
    )
-      and romapeso.estab = :estab
+      and romapeso.estab = :ESTAB
       /*Se estiver para visualizar todas as leituras de peso*/
       and ( ( pusers.visuleitpeso = 'S' )
        or
-       /* ou o usuário só pode ver suas leituras de peso*/ ( ( romapeso.userid = :userid )
+       /* ou o usuário só pode ver suas leituras de peso*/ ( ( romapeso.userid = :USERID )
       and ( pusers.visuleitpeso = 'N' ) ) )
 ),leitura as (
    select l.estab,
@@ -162,16 +162,16 @@ with peso /*+ MATERIALIZE */ as (
 ),peso_final as (
    select peso.*,
           info_descto.obrdesctos,
-          info_descto.desctosok,
+          NVL(info_descto.desctosok,'S') AS desctosok,
           case
              when qualidade.qualidadeok = 1 then
                 'N'
              else
                 'S'
           end as qualidadeok,
-          leitura.libe,
-          leitura.bloq,
-          leitura.canc,
+          nvl(leitura.libe,0)libe,
+          nvl(leitura.bloq,0)bloq,
+          nvl(leitura.canc,0)canc,
           qualidade.autorizado as qualidadeaprova,
           leitura.tem_liberacao,
           qualidade.qualidade_pendente,
@@ -334,4 +334,4 @@ select estab,
        bloq,
        canc,
        qualidadeaprova
-  from dados
+  from dados"
