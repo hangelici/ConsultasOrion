@@ -16,7 +16,7 @@ from
 join dw_fazenda.ft_apt_campos fac on
     ((fac.OSAPONTA = fa.OSAPONTA)))
 where
-    ((fa.COD_ATIVID in (18, 67, 68, 37, 38, 78, 80, 79, 87))
+    ((fa.COD_ATIVID in (18, 67, 68, 37, 38, 78, 80, 79, 39))
         and (fa.SITUACAO = 'Fechado'))
 union all
 select
@@ -140,7 +140,7 @@ left join base b18 on
         and (b18.COD_ATIVID = 18)
             and (b18.DT_ABERTO <= b87.DT_ABERTO))))
 where
-    (b87.COD_ATIVID = 87)
+    (b87.COD_ATIVID = 39)
 group by
     b18.OSAPONTA,
     b18.OSTALHAO),
@@ -153,7 +153,7 @@ select
     min((case when (r.CODIGOATV = 38) then r.DTREPLANEJAMENTO else NULL end)) AS replan_mec_2cap,
     min((case when (r.CODIGOATV = 79) then r.DTREPLANEJAMENTO else NULL end)) AS replan_mec_1adub,
     min((case when (r.CODIGOATV = 80) then r.DTREPLANEJAMENTO else NULL end)) AS replan_mec_2adub,
-    min((case when (r.CODIGOATV = 87) then r.DTREPLANEJAMENTO else NULL end)) AS replan_mec_cap
+    min((case when (r.CODIGOATV = 39) then r.DTREPLANEJAMENTO else NULL end)) AS replan_mec_cap
 from
     dw_fazenda.dm_replanejamento r
 group by
