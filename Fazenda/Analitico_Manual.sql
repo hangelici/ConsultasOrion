@@ -1,7 +1,7 @@
 -- dw_fazenda.os_planejamento_atividades fonte
 
-CREATE OR REPLACE
-ALGORITHM = UNDEFINED VIEW dw_fazenda.os_planejamento_atividades AS with base as (
+/*CREATE OR REPLACE
+ALGORITHM = UNDEFINED VIEW dw_fazenda.os_planejamento_atividades */AS with base as (
 select
     fa.OSAPONTA AS OSAPONTA,
     fa.SITUACAO AS SITUACAO,
@@ -276,34 +276,34 @@ select
         else NULL
     end) AS DT_PLANJ_CAP_71
 from
-    ((((((((((((base b
+    base b
 left join prox_ativ p on
-    ((p.OSAPONTA_BASE = b.OSAPONTA)))
+    p.OSAPONTA_BASE = b.OSAPONTA
 left join plantio_18 pl on
-    (((pl.OSAPONTA_21 = b.OSAPONTA)
-        and (pl.OSTALHAO = b.OSTALHAO))))
+    pl.OSAPONTA_21 = b.OSAPONTA
+        and pl.OSTALHAO = b.OSTALHAO
 left join plantio_ref rf on
-    (((rf.OSAPONTA = b.OSAPONTA)
-        and (rf.OSTALHAO = b.OSTALHAO))))
+    rf.OSAPONTA = b.OSAPONTA
+        and rf.OSTALHAO = b.OSTALHAO
 left join plantio_2adub pa on
-    (((pa.OSAPONTA = b.OSAPONTA)
-        and (pa.OSTALHAO = b.OSTALHAO))))
+    pa.OSAPONTA = b.OSAPONTA
+        and pa.OSTALHAO = b.OSTALHAO
 left join plantio_capina pc on
-    (((pc.OSAPONTA = b.OSAPONTA)
-        and (pc.OSTALHAO = b.OSTALHAO))))
+    pc.OSAPONTA = b.OSAPONTA
+        and pc.OSTALHAO = b.OSTALHAO
 left join plantio_2_capina p2 on
-    (((p2.OSAPONTA = b.OSAPONTA)
-        and (p2.OSTALHAO = b.OSTALHAO))))
+    p2.OSAPONTA = b.OSAPONTA
+        and p2.OSTALHAO = b.OSTALHAO
 left join plantio_capina_cat pcat on
-    (((pcat.OSAPONTA = b.OSAPONTA)
-        and (pcat.OSTALHAO = b.OSTALHAO))))
+    pcat.OSAPONTA = b.OSAPONTA
+        and pcat.OSTALHAO = b.OSTALHAO
 left join replan rp on
-    ((rp.OSTALHAO = b.OSTALHAO)))
+    rp.OSTALHAO = b.OSTALHAO
 left join plantio_3cap c3 on
-    ((c3.OSTALHAO = b.OSTALHAO)))
+    c3.OSTALHAO = b.OSTALHAO
 left join plantio_2adubplan ad on
-    ((ad.OSTALHAO = b.OSTALHAO)))
+    ad.OSTALHAO = b.OSTALHAO
 left join plantio_2captotal capt_2 on
-    ((capt_2.OSTALHAO = b.OSTALHAO)))
+    capt_2.OSTALHAO = b.OSTALHAO
 left join plantio_cap_71 capt_71 on
-    ((capt_71.OSTALHAO = b.OSTALHAO)));
+    capt_71.OSTALHAO = b.OSTALHAO;
