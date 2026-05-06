@@ -539,20 +539,19 @@ app_cursor.execute("""
     join "log_CargaTran" tran on tran."CargaDadoId" = agendamento."Id"
     join "log_Veiculo" veiculo on veiculo."Id" = tran."VeiculoId"
     where
-    cast(agendamento."Embarque" as date) = cast(current_date as date) and transacao."TransacaoTipoId" = 1 and transacao."Cancelada" = false and transacao."Excluido" = false
+    cast(agendamento."Embarque" as date) between cast(current_date-2 as date) and cast(current_date as date) and transacao."TransacaoTipoId" = 1 and transacao."Cancelada" = false and transacao."Excluido" = false
     group by
     veiculo."Placa",
     cast(agendamento."Embarque" as date) 
 """)
 os_app_rows = app_cursor.fetchall()
-app_dict = {}
+app_dict = set()
 for row in os_app_rows:
     qtd = int(round(float(row[0]), 0)) if row[0] is not None else 0
-    data = row[1]               # já é date
     placa = normaliza_placa(row[2])
 
     if placa is not None:
-        app_dict[(placa, data)] = qtd
+        app_dict.add((placa, qtd))
 
 # ------------------- VALIDAÇÕES  ------------------- #
 pg_agrupado = defaultdict(int)
@@ -629,10 +628,14 @@ for row in resultado_final:
         classestoque = None
     else:
         chave_carga = (placa, ncm, data)
-        chave_app = (placa,data)
-
         soma_pg = pg_agrupado.get(chave_carga)
-        soma_app = pg_agrupado_app.get(chave_app)
+
+        try:
+            qcom = int(round(float(str(row[8]).replace(',', '.')), 0))
+        except (ValueError, TypeError):
+            qcom = 0
+
+        chave_app = (placa, qcom)
 
         if chave_carga in carga_dict:
             carga = carga_dict[chave_carga]
@@ -652,13 +655,7 @@ for row in resultado_final:
         
         # APP
         if chave_app in app_dict:
-            peso_app = app_dict[chave_app]
-
-            dif_pesoapp = (
-                soma_app - peso_app
-                if soma_app is not None
-                else None
-            )
+            dif_pesoapp = 0
         else:
             dif_pesoapp = None
 
