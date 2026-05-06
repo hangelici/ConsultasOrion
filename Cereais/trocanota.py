@@ -356,7 +356,7 @@ SALDO_MANUAL.CNPJF,
 SALDO_MANUAL.INSCESTAD,
 SALDO_MANUAL.DTVENCTO,
 ROW_NUMBER() OVER (
-            PARTITION BY SALDO_MANUAL.CNPJF, SALDO_MANUAL.INSCESTAD
+            PARTITION BY SALDO_MANUAL.ESTAB, SALDO_MANUAL.NUMEROCM
             ORDER BY ABS(SALDO_MANUAL.DTVENCTO - TRUNC(SYSDATE))
         ) AS RN,
 SALDO_MANUAL.CONTCONF,
@@ -375,7 +375,10 @@ for row in cursor_oracle.fetchall():
     contconf = row[6]
     numerocm = row[7]
 
-    chave = str(numerocm).strip() if numerocm is not None else None
+    chave = (
+    str(numerocm).strip() if numerocm is not None else None,
+    str(estab).strip() if estab is not None else None
+    )
     contrato_dict[chave] = (estab, contrato, contconf)
 
 ## Buscando tabela de tipos de operação
@@ -407,8 +410,8 @@ select
 d.filial,d.chave,d.dtemi,d.emitid,d.emitie,
 case when d.trnplaca = '' then null else d.trnplaca end trnplaca,
 d.num,d2.ncm,d2.qcom,d2.vprod,d2.cfop,d2.utrib,d.serie,d2.xprod,d.cstat,
-(regexp_match(infadfisco, '[A-Z]{3}[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
-(regexp_match(infcpl,    '[A-Z]{3}[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2
+(regexp_match(infadfisco, '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
+(regexp_match(infcpl,    '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2
 from "document" d 
 inner join docitem d2 on d2.chave = d.chave
 left join filial f on f.cnpj = d.emitid
@@ -609,8 +612,11 @@ for row in resultado_final:
     # ---------------- CONTRATO ----------------
     codpess = str(codpess).strip() if codpess is not None else None
 
+    estab_row = str(row[0]).strip() if row[0] is not None else None
+    chave_ctr = (codpess, estab_row)
+
     estab_contrato, contrato, contconf = contrato_dict.get(
-        codpess,
+        chave_ctr,
         (None, None, None)
     )
     classestoque = None
