@@ -404,14 +404,15 @@ fiscal_cursor.execute("""
         select
 filial,chave,dtemi,emitid,emitie,
 coalesce(trnplaca,placa1,placa2) as trnplaca,
-num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat
+num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat,ucom
 from(
 select
 d.filial,d.chave,d.dtemi,d.emitid,d.emitie,
 case when d.trnplaca = '' then null else d.trnplaca end trnplaca,
 d.num,d2.ncm,d2.qcom,d2.vprod,d2.cfop,d2.utrib,d.serie,d2.xprod,d.cstat,
 (regexp_match(infadfisco, '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
-(regexp_match(infcpl,    '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2
+(regexp_match(infcpl,    '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2,
+d2.ucom
 from "document" d 
 inner join docitem d2 on d2.chave = d.chave
 left join filial f on f.cnpj = d.emitid
@@ -423,6 +424,40 @@ and cast(d.dtemi as date) between (current_date-4) and current_date
 )dados
     """)
 pg_rows = fiscal_cursor.fetchall()
+
+# Converter valores de quantidade
+pg_rows_convertido = []
+
+for row in pg_rows:
+    row = list(row)
+
+    qcom = row[8]
+    ucom = row[-1]
+    ch = row[1]
+
+    try:
+        valor = Decimal(str(qcom).replace(',', '.'))
+
+        ucom_norm = str(ucom).strip().upper()
+
+        logger.info(
+            f"Chave ={ch!r} | QCOM={qcom!r} | UCOM={ucom!r} | NORMALIZADO={ucom_norm!r}"
+        )
+
+        if ucom_norm.startswith('TON'):
+            valor *= 1000
+
+        row[8] = valor.quantize(Decimal('0.0001'))
+
+    except (InvalidOperation, TypeError):
+        row[8] = 0
+
+    # remove ucom
+    del row[-1]
+
+    pg_rows_convertido.append(tuple(row))
+
+pg_rows = pg_rows_convertido
 
 # Aplicando filtro de filiais de cereais
 pg_rows = [
@@ -570,10 +605,7 @@ for row in resultado_final:
 
     ncm = row[7]
 
-    try:
-        qcom = int(round(float(str(row[8]).replace(',', '.')), 0))
-    except (ValueError, TypeError):
-        qcom = 0
+    qcom = row[8]
     
     pg_agrupado[(placa, ncm, data)] += qcom
     pg_agrupado_app[(placa,data)] += qcom
@@ -630,11 +662,7 @@ for row in resultado_final:
         chave_carga = (placa, ncm, data)
         soma_pg = pg_agrupado.get(chave_carga)
 
-        try:
-            qcom = int(round(float(str(row[8]).replace(',', '.')), 0))
-        except (ValueError, TypeError):
-            qcom = 0
-
+        qcom = row[8]
         chave_app = (placa, qcom)
 
         if chave_carga in carga_dict:
@@ -728,7 +756,7 @@ for row in resultado_final_otimizado:
     except:
         lista[2] = None
     
-    lista[8] = to_number_br(lista[8])   # quantidade
+    lista[8] = row[8]
     lista[9] = to_number_br(lista[9])   # valortotal
     lista[0] = to_number_br(lista[0])   # estab
 
@@ -851,7 +879,8 @@ WHEN MATCHED THEN
         t.STATUS_NOTA      = s.STATUS_NOTA,
         t.notaref          = s.notaref,
         t.CLASSIF_LOCAL     = s.CLASSIF_LOCAL,
-        t.numerocm          = s.numerocm
+        t.numerocm          = s.numerocm,
+        t.quantidade        = s.quantidade
 
 WHEN NOT MATCHED THEN
     INSERT (
