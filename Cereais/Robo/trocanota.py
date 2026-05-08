@@ -180,6 +180,7 @@ cnpj_numerocm_dict = {
 
 # Buscar ordem de carga
 cursor_oracle.execute("""
+    SELECT * FROM (
     SELECT
     f.idcarga,
     f.estab,
@@ -188,29 +189,33 @@ cursor_oracle.execute("""
     itemagro.ncm,
     f.PESOLIQUIDO,
     f.DTVALIDADE,
-    localest_u.CLASSIFICACAO1
+    localest_u.CLASSIFICACAO1,
+    ROW_NUMBER() OVER (
+            PARTITION BY F.ESTAB, T.PLACA
+            ORDER BY F.IDCARGA DESC
+        ) AS RN
     from ordemcargafrete F
     inner join ordemcargatransp t on t.idcarga = f.idcarga
     inner join itemagro on itemagro.item = f.item
     left join localest_u on localest_u.estab = f.estab and localest_u.local = f.localestoque
-    WHERE trunc(f.DTVALIDADE) = trunc(current_date)
-    and t.placa is not null              
+    WHERE 
+    trunc(f.DTVALIDADE) between trunc(current_date-2) and trunc(current_date)
+    and t.placa is not null )DADOS WHERE RN =1             
 """)
 carga_dict = {}
 for row in cursor_oracle.fetchall():
     chave = (
         row[3].strip().upper(),   # placa
-        row[4],                  # ncm
-        row[6].date()            # DTVALIDADE
+        row[4]
     )
 
     carga_dict[chave] = {
         "idcarga": row[0],
         "localestoque": row[2],
         "peso": int(round(float(row[5]), 2)),
-        "classificacao": row[7]
+        "classificacao": row[7],
+        "rn": row[8]
     }
-
 # Buscar apenas Filiais de cereais
 cursor_oracle.execute("""
     select 
@@ -314,7 +319,9 @@ SELECT
 CONTRATO.ESTAB,
 CONTRATO.CONTRATO,
 CONTRATO.CONTCONF,
-contratoite.QUANTIDADE,
+CONTRATOITE.QUANTIDADE,
+ARREDONDAR(CONTRATOITE.VALORUNIT,2) AS VALORUNIT,
+CONTRATOITE.LOCAL,
 NVL(ENDERECO.CNPJF,CONTAMOV.CNPJF) AS CNPJF,
 COALESCE(ENDERECO.CREDENCIALAGRO,CONTAMOV.INSCESTAD,'0') AS INSCESTAD,
 NVL(V.DTVENCTO,CONTRATO.DTVENCTO) AS DTVENCTO,
@@ -357,16 +364,17 @@ SALDO_MANUAL.INSCESTAD,
 SALDO_MANUAL.DTVENCTO,
 ROW_NUMBER() OVER (
             PARTITION BY SALDO_MANUAL.ESTAB, SALDO_MANUAL.NUMEROCM
-            ORDER BY ABS(SALDO_MANUAL.DTVENCTO - TRUNC(SYSDATE))
+            ORDER BY (SALDO_MANUAL.DTVENCTO - TRUNC(SYSDATE)) ASC
         ) AS RN,
 SALDO_MANUAL.CONTCONF,
-SALDO_MANUAL.NUMEROCM
+SALDO_MANUAL.NUMEROCM,
+SALDO_MANUAL.VALORUNIT,
+SALDO_MANUAL.LOCAL
 FROM SALDO_MANUAL
 WHERE SALDO > 0 
 )DADOS
-WHERE RN = 1
 """)
-contrato_dict = {}
+contrato_dict = defaultdict(list)
 for row in cursor_oracle.fetchall():
     estab = row[0]
     contrato = row[1]
@@ -374,12 +382,25 @@ for row in cursor_oracle.fetchall():
     inscestad = row[3]
     contconf = row[6]
     numerocm = row[7]
+    rn = row[5]
+    valorunit = row[8]
+    local = row[9]
 
     chave = (
-    str(numerocm).strip() if numerocm is not None else None,
-    str(estab).strip() if estab is not None else None
+        str(numerocm).strip() if numerocm is not None else None,
+        str(estab).strip() if estab is not None else None,
+        Decimal(str(valorunit)),
+        int(local) if local is not None else None
     )
-    contrato_dict[chave] = (estab, contrato, contconf)
+
+    contrato_dict[chave].append(
+        (
+            rn,
+            estab,
+            contrato,
+            contconf
+        )
+    )
 
 ## Buscando tabela de tipos de operação
 cursor_oracle.execute(""" 
@@ -403,16 +424,16 @@ for row in cursor_oracle.fetchall():
 fiscal_cursor.execute("""
         select
 filial,chave,dtemi,emitid,emitie,
-coalesce(trnplaca,placa1,placa2) as trnplaca,
-num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat,ucom
+replace(coalesce(trnplaca,placa1,placa2),'-','') as trnplaca,
+num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat,vuntrib,ucom
 from(
 select
 d.filial,d.chave,d.dtemi,d.emitid,d.emitie,
 case when d.trnplaca = '' then null else d.trnplaca end trnplaca,
 d.num,d2.ncm,d2.qcom,d2.vprod,d2.cfop,d2.utrib,d.serie,d2.xprod,d.cstat,
-(regexp_match(infadfisco, '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
-(regexp_match(infcpl,    '[A-Z]{3}[-.\\s]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2,
-d2.ucom
+(regexp_match(infadfisco, '[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
+(regexp_match(infcpl,    '[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2,
+d2.ucom,d2.vuntrib
 from "document" d 
 inner join docitem d2 on d2.chave = d.chave
 left join filial f on f.cnpj = d.emitid
@@ -435,22 +456,40 @@ for row in pg_rows:
     ucom = row[-1]
     ch = row[1]
 
+    utrib = row[11]
+    vuntrib = row[-2]
+
+    # Ajustando quantidade
     try:
         valor = Decimal(str(qcom).replace(',', '.'))
 
         ucom_norm = str(ucom).strip().upper()
 
-        logger.info(
-            f"Chave ={ch!r} | QCOM={qcom!r} | UCOM={ucom!r} | NORMALIZADO={ucom_norm!r}"
-        )
-
         if ucom_norm.startswith('TON'):
             valor *= 1000
+        elif ucom_norm.startswith('SC'):
+            valor *= 60
 
         row[8] = valor.quantize(Decimal('0.0001'))
 
     except (InvalidOperation, TypeError):
         row[8] = 0
+    
+    # Ajustando Valor Unit
+    try:
+        valor_vuntrib = Decimal(str(vuntrib).replace(',', '.'))
+
+        utrib_norm = str(utrib).strip().upper()
+
+        if utrib_norm.startswith('TON'):
+            valor_vuntrib = (Decimal('1000') / Decimal('60')) / valor_vuntrib
+        else:
+            valor_vuntrib = valor_vuntrib * Decimal('60')
+
+        row[15] = valor_vuntrib.quantize(Decimal('0.0001'))
+
+    except (InvalidOperation, TypeError, ZeroDivisionError):
+        row[15] = None
 
     # remove ucom
     del row[-1]
@@ -639,17 +678,8 @@ for row in resultado_final:
     
     # ---------------- CODIGO PESSOA ----------------
     codpess = cnpj_numerocm_dict.get(emitid)
-
-    # ---------------- CONTRATO ----------------
     codpess = str(codpess).strip() if codpess is not None else None
 
-    estab_row = str(row[0]).strip() if row[0] is not None else None
-    chave_ctr = (codpess, estab_row)
-
-    estab_contrato, contrato, contconf = contrato_dict.get(
-        chave_ctr,
-        (None, None, None)
-    )
     classestoque = None
     # ---------------- CARGA ----------------
     if placa is None or data is None:
@@ -659,7 +689,7 @@ for row in resultado_final:
         dif_pesoapp = None
         classestoque = None
     else:
-        chave_carga = (placa, ncm, data)
+        chave_carga = (placa, ncm)
         soma_pg = pg_agrupado.get(chave_carga)
 
         qcom = row[8]
@@ -680,12 +710,29 @@ for row in resultado_final:
             idcarga = None
             localestoque = None
             dif_peso = None
-        
+
         # APP
         if chave_app in app_dict:
             dif_pesoapp = 0
         else:
             dif_pesoapp = None
+        
+    # ---------------- CONTRATO ----------------
+    estab_row = str(row[0]).strip() if row[0] is not None else None
+    vlrunit = row[-1]
+    chave_ctr = (codpess, estab_row,vlrunit,localestoque)
+    candidatos = contrato_dict.get(chave_ctr, [])
+    if candidatos:
+        rn, estab_contrato, contrato, contconf = min(
+            candidatos,
+            key=lambda x: x[0]
+        )
+    else:
+        estab_contrato, contrato, contconf = (
+            None,
+            None,
+            None
+        )
 
     # ---------------- Config Nota e Tipo de Baixa ---------------- #
     if produtor == 'S':
@@ -828,22 +875,23 @@ USING (
         :13 AS serie,
         :14 AS item,
         :15 AS STATUS_NOTA,
-        :16 AS VALIDANCM,
-        :17 AS produtor,
-        :18 AS seqendereco,
-        :19 AS ordemcarga,
-        :20 AS localestoque,
-        :21 AS difviasoft,
-        :22 AS difapp,
-        :23 AS estabcontrato,
-        :24 AS contrato,
-        :25 AS contconf,
-        :26 AS notaconf,
-        :27 AS tipobaixa,
-        :28 AS notaref,
-        :29 AS CLASSIF_LOCAL,
-        :30 as numerocm,
-        :31 AS status
+        :16 AS VUNTRIB,
+        :17 AS VALIDANCM,
+        :18 AS produtor,
+        :19 AS seqendereco,
+        :20 AS ordemcarga,
+        :21 AS localestoque,
+        :22 AS difviasoft,
+        :23 AS difapp,
+        :24 AS estabcontrato,
+        :25 AS contrato,
+        :26 AS contconf,
+        :27 AS notaconf,
+        :28 AS tipobaixa,
+        :29 AS notaref,
+        :30 AS CLASSIF_LOCAL,
+        :31 as numerocm,
+        :32 AS status
     FROM dual
 ) s
 ON (
@@ -880,7 +928,9 @@ WHEN MATCHED THEN
         t.notaref          = s.notaref,
         t.CLASSIF_LOCAL     = s.CLASSIF_LOCAL,
         t.numerocm          = s.numerocm,
-        t.quantidade        = s.quantidade
+        t.quantidade        = s.quantidade,
+        t.VUNTRIB           = s.VUNTRIB,
+        t.placa             = s.placa
 
 WHEN NOT MATCHED THEN
     INSERT (
@@ -914,7 +964,8 @@ WHEN NOT MATCHED THEN
         notaref,
         CLASSIF_LOCAL,
         numerocm,
-        status
+        status,
+        VUNTRIB
     )
     VALUES (
         s.estab,
@@ -947,7 +998,8 @@ WHEN NOT MATCHED THEN
         s.notaref,
         s.CLASSIF_LOCAL,
         s.numerocm,
-        s.status
+        s.status,
+        s.VUNTRIB
     )
 """
 
