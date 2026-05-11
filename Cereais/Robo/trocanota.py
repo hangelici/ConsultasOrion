@@ -607,7 +607,8 @@ app_cursor.execute("""
     select
     sum(transacao."Quantidade") as "Qtd",
     cast(agendamento."Embarque" as date)  as "Embarque",
-    veiculo."Placa"
+    veiculo."Placa",
+    agendamento."Integra"
     from "log_CargaTransacao" transacao
     join "log_CargaDado" agendamento on transacao."CargaDadoId" = agendamento."Id"
     join "log_CargaTran" tran on tran."CargaDadoId" = agendamento."Id"
@@ -615,17 +616,17 @@ app_cursor.execute("""
     where
     cast(agendamento."Embarque" as date) between cast(current_date-2 as date) and cast(current_date as date) and transacao."TransacaoTipoId" = 1 and transacao."Cancelada" = false and transacao."Excluido" = false
     group by
-    veiculo."Placa",
+    veiculo."Placa",agendamento."Integra",
     cast(agendamento."Embarque" as date) 
 """)
 os_app_rows = app_cursor.fetchall()
-app_dict = set()
+app_dict = {}
 for row in os_app_rows:
-    qtd = int(round(float(row[0]), 0)) if row[0] is not None else 0
-    placa = normaliza_placa(row[2])
+    qtd = Decimal(str(row[0]).replace(',', '.')) if row[0] is not None else Decimal('0')
+    integra = int(row[3]) if row[3] is not None else None
 
-    if placa is not None:
-        app_dict.add((placa, qtd))
+    if integra is not None:
+        app_dict[integra] = qtd
 
 # ------------------- VALIDAÇÕES  ------------------- #
 pg_agrupado = defaultdict(int)
@@ -682,7 +683,7 @@ for row in resultado_final:
 
     classestoque = None
     # ---------------- CARGA ----------------
-    if placa is None or data is None:
+    if placa is None:
         idcarga = None
         localestoque = None
         dif_peso = None
@@ -712,8 +713,13 @@ for row in resultado_final:
             dif_peso = None
 
         # APP
-        if chave_app in app_dict:
-            dif_pesoapp = 0
+        integra_app = idcarga
+        qtd_app = app_dict.get(integra_app)
+
+        if qtd_app is not None:
+            dif_pesoapp = (
+                Decimal(str(qcom)) - qtd_app
+            ).quantize(Decimal('0.0001'))
         else:
             dif_pesoapp = None
         
@@ -835,7 +841,7 @@ for row in resultado_final_otimizado:
     #elif dif_peso is None or dif_peso != 0:
     #    status = 113
 
-    elif dif_peso_app is None or dif_peso_app != 0:
+    elif dif_peso_app is None or dif_peso_app > 0:
         status = 114
 
     elif estab_contrato is None:
