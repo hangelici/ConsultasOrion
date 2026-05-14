@@ -425,7 +425,7 @@ fiscal_cursor.execute("""
         select
 filial,chave,dtemi,emitid,emitie,
 replace(coalesce(trnplaca,placa1,placa2),'-','') as trnplaca,
-num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat,vuntrib,ucom
+num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat,vuntrib,ucom,hremi
 from(
 select
 d.filial,d.chave,d.dtemi,d.emitid,d.emitie,
@@ -433,7 +433,7 @@ case when d.trnplaca = '' then null else d.trnplaca end trnplaca,
 d.num,d2.ncm,d2.qcom,d2.vprod,d2.cfop,d2.utrib,d.serie,d2.xprod,d.cstat,
 (regexp_match(infadfisco, '[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
 (regexp_match(infcpl,    '[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2,
-d2.ucom,d2.vuntrib
+d2.ucom,d2.vuntrib,hremi
 from "document" d 
 inner join docitem d2 on d2.chave = d.chave
 left join filial f on f.cnpj = d.emitid
@@ -448,16 +448,20 @@ pg_rows = fiscal_cursor.fetchall()
 
 # Converter valores de quantidade
 pg_rows_convertido = []
-
+hremi_dict = {}
 for row in pg_rows:
     row = list(row)
 
     qcom = row[8]
-    ucom = row[-1]
+    ucom = row[-2]
     ch = row[1]
 
     utrib = row[11]
-    vuntrib = row[-2]
+    vuntrib = row[-3]
+
+    # dicionario com chave -> hora
+    hremi = row[-1]
+    hremi_dict[ch] = hremi
 
     # Ajustando quantidade
     try:
@@ -492,7 +496,8 @@ for row in pg_rows:
     except (InvalidOperation, TypeError, ZeroDivisionError):
         row[15] = None
 
-    # remove ucom
+    # remove ucom e hora
+    del row[-1]
     del row[-1]
 
     pg_rows_convertido.append(tuple(row))
@@ -815,6 +820,27 @@ for row in resultado_final_otimizado:
     except:
         lista[2] = None
     
+    # Criando o TimeStamp
+    chave = lista[1]
+    hremi = hremi_dict.get(chave)
+    dt_emissao_ts = None
+
+    if lista[2] is not None and hremi is not None:
+        try:
+            hora_obj = datetime.strptime(
+                str(hremi).strip(),
+                "%H:%M:%S"
+            ).time()
+
+            dt_emissao_ts = datetime.combine(
+                lista[2].date(),
+                hora_obj
+            )
+
+        except Exception as e:
+            logger.info(f"Erro DATA_EMISSAO -> {chave} -> {e}")
+            dt_emissao_ts = None
+
     lista[8] = row[8]
     lista[9] = to_number_br(lista[9])   # valortotal
     lista[0] = to_number_br(lista[0])   # estab
@@ -864,9 +890,10 @@ for row in resultado_final_otimizado:
         status = 100  # OK
 
     # -------------------------------------------------
-    # ADICIONA STATUS NO FINAL
+    # ADICIONA STATUS E TIMESTAMP NO FINAL
     # -------------------------------------------------
     lista.append(status)
+    lista.append(dt_emissao_ts)
     dados_para_insert.append(tuple(lista))
 
 merge_sql = """
@@ -904,7 +931,8 @@ USING (
         :29 AS notaref,
         :30 AS CLASSIF_LOCAL,
         :31 as numerocm,
-        :32 AS status
+        :32 AS status,
+        :33 as DATA_EMISSAO
     FROM dual
 ) s
 ON (
@@ -943,7 +971,8 @@ WHEN MATCHED THEN
         t.numerocm          = s.numerocm,
         t.quantidade        = s.quantidade,
         t.VUNTRIB           = s.VUNTRIB,
-        t.placa             = s.placa
+        t.placa             = s.placa,
+        t.DATA_EMISSAO = s.DATA_EMISSAO
 
 WHEN NOT MATCHED THEN
     INSERT (
@@ -978,7 +1007,8 @@ WHEN NOT MATCHED THEN
         CLASSIF_LOCAL,
         numerocm,
         status,
-        VUNTRIB
+        VUNTRIB,
+        DATA_EMISSAO
     )
     VALUES (
         s.estab,
@@ -1012,7 +1042,8 @@ WHEN NOT MATCHED THEN
         s.CLASSIF_LOCAL,
         s.numerocm,
         s.status,
-        s.VUNTRIB
+        s.VUNTRIB,
+        s.DATA_EMISSAO
     )
 """
 
