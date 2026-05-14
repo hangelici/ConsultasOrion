@@ -122,7 +122,7 @@ cursor_oracle.execute("""
         and nfitem.seqnota = nfcab.seqnota
     inner join u_tempresa u on u.estab = nfcab.estab
     where
-    nfitem.cfop in (5906,5907,5117,5116,5101,5102,6101,6102)
+    nfitem.cfop in (5906,5907,5117,5116,5101,5102,6101,6102,5118,6120)
     and nfcab.dtemissao between (current_date - 4) and current_date
     and u.GRAOS = 'S'
     and u.OUTROS = 'N'
@@ -140,7 +140,7 @@ cursor_oracle.execute("""
         and nfitem.seqnota = nfcab.seqnota
     inner join u_tempresa u on u.estab = nfcab.estab
     where
-    nfitem.cfop not in (5906,5907,5117,5116,5101,5102,6101,6102)
+    nfitem.cfop not in (5906,5907,5117,5116,5101,5102,6101,6102,5118,6120)
     and nfcab.dtemissao between (current_date - 4) and current_date
     and u.GRAOS = 'S'
     and u.OUTROS = 'N'
@@ -389,13 +389,13 @@ for row in cursor_oracle.fetchall():
     chave = (
         str(numerocm).strip() if numerocm is not None else None,
         str(estab).strip() if estab is not None else None,
-        Decimal(str(valorunit)),
         int(local) if local is not None else None
     )
 
     contrato_dict[chave].append(
         (
             rn,
+            Decimal(str(valorunit)),
             estab,
             contrato,
             contconf
@@ -439,7 +439,7 @@ inner join docitem d2 on d2.chave = d.chave
 left join filial f on f.cnpj = d.emitid
 left join docheadtext d3 on d3.chave = d.chave
 where
-d2.cfop in ('5906','5907','5117','5116','5101','5102','6101','6102')
+d2.cfop in ('5906','5907','5117','5116','5101','5102','6101','6102','5118','6120')
 and f.cnpj is null
 and cast(d.dtemi as date) between (current_date-4) and current_date
 )dados
@@ -482,7 +482,8 @@ for row in pg_rows:
         utrib_norm = str(utrib).strip().upper()
 
         if utrib_norm.startswith('TON'):
-            valor_vuntrib = (Decimal('1000') / Decimal('60')) / valor_vuntrib
+            # valor_vuntrib = (Decimal('1000') / Decimal('60')) / valor_vuntrib
+            valor_vuntrib = valor_vuntrib / (Decimal('1000') / Decimal('60'))
         else:
             valor_vuntrib = valor_vuntrib * Decimal('60')
 
@@ -726,19 +727,24 @@ for row in resultado_final:
     # ---------------- CONTRATO ----------------
     estab_row = str(row[0]).strip() if row[0] is not None else None
     vlrunit = row[-1]
-    chave_ctr = (codpess, estab_row,vlrunit,localestoque)
+    chave_ctr = (codpess, estab_row,localestoque)
     candidatos = contrato_dict.get(chave_ctr, [])
+    
     if candidatos:
-        rn, estab_contrato, contrato, contconf = min(
-            candidatos,
-            key=lambda x: x[0]
-        )
+        candidatos_validos = [
+        c for c in candidatos
+        if abs(c[1] - vlrunit) <= Decimal('0.06')
+    ]
+
+        if candidatos_validos:
+            rn, valor_db, estab_contrato, contrato, contconf = min(
+                candidatos_validos,
+                key=lambda x: (x[0], abs(x[1] - vlrunit))
+            )
+        else:
+            estab_contrato, contrato, contconf = None, None, None
     else:
-        estab_contrato, contrato, contconf = (
-            None,
-            None,
-            None
-        )
+        estab_contrato, contrato, contconf = None, None, None
 
     # ---------------- Config Nota e Tipo de Baixa ---------------- #
     if produtor == 'S':
@@ -762,7 +768,7 @@ for row in resultado_final:
     elif tipobaixa == 'CONTRATO' and classestoque ==6:
         classestoque = 6
     else:
-        classestoque = 999
+        classestoque = 3
     
     ## Ajuste config p/ filiais (ticket 1153492 acao 19)
     estab = row[0]
@@ -828,6 +834,7 @@ for row in resultado_final_otimizado:
     confcont       = lista[-6]
     notaref        = lista[-3]
     classestoque   = lista[-2]
+    tpbaixa        = lista[-4]
 
     # -------------------------------------------------
     # STATUS COM PRIORIDADE
@@ -850,7 +857,7 @@ for row in resultado_final_otimizado:
     elif ncm_valid == 'NAO EXISTE':
         status = 116
     
-    elif notaref is not None:
+    elif notaref is None and tpbaixa == 'NOTA':
         status = 113
 
     else:
