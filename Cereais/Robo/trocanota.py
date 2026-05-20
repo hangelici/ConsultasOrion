@@ -369,7 +369,8 @@ ROW_NUMBER() OVER (
 SALDO_MANUAL.CONTCONF,
 SALDO_MANUAL.NUMEROCM,
 SALDO_MANUAL.VALORUNIT,
-SALDO_MANUAL.LOCAL
+SALDO_MANUAL.LOCAL,
+SALDO_MANUAL.SALDO
 FROM SALDO_MANUAL
 WHERE SALDO > 0 
 )DADOS
@@ -385,6 +386,7 @@ for row in cursor_oracle.fetchall():
     rn = row[5]
     valorunit = row[8]
     local = row[9]
+    saldo = row[-1]
 
     chave = (
         str(numerocm).strip() if numerocm is not None else None,
@@ -396,6 +398,7 @@ for row in cursor_oracle.fetchall():
         (
             rn,
             Decimal(str(valorunit)),
+            Decimal(str(saldo)),
             estab,
             contrato,
             contconf
@@ -732,22 +735,38 @@ for row in resultado_final:
     # ---------------- CONTRATO ----------------
     estab_row = str(row[0]).strip() if row[0] is not None else None
     vlrunit = row[-1]
+    qtd_nota = Decimal(str(row[8]))
     chave_ctr = (codpess, estab_row,localestoque)
     candidatos = contrato_dict.get(chave_ctr, [])
+    saldo_insuficiente = False
     
     if candidatos:
         candidatos_validos = [
-        c for c in candidatos
-        if abs(c[1] - vlrunit) <= Decimal('0.06')
-    ]
+            c for c in candidatos
+            if abs(c[1] - vlrunit) <= Decimal('0.06')
+        ]
 
         if candidatos_validos:
-            rn, valor_db, estab_contrato, contrato, contconf = min(
-                candidatos_validos,
-                key=lambda x: (x[0], abs(x[1] - vlrunit))
-            )
+
+            candidatos_saldo_ok = [
+                c for c in candidatos_validos
+                if c[2] >= qtd_nota
+            ]
+
+            if candidatos_saldo_ok:
+
+                rn, valor_db, saldo_db, estab_contrato, contrato, contconf = min(
+                    candidatos_saldo_ok,
+                    key=lambda x: x[0]
+                )
+
+            else:
+                saldo_insuficiente = True
+                estab_contrato, contrato, contconf = None, None, None
+
         else:
             estab_contrato, contrato, contconf = None, None, None
+
     else:
         estab_contrato, contrato, contconf = None, None, None
 
@@ -876,6 +895,9 @@ for row in resultado_final_otimizado:
 
     elif dif_peso_app is None or dif_peso_app > 0:
         status = 114
+
+    elif saldo_insuficiente:
+        status = 118
 
     elif estab_contrato is None:
         status = 115
