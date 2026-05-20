@@ -434,8 +434,8 @@ select
 d.filial,d.chave,d.dtemi,d.emitid,d.emitie,
 case when d.trnplaca = '' then null else d.trnplaca end trnplaca,
 d.num,d2.ncm,d2.qcom,d2.vprod,d2.cfop,d2.utrib,d.serie,d2.xprod,d.cstat,
-(regexp_match(infadfisco, '[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa1,
-(regexp_match(infcpl,    '[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}'))[1] AS placa2,
+(regexp_match(infadfisco, '(?<![A-Z])[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}(?![0-9A-Z])'))[1] AS placa1,
+(regexp_match(infcpl, '(?<![A-Z])[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}(?![0-9A-Z])'))[1] AS placa2,
 d2.ucom,d2.vuntrib,hremi
 from "document" d 
 inner join docitem d2 on d2.chave = d.chave
