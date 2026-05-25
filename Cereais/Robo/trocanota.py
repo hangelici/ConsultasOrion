@@ -387,6 +387,7 @@ for row in cursor_oracle.fetchall():
     valorunit = row[8]
     local = row[9]
     saldo = row[-1]
+    vencto = row[4]
 
     chave = (
         str(numerocm).strip() if numerocm is not None else None,
@@ -401,7 +402,8 @@ for row in cursor_oracle.fetchall():
             Decimal(str(saldo)),
             estab,
             contrato,
-            contconf
+            contconf,
+            vencto
         )
     )
 
@@ -755,20 +757,20 @@ for row in resultado_final:
 
             if candidatos_saldo_ok:
 
-                rn, valor_db, saldo_db, estab_contrato, contrato, contconf = min(
+                rn, valor_db, saldo_db, estab_contrato, contrato, contconf,dtvencto = min(
                     candidatos_saldo_ok,
                     key=lambda x: x[0]
                 )
 
             else:
                 saldo_insuficiente = True
-                estab_contrato, contrato, contconf = None, None, None
+                estab_contrato, contrato, contconf,dtvencto = None, None, None, None
 
         else:
-            estab_contrato, contrato, contconf = None, None, None
+            estab_contrato, contrato, contconf,dtvencto = None, None, None, None
 
     else:
-        estab_contrato, contrato, contconf = None, None, None
+        estab_contrato, contrato, contconf,dtvencto = None, None, None, None
 
     # ---------------- Config Nota e Tipo de Baixa ---------------- #
     if produtor == 'S':
@@ -824,7 +826,8 @@ for row in resultado_final:
         tipobaixa,
         num_ref,
         classestoque,
-        codpess
+        codpess,
+        dtvencto
     )
 )
 
@@ -838,6 +841,12 @@ for row in resultado_final_otimizado:
         lista[2] = parse_data_oracle(lista[2])
     except:
         lista[2] = None
+    
+    if isinstance(lista[-1], str):
+        try:
+            lista[-1] = parse_data_oracle(lista[-1])
+        except:
+            lista[-1] = None
     
     # Criando o TimeStamp
     chave = lista[1]
@@ -867,19 +876,19 @@ for row in resultado_final_otimizado:
     # -------------------------------------------------
     # CAPTURA CAMPOS FINAIS
     # -------------------------------------------------
-    ncm_valid      = lista[-15]
-    produtor       = lista[-14]
-    seqendereco    = lista[-13]
-    idcarga        = lista[-12]
-    localestoque   = lista[-11]
-    dif_peso       = lista[-10]
-    dif_peso_app   = lista[-9]
-    estab_contrato = lista[-8]
-    contrato       = lista[-7]
-    confcont       = lista[-6]
-    notaref        = lista[-3]
-    classestoque   = lista[-2]
-    tpbaixa        = lista[-4]
+    ncm_valid      = lista[-16]
+    produtor       = lista[-15]
+    seqendereco    = lista[-14]
+    idcarga        = lista[-13]
+    localestoque   = lista[-12]
+    dif_peso       = lista[-11]
+    dif_peso_app   = lista[-10]
+    estab_contrato = lista[-9]
+    contrato       = lista[-8]
+    confcont       = lista[-7]
+    notaref        = lista[-4]
+    classestoque   = lista[-3]
+    tpbaixa        = lista[-5]
 
     # -------------------------------------------------
     # STATUS COM PRIORIDADE
@@ -899,7 +908,7 @@ for row in resultado_final_otimizado:
     elif saldo_insuficiente:
         status = 118
 
-    elif estab_contrato is None:
+    elif estab_contrato is None and (tpbaixa == 'CONTRATO' or tpbaixa is None):
         status = 115
 
     elif ncm_valid == 'NAO EXISTE':
@@ -953,8 +962,9 @@ USING (
         :29 AS notaref,
         :30 AS CLASSIF_LOCAL,
         :31 as numerocm,
-        :32 AS status,
-        :33 as DATA_EMISSAO
+        :32 as DTVENCTO_CTR,
+        :33 AS status,
+        :34 as DATA_EMISSAO
     FROM dual
 ) s
 ON (
@@ -994,7 +1004,8 @@ WHEN MATCHED THEN
         t.quantidade        = s.quantidade,
         t.VUNTRIB           = s.VUNTRIB,
         t.placa             = s.placa,
-        t.DATA_EMISSAO = s.DATA_EMISSAO
+        t.DATA_EMISSAO = s.DATA_EMISSAO,
+        t.DTVENCTO_CTR = s.DTVENCTO_CTR
 
 WHEN NOT MATCHED THEN
     INSERT (
@@ -1028,6 +1039,7 @@ WHEN NOT MATCHED THEN
         notaref,
         CLASSIF_LOCAL,
         numerocm,
+        DTVENCTO_CTR,
         status,
         VUNTRIB,
         DATA_EMISSAO
@@ -1063,9 +1075,11 @@ WHEN NOT MATCHED THEN
         s.notaref,
         s.CLASSIF_LOCAL,
         s.numerocm,
+        s.DTVENCTO_CTR,
         s.status,
         s.VUNTRIB,
         s.DATA_EMISSAO
+        
     )
 """
 
