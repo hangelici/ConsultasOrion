@@ -12,6 +12,7 @@ V_QUEBRA NUMBER := NULL;
 V_PESO NUMBER := NULL;
 V_LOG VARCHAR2(1) := 'N';
 V_MOTIVO VARCHAR2(100);
+V_PESSOA NUMBER := NULL;
 BEGIN
 
     /* ###### Validações Ticket 1273481 ###### */
@@ -26,14 +27,15 @@ BEGIN
 
     -- Busca SEQNOTA para validar na Retenporto
     BEGIN
-        SELECT SEQNOTA
-          INTO V_SEQNOTA
+        SELECT SEQNOTA,NUMEROCM
+          INTO V_SEQNOTA, V_PESSOA
           FROM NFCAB
          WHERE CHAVEACESSONFE = :NEW.CHAVEACESSO
          AND ESTAB = :NEW.ESTAB;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
             V_SEQNOTA := NULL;
+            V_PESSOA := NULL;
     END;
 
     /*Fornecedor e Filial devem ser a mesma pessoa (Pega CNPJ para validar casos onde Cod.Estab é 
@@ -93,6 +95,16 @@ BEGIN
             AND SEQNOTA = V_SEQNOTA
             AND SEQNOTAITEM = 1;
             V_LOG := 'S';
+
+            UPDATE RETENPORTO_U
+                SET CONFERIDO = 'S',
+                OBS = 'Importação via gatilho - Trading'
+            WHERE ESTAB = :NEW.ESTAB
+            AND SEQNOTA = V_SEQNOTA
+            AND ITEM = :NEW.CODITEM
+            AND NUMEROCM = V_PESSOA
+            AND SEQNOTAITEM = 1;
+
             IF V_MOTIVO IS NULL THEN V_MOTIVO := 'RETENPORTO';
             ELSE
                 V_MOTIVO := V_MOTIVO || ';RETENPORTO';
