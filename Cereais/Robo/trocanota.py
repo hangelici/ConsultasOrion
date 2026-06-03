@@ -20,6 +20,25 @@ def parse_data_pg(data_str):
 def parse_data_oracle(data_str):
     return datetime.strptime(data_str, "%Y.%m.%d")
 
+def normaliza_data_oracle(v):
+    if v is None:
+        return None
+
+    if isinstance(v, datetime):
+        return v
+
+    if isinstance(v, date):
+        return datetime.combine(v, datetime.min.time())
+
+    if isinstance(v, str):
+        for fmt in ("%Y.%m.%d", "%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(v.strip(), fmt)
+            except ValueError:
+                pass
+
+    return None
+
 def to_number_br(valor):
     if valor is None:
         return None
@@ -29,6 +48,10 @@ def to_number_br(valor):
         valor = valor.replace('.', '').replace(',', '.')
         return float(valor)
     return valor
+
+def dividir_lista(lista, tamanho=1000):
+    for i in range(0, len(lista), tamanho):
+        yield lista[i:i + tamanho]
 
 #### Configuração de LOGS
 log_dir = "C:\Integra Troca Nota\logs"
@@ -413,7 +436,7 @@ cursor_oracle.execute("""
         CFOP,CONTCONF,TIPOCLIENTE,NOTACONF,TIPOBAIXA
     FROM U_TIPO_OPERACAO
 """)
-tipo_op_dict = {}
+tipo_op_dict = defaultdict(list)
 for row in cursor_oracle.fetchall():
     cfop = str(row[0]).strip()
     contconf= row[1]
@@ -423,7 +446,11 @@ for row in cursor_oracle.fetchall():
 
     chave = (cfop, contconf, tipocliente)
 
-    tipo_op_dict[chave] = (notaconf, tipobaixa)
+    tipo_op_dict[(cfop, tipocliente)].append({
+        "contconf": contconf,
+        "notaconf": notaconf,
+        "tipobaixa": tipobaixa,
+    })
 
 # ------------------- CONSULTAS FISCAL IO ------------------- #
 fiscal_cursor.execute("""
@@ -521,6 +548,7 @@ resultado_final = [
     row for row in pg_rows
     if row[1] not in chaves_filtro_oracle
 ]
+
 # Buscando referencias
 fiscal_cursor.execute("""
 SELECT
@@ -545,6 +573,39 @@ HAVING COUNT(d3.refkey) = 1
 """)
 ref_rows = fiscal_cursor.fetchall()
 dict_ref = {row[0]: (row[1], row[2]) for row in ref_rows}
+# pega refkeys
+ref_keys = [row[1] for row in ref_rows if row[1]]
+
+# Buscando as notas de referencia no Oracle com contrato
+resultado_oracle = []
+for lote in dividir_lista(ref_keys, 1000):
+
+    placeholders = ",".join(
+        [f":{i+1}" for i in range(len(lote))]
+    )
+
+    sql_oracle = f"""
+    SELECT
+        c.estab,
+        c.contrato,
+        nfcab.numerocm,
+        nfcab.nota,
+        nfcab.chaveacessonfe
+    FROM contratonfite c
+    INNER JOIN nfcab
+        ON nfcab.estab = c.estabnota
+        AND nfcab.seqnota = c.seqnota
+    WHERE nfcab.chaveacessonfe IN ({placeholders})
+    """
+
+    cursor_oracle.execute(sql_oracle, lote)
+
+    resultado_oracle.extend(
+        cursor_oracle.fetchall()
+    )
+contconf_por_refkey = {}
+for estabf, contratof, contconff, notaf, chaveacessof in resultado_oracle:
+    contconf_por_refkey[chaveacessof] = contconff  
 
 # Buscando eventos de hoje
 fiscal_cursor.execute(r"""
@@ -688,6 +749,13 @@ for row in resultado_final:
         produtor = 'NAO EXISTE'
         seqendereco = None
     
+    if produtor == 'S':
+        tipocliente = 'PRODUTOR'
+    elif produtor == 'NAO EXISTE':
+        tipocliente = 'NAO EXISTE'
+    else:
+        tipocliente = 'EMPRESA'
+    
     # ---------------- CODIGO PESSOA ----------------
     codpess = cnpj_numerocm_dict.get(emitid)
     codpess = str(codpess).strip() if codpess is not None else None
@@ -772,22 +840,50 @@ for row in resultado_final:
     else:
         estab_contrato, contrato, contconf,dtvencto = None, None, None, None
 
-    # ---------------- Config Nota e Tipo de Baixa ---------------- #
-    if produtor == 'S':
-        tipocliente = 'PRODUTOR'
-    elif produtor == 'NAO EXISTE':
-        tipocliente = 'NAO EXISTE'
-    else:
-        tipocliente = 'EMPRESA'
+    
+    # ---------------- Nota referencia ---------------- #
+    chave_ref = row[1]
+    num_ref = None
+    contconf_ref = None
 
-    if contconf is not None:
-        chave_tipo = (cfop, contconf, tipocliente)
-        if chave_tipo in tipo_op_dict:
-            notaconf, tipobaixa = tipo_op_dict[chave_tipo]
-        else:
-            notaconf, tipobaixa = None, None
-    else:
-            notaconf, tipobaixa = None, None
+    if chave_ref in dict_ref:
+        refkey, num_ref = dict_ref[chave_ref]
+        contconf_ref = contconf_por_refkey.get(refkey)
+
+    # ---------------- Config Nota e Tipo de Baixa ---------------- #
+    regras_tipo = tipo_op_dict.get((cfop, tipocliente), [])
+    notaconf = None
+    tipobaixa = None
+
+    if regras_tipo:
+        regra_base = regras_tipo[0]
+        tipobaixa = regra_base["tipobaixa"]
+
+        if tipobaixa == 'CONTRATO':
+            regra = next(
+                (r for r in regras_tipo if r["contconf"] == contconf),
+                None
+            )
+            if regra is not None:
+                notaconf = regra["notaconf"]
+            else:
+                notaconf = None
+
+        elif tipobaixa == 'NOTA':
+            if regra_base["notaconf"] == 999:
+                notaconf = 999
+            else:
+                if contconf_ref is not None:
+                    regra = next(
+                        (r for r in regras_tipo if r["contconf"] == contconf_ref),
+                        None
+                    )
+                    if regra is not None:
+                        notaconf = regra["notaconf"]
+                    else:
+                        notaconf = regra_base["notaconf"]
+                else:
+                    notaconf = regra_base["notaconf"]
 
     if tipobaixa == 'CONTRATO' and classestoque != 6:
         classestoque = 3
@@ -796,6 +892,9 @@ for row in resultado_final:
     else:
         classestoque = 3
     
+    ## Ajuste para retonar config conforme regra correta de tipo de baixa
+    contconf_final = contconf if tipobaixa == 'CONTRATO' else contconf_ref
+
     ## Ajuste config p/ filiais (ticket 1153492 acao 19)
     estab = row[0]
     if estab in (30,34,89) and notaconf == 275:
@@ -803,11 +902,6 @@ for row in resultado_final:
     elif estab in (30,34,89) and notaconf == 284:
         notaconf = 314
     
-    # ---------------- Nota referencia ---------------- #
-    chave_ref = row[1]
-    num_ref = None
-    if chave_ref in dict_ref:
-        _, num_ref = dict_ref[chave_ref]
 
     # ---------------- NOVA LINHA ----------------
     resultado_final_otimizado.append(
@@ -821,7 +915,7 @@ for row in resultado_final:
         dif_pesoapp,
         estab_contrato,
         contrato,
-        contconf,
+        contconf_final,
         notaconf,
         tipobaixa,
         num_ref,
@@ -842,11 +936,12 @@ for row in resultado_final_otimizado:
     except:
         lista[2] = None
     
-    if isinstance(lista[-1], str):
+    """ if isinstance(lista[-1], str):
         try:
             lista[-1] = parse_data_oracle(lista[-1])
         except:
-            lista[-1] = None
+            lista[-1] = None """
+    lista[-1] = normaliza_data_oracle(lista[-1])
     
     # Criando o TimeStamp
     chave = lista[1]
@@ -885,7 +980,7 @@ for row in resultado_final_otimizado:
     dif_peso_app   = lista[-10]
     estab_contrato = lista[-9]
     contrato       = lista[-8]
-    confcont       = lista[-7]
+    contconf_final = lista[-7]
     notaref        = lista[-4]
     classestoque   = lista[-3]
     tpbaixa        = lista[-5]
@@ -980,6 +1075,7 @@ ON (
 WHEN MATCHED THEN
     UPDATE SET
         t.valortotal       = s.valortotal,
+        t.ieemitente       = s.ieemitente,
         t.unidadetributavel= s.unidadetributavel,
         t.serie            = s.serie,
         t.item             = s.item,
