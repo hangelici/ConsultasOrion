@@ -151,7 +151,7 @@ BEGIN
    contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.tiporateio,vlrfrete,moedadia)
 
    VALUES(:NEW.ESTAB,CONTRATOD,:NEW.NUMERO,:NEW.SEQENDERECO,CONTRATOCONF,:NEW.PESSOA,:NEW.PESSOA,to_date(CURRENT_DATE),COALESCE(v_prazo,prazopagamento),:new.userid,
-   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,'A',TO_DATE('01/01/2099'),:new.DTVALIDADE,
+   :new.safra,:new.VALORMERCADORIA,:new.VALORMERCADORIA,v_moeda,:NEW.OBS,1,'N',:new.valortotal,'A',TO_DATE('01/01/2099'),TO_DATE('01/01/2099'),
    v_dtmov,v_dtlimite,v_dtlimite,to_date(CURRENT_DATE),0,:new.kmfrete,v_moeda_data);
 
    INSERT INTO CONTRATOITE (CONTRATOITE.ESTAB,CONTRATOITE.CONTRATO,CONTRATOITE.SEQITEM,CONTRATOITE.ITEM,CONTRATOITE.LOCAL,CONTRATOITE.DTEMISSAO,CONTRATOITE.QUANTIDADE,CONTRATOITE.VALORUNIT,
