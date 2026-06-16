@@ -1067,7 +1067,6 @@ ON (
    AND t.chaveacesso   = s.chaveacesso
    AND t.dtemissao     = s.dtemissao
    AND t.cnpjf         = s.cnpjf
-   AND t.ieemitente    = s.ieemitente
    AND t.ncm           = s.ncm
    AND t.cfop          = s.cfop
    
