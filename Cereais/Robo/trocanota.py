@@ -183,13 +183,19 @@ lista_ncm = set(chave_ncm)
 # Validar se existe a pessoa do Fiscal IO no Agro
 cursor_oracle.execute("""
     select
-    cnpjf,INSCESTAD,PRODUTOR,0 as SEQENDERECO,numerocm
+    cnpjf,
+    case when cidade.uf ='MG' THEN lpad(INSCESTAD,13,'0') ELSE INSCESTAD END as INSCESTAD,
+    PRODUTOR, 0 as SEQENDERECO,numerocm
     from contamov
+    left join cidade on cidade.cidade = contamov.cidade
     where INSCESTAD is not NULL
     union all
     SELECT
-    cnpjf,CREDENCIALAGRO AS INSCESTAD,PRODUTOREND AS PRODUTOR,SEQENDERECO,numerocm
-    from endereco                
+    cnpjf,
+    CASE WHEN CIDADE.UF = 'MG' then lpad(CREDENCIALAGRO,13,'0') else CREDENCIALAGRO end AS INSCESTAD,
+    PRODUTOREND AS PRODUTOR,SEQENDERECO,numerocm
+    from endereco
+    left join cidade on cidade.cidade = endereco.cidade                
 """)
 rows_pess = cursor_oracle.fetchall()
 pessoa_dict = {
@@ -460,7 +466,8 @@ replace(coalesce(trnplaca,placa1,placa2),'-','') as trnplaca,
 num,ncm,qcom,vprod,cfop,utrib,serie,xprod,cstat,vuntrib,ucom,hremi
 from(
 select
-d.filial,d.chave,d.dtemi,d.emitid,d.emitie,
+d.filial,d.chave,d.dtemi,d.emitid,
+case when filial.estado = '31' then LPAD(emitie::text, 13, '0') else d.emitie end emitie,
 case when d.trnplaca = '' then null else d.trnplaca end trnplaca,
 d.num,d2.ncm,d2.qcom,d2.vprod,d2.cfop,d2.utrib,d.serie,d2.xprod,d.cstat,
 (regexp_match(infadfisco, '(?<![A-Z])[A-Z]{3}[-.]?[0-9][A-Z0-9][0-9]{2}(?![0-9A-Z])'))[1] AS placa1,
@@ -470,6 +477,7 @@ from "document" d
 inner join docitem d2 on d2.chave = d.chave
 left join filial f on f.cnpj = d.emitid
 left join docheadtext d3 on d3.chave = d.chave
+left join filial on filial.cnpj = d.filial
 where
 d2.cfop in ('5906','5907','5117','5116','5101','5102','6101','6102','5118','6120')
 and f.cnpj is null
