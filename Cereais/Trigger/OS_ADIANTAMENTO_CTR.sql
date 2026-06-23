@@ -30,7 +30,7 @@ BEGIN
         IF :NEW.OS_STATUS_AD = 'PENDENTE PAGAMENTO' THEN 
             V_TIPO := 'AFGC'; 
             V_DEBCRED := 'D';
-        ELSE V_TIPO := 'ACB';
+        ELSE V_TIPO := 'ACGC';
         V_DEBCRED := 'C';
         END IF;
 
