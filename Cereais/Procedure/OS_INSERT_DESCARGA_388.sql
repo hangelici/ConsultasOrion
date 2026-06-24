@@ -1,61 +1,69 @@
 create or replace PROCEDURE OS_INSERT_DESCARGA_388 AS 
 BEGIN
 for valores in (
-with vinculo as (
+with produtor as (
     -- ticket 1283093
     select
     p.estab,
     p.seqnota,
-    nf.numerocm,
-    count(p.nfprodutor)
-    from nfcabprodutor p
-    --- notas config 388
-    inner join nfcab nf ON
-        nf.estab = p.estab
-        and nf.seqnota = p.seqnota
-    -- notas config 387
-    inner join nfcab ON
-        nfcab.CHAVEACESSONFE = p.CHAVEACESSONFP
-        and nfcab.estab =  p.estab
-    where nf.notaconf = 388
-    and nfcab.notaconf = 387
-    group BY
-    p.estab,
-    p.seqnota,
-    nf.numerocm
-    having count(p.nfprodutor) = 1
-),
-produtor as (
-    SELECT
-    p.estab, p.seqnota, 
     nf.chaveacessonfe as chave388,
     nf.nota as nota388,
-    p.chaveacessonfp as chave387, 
-    v.numerocm
+    nf.seqnota as seq388,
+    p.chaveacessonfp as chave387,
+    nf.numerocm
     from nfcabprodutor p
-    inner join vinculo v ON
-        v.estab = p.estab
-        and v.seqnota = p.seqnota
-     --- notas config 388
-    inner join nfcab nf ON
-        nf.estab = p.estab
+    inner join nfcab nf on 
+        nf.estab   = p.estab
         and nf.seqnota = p.seqnota
-    -- notas config 387
-    inner join nfcab ON
-        nfcab.CHAVEACESSONFE = p.CHAVEACESSONFP
-        and nfcab.estab =  p.estab
-    where nf.notaconf = 388
-    and nfcab.notaconf = 387
-    and nvl(nf.status,'X') <> 'C'
-    and nvl(nfcab.status,'X') <> 'C'
-    and nfcab.dtemissao >= '01/01/2026'
-    and nf.dtemissao >= '01/01/2026'
+        and nf.notaconf = 388
+    inner join nfcab nf387 on 
+        nf387.chaveacessonfe = p.chaveacessonfp
+        and nf387.estab = p.estab
+        and nf387.notaconf = 387
+
+    where (nf.status <> 'c' or nf.status is null)
+    and (nf387.status <> 'c' or nf387.status is null)
+    and nf.dtemissao    >= date '2026-01-01'
+    and nf387.dtemissao >= date '2026-01-01'
+
+    group by
+    p.estab,
+    p.seqnota,
+    nf.chaveacessonfe,
+    nf.nota,
+    nf.seqnota,
+    p.chaveacessonfp,
+    nf.numerocm
+    having count(*) = 1
+),
+partirde as (
+    select
+        nf.estab,
+        nf.seqnota
+    from produtor p
+    inner join nfcab nf on 
+        nf.estab = p.estab
+        and nf.seqnota = p.seq388
+        and nf.notaconf = 388
+    inner join nfitem i on 
+        i.estab = nf.estab
+        and i.seqnota = nf.seqnota
+    inner join nfitemapartirde ap on 
+        ap.estaborigem = i.estab
+        and ap.seqnotaorigem = i.seqnota
+        and ap.seqnotaitemorigem = i.seqnotaitem
+    inner join nfcab nf384 on 
+        nf384.estab = ap.estab
+        and nf384.seqnota = ap.seqnota
+        and nf384.notaconf = 384
+    group by nf.estab,nf.seqnota,i.seqnotaitem,i.quantidade
+    having sum(ap.quantidade) = i.quantidade
 ),
 base as (
-    select 
-    produtor.chave387,
-    produtor.chave388,
-    produtor.nota388,
+    select
+    p.chave387,
+    p.chave388,
+    p.nota388,
     u.estab,
     u.data,
     u.codterminal,
@@ -67,19 +75,25 @@ base as (
     u.retencao,
     trunc(current_date) as dtinclusao,
     u.estab as codfornecedor
-    from U_DESCARGA_TRADING u
-    inner join produtor ON
-        produtor.CHAVE387 = u.chaveacesso
-        and produtor.estab = u.estab
-    where
-    u.dt_inclusao is not null and 
-    not exists (
-        select 1
-        from U_DESCARGA_TRADING x
-        where x.estab = produtor.estab
-        and x.chaveacesso = produtor.chave388
+    from u_descarga_trading u
+    inner join produtor p on 
+        p.chave387 = u.chaveacesso
+        and p.estab    = u.estab
+
+    where u.dt_inclusao is not null
+    and not exists (
+            select 1
+            from u_descarga_trading x
+            where x.estab = p.estab
+              and x.chaveacesso = p.chave388
         )
-    ) 
+    and not exists (
+            select 1
+            from partirde pd
+            where pd.estab   = p.estab
+              and pd.seqnota = p.seq388
+        )
+)
 select * from base where chave388 is not null and chave387 is not null
 )
 loop
