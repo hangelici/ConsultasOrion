@@ -20,6 +20,10 @@ with produtor as (
         nf387.chaveacessonfe = p.chaveacessonfp
         and nf387.estab = p.estab
         and nf387.notaconf = 387
+    inner join RETENPORTO_U r on
+        r.estab = nf.estab
+        and r.seqnota = nf.seqnota
+        and nvl(r.IMPORTACAO_BD,'S') = 'S'
 
     where (nf.status <> 'c' or nf.status is null)
     and (nf387.status <> 'c' or nf387.status is null)
@@ -35,29 +39,6 @@ with produtor as (
     p.chaveacessonfp,
     nf.numerocm
     having count(*) = 1
-),
-partirde as (
-    select
-        nf.estab,
-        nf.seqnota
-    from produtor p
-    inner join nfcab nf on 
-        nf.estab = p.estab
-        and nf.seqnota = p.seq388
-        and nf.notaconf = 388
-    inner join nfitem i on 
-        i.estab = nf.estab
-        and i.seqnota = nf.seqnota
-    inner join nfitemapartirde ap on 
-        ap.estaborigem = i.estab
-        and ap.seqnotaorigem = i.seqnota
-        and ap.seqnotaitemorigem = i.seqnotaitem
-    inner join nfcab nf384 on 
-        nf384.estab = ap.estab
-        and nf384.seqnota = ap.seqnota
-        and nf384.notaconf = 384
-    group by nf.estab,nf.seqnota,i.seqnotaitem,i.quantidade
-    having sum(ap.quantidade) = i.quantidade
 ),
 base as (
     select
@@ -86,12 +67,6 @@ base as (
             from u_descarga_trading x
             where x.estab = p.estab
               and x.chaveacesso = p.chave388
-        )
-    and not exists (
-            select 1
-            from partirde pd
-            where pd.estab   = p.estab
-              and pd.seqnota = p.seq388
         )
 )
 select * from base where chave388 is not null and chave387 is not null
