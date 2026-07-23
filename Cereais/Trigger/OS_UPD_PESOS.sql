@@ -13,21 +13,21 @@ COMPOUND TRIGGER
     g_cnt     PLS_INTEGER := 0;
 
     BEFORE EACH ROW IS
-        V_SEQNOTA    NUMBER;
-        V_CNPJ       VARCHAR2(20) := NULL;
-        V_FILIAL     VARCHAR2(20) := NULL;
-        V_VALIDA_UPD VARCHAR2(1) := 'N';
-        V_DESCARGA   NUMBER := 0;
-        V_RETENCAO   NUMBER := 0;
-        V_QUEBRA     NUMBER := NULL;
-        V_PESO       NUMBER := NULL;
-        V_LOG        VARCHAR2(1) := 'N';
-        V_MOTIVO     VARCHAR2(100);
-        V_PESSOA     NUMBER := NULL;
+        V_SEQNOTA         NUMBER;
+        V_CNPJ            VARCHAR2(20) := NULL;
+        V_FILIAL          VARCHAR2(20) := NULL;
+        V_VALIDA_UPD      VARCHAR2(1) := 'N';
+        V_DESCARGA        NUMBER := 0;
+        V_RETENCAO        NUMBER := 0;
+        V_QUEBRA          NUMBER := NULL;
+        V_PESO            NUMBER := NULL;
+        V_LOG             VARCHAR2(1) := 'N';
+        V_MOTIVO          VARCHAR2(100);
+        V_PESSOA          NUMBER := NULL;
+        V_QTD_RETENPORTO  NUMBER := 0;
     BEGIN
 
         /* ###### Ticket 1273481 — ajuste de QUEBRA_SOBRA ###### */
-        -- DT_INCLUSAO NÃO PODE SER NULO para esta alteração acontecer
         IF (NVL(:NEW.PLIQUIDO,0) - NVL(:NEW.PORIGEM,0)) <> NVL(:NEW.QUEBRA_SOBRA,0)
            AND :NEW.DT_INCLUSAO IS NOT NULL THEN
             V_QUEBRA := :NEW.QUEBRA_SOBRA;
@@ -63,60 +63,74 @@ COMPOUND TRIGGER
             END;
         END IF;
 
-        -- DT_INCLUSAO NÃO PODE SER NULO para esta alteração acontecer também
         IF V_FILIAL = V_CNPJ
            AND :NEW.DT_INCLUSAO IS NOT NULL
            AND :NEW.CODTERMINAL NOT IN (139917, 141456) THEN
 
-            BEGIN
-                SELECT 'S', PESODESCARREGAMENTO, PESORETENCAO, PESO
-                INTO V_VALIDA_UPD, V_DESCARGA, V_RETENCAO, V_PESO
-                FROM RETENPORTO
-                WHERE RETENPORTO.ESTAB = :NEW.ESTAB
-                  AND RETENPORTO.ITEM = :NEW.CODITEM
-                  AND RETENPORTO.SEQNOTA = V_SEQNOTA
-                  AND RETENPORTO.SEQNOTAITEM = 1
-                  AND (NVL(RETENPORTO.PESO,0) - NVL(RETENPORTO.PESODESCARREGAMENTO,0)) >= 1000;
-            EXCEPTION
-                WHEN NO_DATA_FOUND THEN
-                    V_VALIDA_UPD := 'N';
-                    V_DESCARGA := 0;
-                    V_RETENCAO := 0;
-            END;
+            /* ###### Validação de duplicidade ######
+                TICKET 1341444
+               Verifica se QUALQUER SEQNOTAITEM está duplicado dentro dessa
+               SEQNOTA (ESTAB + SEQNOTA). Se algum item repetir, pula a nota
+               inteira, independente de qual SEQNOTAITEM está duplicado. */
+            SELECT COUNT(*)
+              INTO V_QTD_RETENPORTO
+              FROM (
+                  SELECT SEQNOTAITEM
+                    FROM RETENPORTO
+                   WHERE ESTAB = :NEW.ESTAB
+                     AND SEQNOTA = V_SEQNOTA
+                   GROUP BY SEQNOTAITEM
+                  HAVING COUNT(*) > 1
+              );
 
-            IF V_VALIDA_UPD = 'S'
-               AND ( (NVL(:NEW.PLIQUIDO,0) <> NVL(V_DESCARGA,0))
-                  OR (NVL(:NEW.RETENCAO,0) <> NVL(V_RETENCAO,0)) ) THEN
+            IF V_QTD_RETENPORTO = 0 THEN
 
-                V_LOG := 'S';
+                BEGIN
+                    SELECT 'S', PESODESCARREGAMENTO, PESORETENCAO, PESO
+                    INTO V_VALIDA_UPD, V_DESCARGA, V_RETENCAO, V_PESO
+                    FROM RETENPORTO
+                    WHERE RETENPORTO.ESTAB = :NEW.ESTAB
+                      AND RETENPORTO.ITEM = :NEW.CODITEM
+                      AND RETENPORTO.SEQNOTA = V_SEQNOTA
+                      AND RETENPORTO.SEQNOTAITEM = 1
+                      AND (NVL(RETENPORTO.PESO,0) - NVL(RETENPORTO.PESODESCARREGAMENTO,0)) >= 1000;
+                EXCEPTION
+                    WHEN NO_DATA_FOUND THEN
+                        V_VALIDA_UPD := 'N';
+                        V_DESCARGA := 0;
+                        V_RETENCAO := 0;
+                END;
 
-                -- Este UPDATE fica AQUI mesmo, no BEFORE EACH ROW: RETENPORTO
-                -- não tem trigger que devolva para U_DESCARGA_TRADING, então
-                -- não gera mutating table. Roda imediatamente, como no original.
-                UPDATE RETENPORTO
-                SET PESODESCARREGAMENTO =
-                        CASE WHEN NVL(:NEW.PLIQUIDO,0) <> NVL(V_DESCARGA,0)
-                             THEN :NEW.PLIQUIDO ELSE PESODESCARREGAMENTO END,
-                    PESORETENCAO =
-                        CASE WHEN NVL(:NEW.RETENCAO,0) <> NVL(V_RETENCAO,0)
-                             THEN :NEW.RETENCAO ELSE PESORETENCAO END
-                WHERE ESTAB = :NEW.ESTAB
-                  AND ITEM = :NEW.CODITEM
-                  AND SEQNOTA = V_SEQNOTA
-                  AND SEQNOTAITEM = 1;
+                IF V_VALIDA_UPD = 'S'
+                   AND ( (NVL(:NEW.PLIQUIDO,0) <> NVL(V_DESCARGA,0))
+                      OR (NVL(:NEW.RETENCAO,0) <> NVL(V_RETENCAO,0)) ) THEN
 
-                -- SÓ este UPDATE precisa ser adiado: é ele que dispara
-                -- OS_INSERT_DESCARGA_388, que consulta U_DESCARGA_TRADING.
-                g_cnt := g_cnt + 1;
-                g_estab(g_cnt)   := :NEW.ESTAB;
-                g_seqnota(g_cnt) := V_SEQNOTA;
-                g_coditem(g_cnt) := :NEW.CODITEM;
-                g_pessoa(g_cnt)  := V_PESSOA;
+                    V_LOG := 'S';
 
-                IF V_MOTIVO IS NULL THEN V_MOTIVO := 'RETENPORTO';
-                ELSE V_MOTIVO := V_MOTIVO || ';RETENPORTO';
+                    UPDATE RETENPORTO
+                    SET PESODESCARREGAMENTO =
+                            CASE WHEN NVL(:NEW.PLIQUIDO,0) <> NVL(V_DESCARGA,0)
+                                 THEN :NEW.PLIQUIDO ELSE PESODESCARREGAMENTO END,
+                        PESORETENCAO =
+                            CASE WHEN NVL(:NEW.RETENCAO,0) <> NVL(V_RETENCAO,0)
+                                 THEN :NEW.RETENCAO ELSE PESORETENCAO END
+                    WHERE ESTAB = :NEW.ESTAB
+                      AND ITEM = :NEW.CODITEM
+                      AND SEQNOTA = V_SEQNOTA
+                      AND SEQNOTAITEM = 1;
+
+                    g_cnt := g_cnt + 1;
+                    g_estab(g_cnt)   := :NEW.ESTAB;
+                    g_seqnota(g_cnt) := V_SEQNOTA;
+                    g_coditem(g_cnt) := :NEW.CODITEM;
+                    g_pessoa(g_cnt)  := V_PESSOA;
+
+                    IF V_MOTIVO IS NULL THEN V_MOTIVO := 'RETENPORTO';
+                    ELSE V_MOTIVO := V_MOTIVO || ';RETENPORTO';
+                    END IF;
                 END IF;
-            END IF;
+
+            END IF; -- V_QTD_RETENPORTO = 0 (nenhum item duplicado na SEQNOTA)
         END IF;
 
         IF V_LOG = 'S' THEN
