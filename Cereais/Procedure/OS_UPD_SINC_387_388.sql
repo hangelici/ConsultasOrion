@@ -74,12 +74,8 @@ WITH vinculo AS (
 
     WHERE
     NVL(r388.pesodescarregamento,0) < NVL(r387.pesodescarregamento,0)
-    OR 
-    NVL(r388.pesoretencao,0) < NVL(r387.pesoretencao,0)
     OR
     (NVL(r388.pesodescarregamento,0) = 0 and NVL(r387.pesodescarregamento,0) <> 0)
-    OR
-    (NVL(r388.pesoretencao,0) = 0 and NVL(r387.pesoretencao,0) <> 0)
 
     UNION ALL
 
@@ -113,21 +109,21 @@ WITH vinculo AS (
 
     WHERE
     NVL(r387.pesodescarregamento,0) < NVL(r388.pesodescarregamento,0)
-    OR 
-    NVL(r387.pesoretencao,0) < NVL(r388.pesoretencao,0)
     OR
     (NVL(r387.pesodescarregamento,0) = 0 and NVL(r388.pesodescarregamento,0) <> 0)
-    OR
-    (NVL(r387.pesoretencao,0) = 0 and NVL(r388.pesoretencao,0) <> 0)
 
 )
 LOOP
 update retenporto r set
-    r.pesodescarregamento = valores.novo_peso_desc,
-    r.pesoretencao = valores.novo_peso_ret
+    r.pesodescarregamento = valores.novo_peso_desc
 where r.estab = valores.estab
 and r.seqnota = valores.seqnota
 and r.seqnotaitem = 1;
+
+update RETENPORTO_U u SET OBS = 'Importação via gatilho - Trading'
+where u.estab = valores.estab
+and u.seqnota = valores.seqnota
+and u.seqnotaitem = 1;
 
 insert into U_LOG_SINC_388_387 (
     ESTAB,
