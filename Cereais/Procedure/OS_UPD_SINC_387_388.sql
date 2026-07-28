@@ -43,6 +43,20 @@ WITH vinculo AS (
           AND NVL(nf387.status,'X') <> 'C'
           and nf.dtemissao >= '01/01/2026'
           and nf387.dtemissao >= '01/01/2026'
+    ),
+    ret as (
+        select
+        retenporto.*
+        from retenporto
+        inner join (
+            select
+                estab,seqnota,numerocm from retenporto 
+                group by estab,seqnota, numerocm
+                having count(*) < 2
+        )aux on
+        aux.estab = retenporto.estab
+        and aux.seqnota = retenporto.seqnota
+        and aux.numerocm = retenporto.numerocm
     )
     SELECT
         t.estab,
@@ -62,12 +76,12 @@ WITH vinculo AS (
 
     FROM produtor t
 
-    INNER JOIN retenporto r388
+    INNER JOIN ret r388
         ON r388.estab = t.estab
        AND r388.seqnota = t.seq388
        AND r388.seqnotaitem = 1
 
-    INNER JOIN retenporto r387
+    INNER JOIN ret r387
         ON r387.estab = t.estab
        AND r387.seqnota = t.seq387
        AND r387.seqnotaitem = 1
@@ -97,12 +111,12 @@ WITH vinculo AS (
 
     FROM produtor t
 
-    INNER JOIN retenporto r388
+    INNER JOIN ret r388
         ON r388.estab = t.estab
        AND r388.seqnota = t.seq388
        AND r388.seqnotaitem = 1
 
-    INNER JOIN retenporto r387
+    INNER JOIN ret r387
         ON r387.estab = t.estab
        AND r387.seqnota = t.seq387
        AND r387.seqnotaitem = 1
