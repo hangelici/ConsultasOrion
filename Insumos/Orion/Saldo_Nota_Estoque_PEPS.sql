@@ -12,7 +12,7 @@ with base as (
         m.datamovim,
         m.horamovim,
         m.somadiminui,
-        m.quantidade,
+        sum(m.quantidade) as quantidade,
         nfitem.valorunitario,
         nfcab.prazopagto,
         max(p.dtvencto) as dtvencto
@@ -47,7 +47,7 @@ with base as (
     m.estab,m.item,m.doc,m.seq,nfcab.notaconf,
     nfcfg.descricao,t.tipoop,nfcab.numerocm,
     m.datamovim,m.horamovim,m.somadiminui,
-    m.quantidade,nfcab.prazopagto,nfitem.valorunitario
+    nfcab.prazopagto,nfitem.valorunitario
 ),
 -- consolida a nota (DOC pode ter mais de um SEQ)
 notas as (
