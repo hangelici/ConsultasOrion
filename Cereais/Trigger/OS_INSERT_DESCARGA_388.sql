@@ -2,7 +2,7 @@ create or replace TRIGGER OS_INSERT_DESCARGA_388
 FOR INSERT OR UPDATE ON RETENPORTO_U
 COMPOUND TRIGGER
 
-    TYPE t_estab IS TABLE OF RETENPORTO_U.ESTAB%TYPE   INDEX BY PLS_INTEGER;
+    TYPE t_estab IS TABLE OF RETENPORTO_U.ESTAB%TYPE INDEX BY PLS_INTEGER;
     TYPE t_seq   IS TABLE OF RETENPORTO_U.SEQNOTA%TYPE INDEX BY PLS_INTEGER;
 
     g_estab t_estab;
@@ -22,100 +22,180 @@ COMPOUND TRIGGER
     BEGIN
         FOR i IN 1 .. g_cnt LOOP
 
-            FOR VALORES IN (
-                WITH PRODUTOR AS (
+            FOR valores IN (
+
+                WITH produtor AS (
+
                     SELECT
-                        P.ESTAB,
-                        P.SEQNOTA,
-                        NF.CHAVEACESSONFE AS CHAVE388,
-                        NF.NOTA AS NOTA388,
-                        NF.SEQNOTA AS SEQ388,
-                        P.CHAVEACESSONFP AS CHAVE387,
-                        NF.NUMEROCM
-                    FROM NFCABPRODUTOR P
-                    INNER JOIN NFCAB NF
-                            ON NF.ESTAB = P.ESTAB
-                           AND NF.SEQNOTA = P.SEQNOTA
-                           AND NF.NOTACONF = 388
-                    INNER JOIN NFCAB NF387
-                            ON NF387.CHAVEACESSONFE = P.CHAVEACESSONFP
-                           AND NF387.ESTAB = P.ESTAB
-                           AND NF387.NOTACONF = 387
-                    WHERE P.ESTAB = g_estab(i)
-                      AND P.SEQNOTA = g_seq(i)
-                      AND (NF.STATUS <> 'c' OR NF.STATUS IS NULL)
-                      AND (NF387.STATUS <> 'c' OR NF387.STATUS IS NULL)
-                      AND NF.DTEMISSAO >= DATE '2026-01-01'
-                      AND NF387.DTEMISSAO >= DATE '2026-01-01'
+                        p.estab,
+                        p.seqnota,
+                        nf.chaveacessonfe      AS chave_destino,
+                        nf.nota               AS nota_destino,
+                        nf.seqnota            AS seq_destino,
+                        p.chaveacessonfp      AS chave_origem,
+                        nf.numerocm,
+                        nf.notaconf           AS notaconf_destino,
+                        nf_origem.notaconf    AS notaconf_origem
+
+                    FROM nfcabprodutor p
+
+                    INNER JOIN nfcab nf
+                        ON nf.estab = p.estab
+                       AND nf.seqnota = p.seqnota
+
+                    INNER JOIN nfcab nf_origem
+                        ON nf_origem.chaveacessonfe = p.chaveacessonfp
+                       AND nf_origem.estab = p.estab
+
+                    WHERE p.estab = g_estab(i)
+                      AND p.seqnota = g_seq(i)
+
+                      AND (
+                              (nf.notaconf = 388  AND nf_origem.notaconf = 387)
+                           OR (nf.notaconf = 1388 AND nf_origem.notaconf = 1387)
+                          )
+
+                      AND (nf.status <> 'C' OR nf.status IS NULL)
+                      AND (nf_origem.status <> 'C' OR nf_origem.status IS NULL)
+
+                      AND nf.dtemissao >= DATE '2026-01-01'
+                      AND nf_origem.dtemissao >= DATE '2026-01-01'
+
                     GROUP BY
-                        P.ESTAB, P.SEQNOTA, NF.CHAVEACESSONFE, NF.NOTA,
-                        NF.SEQNOTA, P.CHAVEACESSONFP, NF.NUMEROCM
+                        p.estab,
+                        p.seqnota,
+                        nf.chaveacessonfe,
+                        nf.nota,
+                        nf.seqnota,
+                        p.chaveacessonfp,
+                        nf.numerocm,
+                        nf.notaconf,
+                        nf_origem.notaconf
+
                     HAVING COUNT(*) = 1
+
                 ),
-                BASE AS (
+
+                base AS (
+
                     SELECT
-                        P.CHAVE387,
-                        P.CHAVE388,
-                        P.NOTA388,
-                        U.ESTAB,
-                        U.DATA,
-                        U.CODTERMINAL,
-                        U.SEQ_END_TERMINA,
-                        U.CODITEM,
-                        U.PLACA,
-                        U.PORIGEM,
-                        U.PLIQUIDO,
-                        U.RETENCAO,
-                        TRUNC(CURRENT_DATE) AS DTINCLUSAO,
-                        U.ESTAB AS CODFORNECEDOR
-                    FROM U_DESCARGA_TRADING U
-                    INNER JOIN PRODUTOR P
-                            ON P.CHAVE387 = U.CHAVEACESSO
-                           AND P.ESTAB = U.ESTAB
-                    WHERE U.DT_INCLUSAO IS NOT NULL
+                        p.chave_origem,
+                        p.chave_destino,
+                        p.nota_destino,
+                        u.estab,
+                        u.data,
+                        u.codterminal,
+                        u.seq_end_termina,
+                        u.coditem,
+                        u.placa,
+                        u.porigem,
+                        u.pliquido,
+                        u.retencao,
+                        TRUNC(CURRENT_DATE) AS dtinclusao,
+                        u.estab AS codfornecedor
+
+                    FROM u_descarga_trading u
+
+                    INNER JOIN produtor p
+                        ON p.chave_origem = u.chaveacesso
+                       AND p.estab = u.estab
+
+                    WHERE u.dt_inclusao IS NOT NULL
+
                       AND NOT EXISTS (
                             SELECT 1
-                            FROM U_DESCARGA_TRADING X
-                            WHERE X.ESTAB = P.ESTAB
-                              AND X.CHAVEACESSO = P.CHAVE388
+                              FROM u_descarga_trading x
+                             WHERE x.estab = p.estab
+                               AND x.chaveacesso = p.chave_destino
                       )
+
                 )
+
                 SELECT *
-                FROM BASE
-                WHERE CHAVE388 IS NOT NULL
-                  AND CHAVE387 IS NOT NULL
+                FROM base
+                WHERE chave_destino IS NOT NULL
+                  AND chave_origem IS NOT NULL
+
             ) LOOP
 
-                INSERT INTO U_DESCARGA_TRADING (
-                    U_DESCARGA_TRADING_ID, REF, NF, CHAVEACESSO, ESTAB, DATA,
-                    CODTERMINAL, SEQ_END_TERMINA, CODITEM, PLACA, PORIGEM,
-                    PLIQUIDO, RETENCAO, DT_INCLUSAO, CODFORNECEDOR, STATUS
-                ) VALUES (
-                    (SELECT NVL(MAX(U_DESCARGA_TRADING_ID), 0) + 1 FROM U_DESCARGA_TRADING),
-                    (SELECT NVL(MAX(REF), 0) + 1 FROM U_DESCARGA_TRADING),
-                    VALORES.NOTA388, VALORES.CHAVE388, VALORES.ESTAB, VALORES.DATA,
-                    VALORES.CODTERMINAL, VALORES.SEQ_END_TERMINA, VALORES.CODITEM,
-                    VALORES.PLACA, VALORES.PORIGEM, VALORES.PLIQUIDO, VALORES.RETENCAO,
-                    VALORES.DTINCLUSAO, VALORES.CODFORNECEDOR, 25
+                INSERT INTO u_descarga_trading (
+                    u_descarga_trading_id,
+                    ref,
+                    nf,
+                    chaveacesso,
+                    estab,
+                    data,
+                    codterminal,
+                    seq_end_termina,
+                    coditem,
+                    placa,
+                    porigem,
+                    pliquido,
+                    retencao,
+                    dt_inclusao,
+                    codfornecedor,
+                    status
+                )
+                VALUES (
+                    (SELECT NVL(MAX(u_descarga_trading_id),0)+1 FROM u_descarga_trading),
+                    (SELECT NVL(MAX(ref),0)+1 FROM u_descarga_trading),
+                    valores.nota_destino,
+                    valores.chave_destino,
+                    valores.estab,
+                    valores.data,
+                    valores.codterminal,
+                    valores.seq_end_termina,
+                    valores.coditem,
+                    valores.placa,
+                    valores.porigem,
+                    valores.pliquido,
+                    valores.retencao,
+                    valores.dtinclusao,
+                    valores.codfornecedor,
+                    25
                 );
 
-                INSERT INTO U_INSERT_DESCARGA_388 (
-                    CHAVE387, CHAVE388, NOTA388, ESTAB, DATA, CODTERMINAL,
-                    SEQ_END_TERMINA, CODITEM, PLACA, PORIGEM, PLIQUIDO,
-                    RETENCAO, DTINCLUSAO, CODFORNECEDOR
-                ) VALUES (
-                    VALORES.CHAVE387, VALORES.CHAVE388, VALORES.NOTA388, VALORES.ESTAB,
-                    VALORES.DATA, VALORES.CODTERMINAL, VALORES.SEQ_END_TERMINA,
-                    VALORES.CODITEM, VALORES.PLACA, VALORES.PORIGEM, VALORES.PLIQUIDO,
-                    VALORES.RETENCAO, VALORES.DTINCLUSAO, VALORES.CODFORNECEDOR
+                INSERT INTO u_insert_descarga_388 (
+                    chave387,
+                    chave388,
+                    nota388,
+                    estab,
+                    data,
+                    codterminal,
+                    seq_end_termina,
+                    coditem,
+                    placa,
+                    porigem,
+                    pliquido,
+                    retencao,
+                    dtinclusao,
+                    codfornecedor
+                )
+                VALUES (
+                    valores.chave_origem,
+                    valores.chave_destino,
+                    valores.nota_destino,
+                    valores.estab,
+                    valores.data,
+                    valores.codterminal,
+                    valores.seq_end_termina,
+                    valores.coditem,
+                    valores.placa,
+                    valores.porigem,
+                    valores.pliquido,
+                    valores.retencao,
+                    valores.dtinclusao,
+                    valores.codfornecedor
                 );
 
             END LOOP;
+
         END LOOP;
 
         g_estab.DELETE;
         g_seq.DELETE;
         g_cnt := 0;
+
     END AFTER STATEMENT;
 
 END OS_INSERT_DESCARGA_388;
