@@ -1,4 +1,4 @@
-create or replace TRIGGER OS_UPD_PESOS
+create or replace TRIGGER "VIASOFT"."OS_UPD_PESOS" 
 FOR INSERT OR UPDATE ON VIASOFT.u_descarga_trading
 COMPOUND TRIGGER
 
@@ -25,6 +25,8 @@ COMPOUND TRIGGER
         V_MOTIVO          VARCHAR2(100);
         V_PESSOA          NUMBER := NULL;
         V_QTD_RETENPORTO  NUMBER := 0;
+        V_ITEM_OFICIAL    NUMBER := NULL; -- Ticket 1352719: item oficial vindo da NFITEM
+        V_CODITEM_ANT     NUMBER := NULL; -- Ticket 1352719: valor anterior do CODITEM, para log
     BEGIN
 
         /* ###### Ticket 1273481 — ajuste de QUEBRA_SOBRA ###### */
@@ -48,6 +50,40 @@ COMPOUND TRIGGER
                 V_SEQNOTA := NULL;
                 V_PESSOA := NULL;
         END;
+
+        /* ###### Ticket 1352719 — Validação de CODITEM contra NFITEM (fonte oficial) ######
+           Regra: NFITEM sempre prevalece. Se houver mais de um item na nota
+           (SEQNOTAITEM), usa o de MENOR SEQNOTAITEM como oficial. Se CODITEM
+           divergir, corrige antes de gravar. Roda em complemento à correção
+           pontual de histórico (UPDATE avulso já aplicado). */
+        IF V_SEQNOTA IS NOT NULL THEN
+            BEGIN
+                SELECT NI.ITEM
+                  INTO V_ITEM_OFICIAL
+                  FROM NFITEM NI
+                 WHERE NI.ESTAB = :NEW.ESTAB
+                   AND NI.SEQNOTA = V_SEQNOTA
+                   AND NI.SEQNOTAITEM = (
+                            SELECT MIN(NI2.SEQNOTAITEM)
+                              FROM NFITEM NI2
+                             WHERE NI2.ESTAB = :NEW.ESTAB
+                               AND NI2.SEQNOTA = V_SEQNOTA
+                       );
+            EXCEPTION
+                WHEN NO_DATA_FOUND THEN
+                    V_ITEM_OFICIAL := NULL;
+            END;
+
+            IF V_ITEM_OFICIAL IS NOT NULL
+               AND NVL(:NEW.CODITEM,-1) <> V_ITEM_OFICIAL THEN
+                V_CODITEM_ANT := :NEW.CODITEM;
+                :NEW.CODITEM := V_ITEM_OFICIAL;
+                V_LOG := 'S';
+                IF V_MOTIVO IS NULL THEN V_MOTIVO := 'CODITEM';
+                ELSE V_MOTIVO := V_MOTIVO || ';CODITEM';
+                END IF;
+            END IF;
+        END IF;
 
         IF V_SEQNOTA IS NOT NULL THEN
             BEGIN
