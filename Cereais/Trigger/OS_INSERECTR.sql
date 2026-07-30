@@ -7,6 +7,7 @@ ESTABD number;
 CONTCONFO number;
 GERADO varchar2(10);
 V_VALIDA_ESTAB NUMBER := 0;
+V_ESTAB number;
 PRAGMA AUTONOMOUS_TRANSACTION;
 
 BEGIN
@@ -25,42 +26,55 @@ BEGIN
                 WHEN NO_DATA_FOUND THEN
                 V_VALIDA_ESTAB := 0;
         END;
+
         
         IF V_VALIDA_ESTAB = 1 THEN
+
+            BEGIN -- ticket 1363844
+                SELECT ESTAB_COPIA
+                INTO V_ESTAB
+                FROM CONTRATO_U
+                WHERE CONTRATO_U.ESTAB = :NEW.ESTAB
+                AND CONTRATO_U.CONTRATO = :NEW.CONTRATO
+                AND NVL(CONTRATO_U.ESTAB_COPIA, 0) <> 0 ;
+                EXCEPTION
+                    WHEN NO_DATA_FOUND THEN
+                    V_ESTAB := :NEW.NUMEROCM;
+            END;
         
-            SELECT (ID_INT)+1 INTO CONTRATOD from seqprimarykey where tabela='CONTRATO'AND SUBSTR(CHAVEVALOR,7,4)=:NEW.NUMEROCM; 
+            SELECT (ID_INT)+1 INTO CONTRATOD from seqprimarykey where tabela='CONTRATO'AND SUBSTR(CHAVEVALOR,7,4)=V_ESTAB; 
            --SELECT MAX(u_logctr_id)+1 INTO u_logctr_id FROM u_logctr;  
            :NEW.PRIORIDADE := 3;
            INSERT INTO CONTRATO(contrato.estab,contrato.contrato,contrato.contconf,contrato.numerocm,contrato.numerocmadic,contrato.dtemissao,contrato.dtvencto,contrato.userid,
            contrato.safra,contrato.valortotal,contrato.moeda,contrato.tipofrete,contrato.associado,contrato.sexo,contrato.consfinal,contrato.prioridade,
            contrato.padrao,contrato.saldovalor,contrato.numcomprador,contrato.ativo,contrato.datalimiteent,contrato.datalimiteliq,contrato.moedadia,
            contrato.dtmovsaldo,contrato.dtlimentimp,contrato.dtlimliqimp,contrato.dtcotacao,contrato.cencuscod,contrato.tiporateio)
-           VALUES(:NEW.NUMEROCM,CONTRATOD,24,:NEW.ESTAB,:NEW.ESTAB,:new.dtemissao,:new.dtvencto,:new.userid,
+           VALUES(V_ESTAB,CONTRATOD,24,:NEW.ESTAB,:NEW.ESTAB,:new.dtemissao,:new.dtvencto,:new.userid,
            :new.safra,:new.valortotal,:new.moeda,:new.tipofrete,:new.associado,:new.sexo,:new.consfinal,:NEW.PRIORIDADE,
            :new.padrao,:new.saldovalor,:new.numempresa,:new.ativo,:new.datalimiteent,:new.datalimiteliq,:new.moedadia,
            :new.dtmovsaldo,:new.dtlimentimp,:new.dtlimliqimp,:new.dtcotacao,:new.cencuscod,0);
            COMMIT;
            INSERT INTO U_CONTRATO(U_CONTRATO_ID, ESTABCOMPRA, CONTRATOCOMPRA, ESTABVENDA, CONTRATOVENDA)                              --PER2572
-           VALUES((SELECT COALESCE(MAX(U_CONTRATO_ID), 0) + 1 FROM U_CONTRATO), :NEW.ESTAB, :NEW.CONTRATO, :NEW.NUMEROCM, CONTRATOD); --PER2572                     
+           VALUES((SELECT COALESCE(MAX(U_CONTRATO_ID), 0) + 1 FROM U_CONTRATO), :NEW.ESTAB, :NEW.CONTRATO, V_ESTAB, CONTRATOD); --PER2572                     
            COMMIT;                                                                                                                    --PER2572
         
            INSERT INTO U_LOGCTR (u_logctr_id,U_LOGCTR.ESTABO,U_LOGCTR.CONTCONFO,U_LOGCTR.CONTRATOO,u_logctr.estabD,u_logctr.CONTCONFD,u_logctr.CONTRATOD,GERADO)
-           VALUES (OS_GEN_LOGCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.CONTCONF,:NEW.CONTRATO,:NEW.NUMEROCM,24,CONTRATOD,'N');
+           VALUES (OS_GEN_LOGCTR_ID.NEXTVAL,:NEW.ESTAB,:NEW.CONTCONF,:NEW.CONTRATO,V_ESTAB,24,CONTRATOD,'N');
            COMMIT;
         
            INSERT INTO CONTRATOESTAB (ESTAB,CONTRATO,ESTABBX)
-           VALUES (:NEW.NUMEROCM,CONTRATOD,:NEW.NUMEROCM);
+           VALUES (V_ESTAB,CONTRATOD,V_ESTAB);
            COMMIT;
         
           /* INSERT INTO CONTRATOROMCFG (ESTAB,CONTRATO,SEQUENCIA,ROMANEIOCONFIG,PADRAO)
            VALUES (:NEW.NUMEROCM,CONTRATOD,1,82,1);
            COMMIT;*/
            INSERT INTO contratodtvencto (estab,contrato,sequencia,dtvencto,qtdfluxocx,numdiaspagto)
-           VALUES (:NEW.NUMEROCM,CONTRATOD,1,:new.dtvencto,0,0);
+           VALUES (V_ESTAB,CONTRATOD,1,:new.dtvencto,0,0);
            COMMIT;
         
            INSERT INTO CONTRATO_U (ESTAB,CONTRATO,STATUSASS,statusaprov,OBS,tipofretes,tipoentrega,tipopgto,tipopessoa,dtinicioent,qtrigo,statusasse,statusfat,dtemissaoori,contrato_edit)   
-           VALUES (:NEW.NUMEROCM,CONTRATOD,'Pendente','2 - Aprovado','Contrato Automático Do Estab: '||:NEW.ESTAB|| ' Contrato Origem: '||:NEW.CONTRATO,'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
+           VALUES (V_ESTAB,CONTRATOD,'Pendente','2 - Aprovado','Contrato Automático Do Estab: '||:NEW.ESTAB|| ' Contrato Origem: '||:NEW.CONTRATO,'AJUSTE','AJUSTE','AJUSTE','AJUSTE',
            :new.dtmovsaldo,'Sem_Padrao','N','0 - A Faturar',:new.dtemissao, 'N');    
            COMMIT;
            
@@ -69,7 +83,7 @@ BEGIN
         
         IF CONTRATOD IS NOT NULL THEN
            UPDATE seqprimarykey SET seqprimarykey.id_int= CONTRATOD
-           where tabela='CONTRATO'AND SUBSTR(CHAVEVALOR,7,4)=:NEW.NUMEROCM; 
+           where tabela='CONTRATO'AND SUBSTR(CHAVEVALOR,7,4)=V_ESTAB; 
            COMMIT;
         END IF;
         
