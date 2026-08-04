@@ -25,6 +25,7 @@ WITH vinculo AS (
     WHERE (
             (nf.notaconf = 388  AND nf_origem.notaconf = 387)
          OR (nf.notaconf = 1388 AND nf_origem.notaconf = 1387)
+         OR (nf.notaconf = 388 AND nf_origem.notaconf = 393)
           )
 
     GROUP BY
