@@ -1,113 +1,181 @@
-create or replace PROCEDURE OS_STATUSCTRFAT
+CREATE OR REPLACE PROCEDURE OS_STATUSCTRFAT
 AS
 BEGIN
+    /*
+        ###### Alterações Ticket 1379898 ######
+    */
+    ----------------------------------------------------------------------
+    -- 1. CONTRATO FINALIZADO
+    --    Saldo = 0
+    --    Não altera contratos já Finalizados ou Concluídos
+    ----------------------------------------------------------------------
 
-     EXECUTE IMMEDIATE 'update contrato_u cdu set cdu.statusfat=''2 - Verificar'' 
+    EXECUTE IMMEDIATE '
+        UPDATE CONTRATO_U CDU
+           SET CDU.STATUSFAT = ''3 - Finalizado''
+         WHERE NVL(CDU.STATUSFAT,''X'') NOT IN (''3 - Finalizado'', ''4 - Concluido'')
+           AND EXISTS (
+                SELECT 1
+                  FROM CONTRATO
 
-                            where cdu.contrato=(
+                 INNER JOIN CONTRATOCFG
+                    ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
+                   AND CONTRATOCFG.CONTCONF IN (20,21)
 
-                            SELECT
+                 INNER JOIN U_TEMPRESA
+                    ON U_TEMPRESA.ESTAB = CONTRATO.ESTAB
+                   AND U_TEMPRESA.GRAOS = ''S''
 
-                            CONTRATO.CONTRATO
+                 INNER JOIN CONTRATOITE
+                    ON CONTRATOITE.ESTAB = CONTRATO.ESTAB
+                   AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
 
-                            FROM CONTRATO
-                            
-                            INNER JOIN CONTRATOCFG ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
-                                                   AND CONTRATOCFG.CONTCONF in (20,21)
-                                                   
-                            INNER JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB=CONTRATO.ESTAB
-                                                 AND U_TEMPRESA.GRAOS=''S''
+                 INNER JOIN TABLE (
+                    PCONTRATOSALDO(
+                        CONTRATO.ESTAB,
+                        CURRENT_DATE,
+                        CONTRATO.CONTRATO,
+                        CONTRATO.CONTRATO,
+                        CONTRATOITE.SEQITEM,
+                        CONTRATOITE.SEQITEM,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL
+                    )
+                 ) PSALDO
+                    ON 0 = 0
 
-                            INNER JOIN CONTRATOITE ON
-                            (CONTRATOITE.ESTAB = CONTRATO.ESTAB)
-                            AND (CONTRATOITE.CONTRATO = CONTRATO.CONTRATO)
+                 WHERE CONTRATO.ESTAB = CDU.ESTAB
+                   AND CONTRATO.CONTRATO = CDU.CONTRATO
+                   AND ARREDONDAR(PSALDO.NQTDSALDO, 2) = 0
+           )';
 
-                            INNER JOIN TABLE (PCONTRATOSALDO( CONTRATO.ESTAB,
-                            CURRENT_DATE, CONTRATO.CONTRATO, CONTRATO.CONTRATO,
-                            CONTRATOITE.SEQITEM, CONTRATOITE.SEQITEM, NULL, NULL, NULL,
-                            NULL, NULL)) PSALDO
-                            ON (0=0)
-                            
-                             INNER join contrato_u on contrato_u.estab=contrato.estab
-                                                and contrato_u.contrato=contrato.contrato
-                                                 AND CONTRATO_U.STATUSFAT not in (''2 - Verificar'',''3 - Finalizado'')
-
-                            where arredondar(PSALDO.NQTDSALDO,2) = 0                          
-                            and cdu.estab=contrato.estab
-                            and cdu.contrato=contrato.contrato)';
-                            COMMIT;
+    COMMIT;
 
 
-    EXECUTE IMMEDIATE 'update contrato_u cdu set cdu.statusfat=''2 - Verificar'' 
+    ----------------------------------------------------------------------
+    -- 2. CONTRATO PARA VERIFICAR
+    --    Saldo > 0 e <= 5% da quantidade
+    --    Não altera contratos já Finalizados ou Concluídos
+    ----------------------------------------------------------------------
 
-                            where cdu.contrato=(
+    EXECUTE IMMEDIATE '
+        UPDATE CONTRATO_U CDU
+           SET CDU.STATUSFAT = ''2 - Verificar''
+         WHERE NVL(CDU.STATUSFAT,''X'') NOT IN (''3 - Finalizado'', ''4 - Concluido'')
+           AND EXISTS (
+                SELECT 1
+                  FROM CONTRATO
 
-                            SELECT
+                 INNER JOIN CONTRATOCFG
+                    ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
+                   AND CONTRATOCFG.CONTCONF IN (20,21)
 
-                            CONTRATO.CONTRATO
+                 INNER JOIN U_TEMPRESA
+                    ON U_TEMPRESA.ESTAB = CONTRATO.ESTAB
+                   AND U_TEMPRESA.GRAOS = ''S''
 
-                            FROM CONTRATO
-                            
-                            INNER JOIN CONTRATOCFG ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
-                                                  AND CONTRATOCFG.CONTCONF in (20,21)
-                          
-                            INNER JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB=CONTRATO.ESTAB
-                                                 AND U_TEMPRESA.GRAOS=''S''
+                 INNER JOIN CONTRATOITE
+                    ON CONTRATOITE.ESTAB = CONTRATO.ESTAB
+                   AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
 
-                            INNER JOIN CONTRATOITE ON
-                            (CONTRATOITE.ESTAB = CONTRATO.ESTAB)
-                            AND (CONTRATOITE.CONTRATO = CONTRATO.CONTRATO)
+                 INNER JOIN TABLE (
+                    PCONTRATOSALDO(
+                        CONTRATO.ESTAB,
+                        CURRENT_DATE,
+                        CONTRATO.CONTRATO,
+                        CONTRATO.CONTRATO,
+                        CONTRATOITE.SEQITEM,
+                        CONTRATOITE.SEQITEM,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL
+                    )
+                 ) PSALDO
+                    ON 0 = 0
 
-                            INNER JOIN TABLE (PCONTRATOSALDO( CONTRATO.ESTAB,
-                            CURRENT_DATE, CONTRATO.CONTRATO, CONTRATO.CONTRATO,
-                            CONTRATOITE.SEQITEM, CONTRATOITE.SEQITEM, NULL, NULL, NULL,
-                            NULL, NULL)) PSALDO
-                            ON (0=0)
-                            
-                            INNER join contrato_u on contrato_u.estab=contrato.estab
-                                                 and contrato_u.contrato=contrato.contrato
-                                                 AND CONTRATO_U.STATUSFAT <> ''2 - Verificar''
+                 WHERE CONTRATO.ESTAB = CDU.ESTAB
+                   AND CONTRATO.CONTRATO = CDU.CONTRATO
+                   AND ARREDONDAR(PSALDO.NQTDSALDO, 2) > 0
 
-                            where arredondar(PSALDO.NQTDSALDO,2) > 0 and
-                            ARREDONDAR(((CAST(COALESCE(PSALDO.NQTDSALDO,0)AS DECIMAL(18,2))/contratoite.quantidade)*100),2) between 0 and 9.99
-                            and cdu.estab=contrato.estab
-                            and cdu.contrato=contrato.contrato)';
-                            COMMIT;
+                   AND ARREDONDAR(
+                        (
+                            CAST(
+                                COALESCE(PSALDO.NQTDSALDO, 0)
+                                AS DECIMAL(18,2)
+                            )
+                            / CONTRATOITE.QUANTIDADE
+                        ) * 100,
+                        2
+                   ) <= 5
+           )';
 
-    EXECUTE IMMEDIATE 'update contrato_u cdu set cdu.statusfat=''1 - Em Aberto''
+    COMMIT;
 
-                       where cdu.contrato=(
 
-                       SELECT
+    ----------------------------------------------------------------------
+    -- 3. CONTRATO EM ABERTO
+    --    Saldo > 5% da quantidade
+    --    Não altera contratos já Finalizados ou Concluídos
+    ----------------------------------------------------------------------
 
-                       CONTRATO.CONTRATO
+    EXECUTE IMMEDIATE '
+        UPDATE CONTRATO_U CDU
+           SET CDU.STATUSFAT = ''1 - Em Aberto''
+         WHERE NVL(CDU.STATUSFAT,''X'') NOT IN (''3 - Finalizado'', ''4 - Concluido'')
+           AND EXISTS (
+                SELECT 1
+                  FROM CONTRATO
 
-                       FROM CONTRATO
-                       
-                       INNER JOIN CONTRATOCFG ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
-                                            AND CONTRATOCFG.CONTCONF in (20,21)
-                       
-                       INNER JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB=CONTRATO.ESTAB
-                                                 AND U_TEMPRESA.GRAOS=''S''
-                            
-                       INNER JOIN CONTRATOITE ON
-                       (CONTRATOITE.ESTAB = CONTRATO.ESTAB)
-                       AND (CONTRATOITE.CONTRATO = CONTRATO.CONTRATO)
+                 INNER JOIN CONTRATOCFG
+                    ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
+                   AND CONTRATOCFG.CONTCONF IN (20,21)
 
-                       INNER JOIN TABLE (PCONTRATOSALDO( CONTRATO.ESTAB,
-                       CURRENT_DATE, CONTRATO.CONTRATO, CONTRATO.CONTRATO,
-                       CONTRATOITE.SEQITEM, CONTRATOITE.SEQITEM, NULL, NULL, NULL,
-                       NULL, NULL)) PSALDO
-                       ON (0=0)
-                       
-                       INNER join contrato_u on contrato_u.estab=contrato.estab
-                                            and contrato_u.contrato=contrato.contrato
-                                            AND CONTRATO_U.STATUSFAT <> ''3 - Finalizado''
+                 INNER JOIN U_TEMPRESA
+                    ON U_TEMPRESA.ESTAB = CONTRATO.ESTAB
+                   AND U_TEMPRESA.GRAOS = ''S''
 
-                      where PSALDO.NQTDSALDO > 0 and
-                      ARREDONDAR(((CAST(COALESCE(PSALDO.NQTDSALDO,0)AS DECIMAL(18,2))/contratoite.quantidade)*100),2) between 10 and 99.99
-                      and cdu.estab=contrato.estab
-                      and cdu.contrato=contrato.contrato)';
-                      COMMIT;
+                 INNER JOIN CONTRATOITE
+                    ON CONTRATOITE.ESTAB = CONTRATO.ESTAB
+                   AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
+
+                 INNER JOIN TABLE (
+                    PCONTRATOSALDO(
+                        CONTRATO.ESTAB,
+                        CURRENT_DATE,
+                        CONTRATO.CONTRATO,
+                        CONTRATO.CONTRATO,
+                        CONTRATOITE.SEQITEM,
+                        CONTRATOITE.SEQITEM,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL
+                    )
+                 ) PSALDO
+                    ON 0 = 0
+
+                 WHERE CONTRATO.ESTAB = CDU.ESTAB
+                   AND CONTRATO.CONTRATO = CDU.CONTRATO
+                   AND ARREDONDAR(PSALDO.NQTDSALDO, 2) > 0
+
+                   AND ARREDONDAR(
+                        (
+                            CAST(
+                                COALESCE(PSALDO.NQTDSALDO, 0)
+                                AS DECIMAL(18,2)
+                            )
+                            / CONTRATOITE.QUANTIDADE
+                        ) * 100,
+                        2
+                   ) > 5
+           )';
+
+    COMMIT;
 
 END;
