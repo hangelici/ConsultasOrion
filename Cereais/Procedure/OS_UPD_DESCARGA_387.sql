@@ -65,6 +65,7 @@ produtor AS (
     WHERE (
             (nf.notaconf = 388  AND nf_origem.notaconf = 387)
          OR (nf.notaconf = 1388 AND nf_origem.notaconf = 1387)
+         OR (nf.notaconf = 388 AND nf_origem.notaconf = 393)
           )
 
       AND nf_origem.dtemissao >= DATE '2026-01-01'
@@ -124,10 +125,10 @@ INNER JOIN u_descarga_trading u388
 WHERE
 (
     u.data IS NULL
- OR u.pliquido IS NULL
- OR u.pliquido = 0
- OR u.retencao IS NULL
- OR u.retencao = 0
+OR u.pliquido IS NULL
+OR u.pliquido = 0
+OR u.retencao IS NULL
+OR u.retencao = 0
 )
 
 AND u.dt_inclusao IS NOT NULL
