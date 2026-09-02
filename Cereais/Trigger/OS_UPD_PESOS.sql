@@ -128,8 +128,7 @@ COMPOUND TRIGGER
                     WHERE RETENPORTO.ESTAB = :NEW.ESTAB
                       AND RETENPORTO.ITEM = :NEW.CODITEM
                       AND RETENPORTO.SEQNOTA = V_SEQNOTA
-                      AND RETENPORTO.SEQNOTAITEM = 1
-                      AND (NVL(RETENPORTO.PESO,0) - NVL(RETENPORTO.PESODESCARREGAMENTO,0)) >= 1000;
+                      AND RETENPORTO.SEQNOTAITEM = 1;
                 EXCEPTION
                     WHEN NO_DATA_FOUND THEN
                         V_VALIDA_UPD := 'N';
