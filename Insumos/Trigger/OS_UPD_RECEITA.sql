@@ -1,40 +1,71 @@
-create or replace TRIGGER OS_UPD_RECEITA_DIG
+CREATE OR REPLACE TRIGGER OS_UPD_RECEITA_DIG
 BEFORE INSERT OR UPDATE
 ON NFCAB
 FOR EACH ROW
+
 DECLARE
+
     V_RECEITA_ASS NUMBER;
     V_ESTAB_ASS   VARCHAR2(3);
-    V_RECEITA     NUMBER;
-    V_ESTAB       NUMBER;
+    V_QTD         NUMBER;
+    V_MIN_ASS     NUMBER;
+    V_MAX_ASS     NUMBER;
+
 BEGIN
 
     /*
-        Verifica se existe receita vinculada à nota.
+        Busca todas as receitas vinculadas à nota.
 
-        Se não existir em NFCABRECEITCAB,
-        encerra a trigger sem impedir o INSERT/UPDATE da NFCAB.
+        Regra:
+          - Todas 0 -> V_RECEITA_ASS = 0
+          - Todas 1 -> V_RECEITA_ASS = 1
+          - Mistura 0 e 1 -> V_RECEITA_ASS = 3
+
+        Se não existir nenhuma receita, encerra a trigger.
     */
     BEGIN
-        SELECT ESTABRECEITA,
-               RECEITUARIOID
-        INTO   V_ESTAB,
-               V_RECEITA
-        FROM NFCABRECEITCAB
-        WHERE ESTAB = :NEW.ESTAB
-          AND SEQNOTA = :NEW.SEQNOTA;
 
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
+        SELECT COUNT(*),
+               MIN(RC.ASSINADODIGITALMENTE),
+               MAX(RC.ASSINADODIGITALMENTE)
+        INTO   V_QTD,
+               V_MIN_ASS,
+               V_MAX_ASS
+        FROM NFCABRECEITCAB NR
+        INNER JOIN RECEITCAB RC
+            ON RC.ESTAB = NR.ESTABRECEITA
+           AND RC.RECEITUARIOID = NR.RECEITUARIOID
+        WHERE NR.ESTAB = :NEW.ESTAB
+          AND NR.SEQNOTA = :NEW.SEQNOTA;
+
+        /*
+            Nenhuma receita encontrada.
+        */
+        IF V_QTD = 0 THEN
             RETURN;
+        END IF;
 
-        WHEN TOO_MANY_ROWS THEN
-            RAISE_APPLICATION_ERROR(
-                -20001,
-                'Mais de uma receita encontrada em NFCABRECEITCAB para ' ||
-                'ESTAB=' || :NEW.ESTAB ||
-                ' e SEQNOTA=' || :NEW.SEQNOTA
-            );
+        /*
+            Consolida o status das receitas:
+            
+            0 + 0 + 0 = 0
+            1 + 1 + 1 = 1
+            0 + 1       = 3
+        */
+        IF V_MIN_ASS = 0 AND V_MAX_ASS = 0 THEN
+
+            V_RECEITA_ASS := 0;
+
+        ELSIF V_MIN_ASS = 1 AND V_MAX_ASS = 1 THEN
+
+            V_RECEITA_ASS := 1;
+
+        ELSE
+
+            V_RECEITA_ASS := 3;
+
+        END IF;
+
     END;
 
 
@@ -42,45 +73,25 @@ BEGIN
         Busca a configuração de assinatura digital da empresa.
     */
     BEGIN
+
         SELECT ASSINADIGITALMENTE
         INTO V_ESTAB_ASS
         FROM U_TEMPRESA
         WHERE ESTAB = :NEW.ESTAB;
 
     EXCEPTION
+
         WHEN NO_DATA_FOUND THEN
             RETURN;
 
         WHEN TOO_MANY_ROWS THEN
+
             RAISE_APPLICATION_ERROR(
                 -20002,
                 'Mais de uma configuração encontrada em U_TEMPRESA para ' ||
                 'ESTAB=' || :NEW.ESTAB
             );
-    END;
 
-
-    /*
-        Busca a assinatura digital do receituário.
-    */
-    BEGIN
-        SELECT ASSINADODIGITALMENTE
-        INTO V_RECEITA_ASS
-        FROM RECEITCAB
-        WHERE ESTAB = V_ESTAB
-          AND RECEITUARIOID = V_RECEITA;
-
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RETURN;
-
-        WHEN TOO_MANY_ROWS THEN
-            RAISE_APPLICATION_ERROR(
-                -20003,
-                'Mais de um receituário encontrado em RECEITCAB para ' ||
-                'ESTAB=' || V_ESTAB ||
-                ' e RECEITUARIOID=' || V_RECEITA
-            );
     END;
 
 
@@ -89,9 +100,10 @@ BEGIN
         na tabela complementar da NFCAB.
     */
     UPDATE NFCAB_U
-    SET ESTAB_ASS_DIGIT   = V_ESTAB_ASS,
-        REC_ASS_DIGIT = V_RECEITA_ASS
-    WHERE ESTAB = :NEW.ESTAB
-      AND SEQNOTA = :NEW.SEQNOTA;
+       SET ESTAB_ASS_DIGIT = V_ESTAB_ASS,
+           REC_ASS_DIGIT   = V_RECEITA_ASS
+     WHERE ESTAB = :NEW.ESTAB
+       AND SEQNOTA = :NEW.SEQNOTA;
 
 END;
+/
