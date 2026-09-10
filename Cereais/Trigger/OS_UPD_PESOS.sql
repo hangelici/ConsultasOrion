@@ -12,6 +12,12 @@ COMPOUND TRIGGER
     g_pessoa  t_num;
     g_cnt     PLS_INTEGER := 0;
 
+    /* ###### Ticket 1374280 — atualizar pesos da 387/1387 ###### */
+    -- fila para 387/1387
+    g_387_estab t_char; 
+    g_387_chave t_char; 
+    g_387_cnt PLS_INTEGER := 0;
+
     BEFORE EACH ROW IS
         V_SEQNOTA         NUMBER;
         V_CNPJ            VARCHAR2(20) := NULL;
@@ -27,6 +33,7 @@ COMPOUND TRIGGER
         V_QTD_RETENPORTO  NUMBER := 0;
         V_ITEM_OFICIAL    NUMBER := NULL; -- Ticket 1352719: item oficial vindo da NFITEM
         V_CODITEM_ANT     NUMBER := NULL; -- Ticket 1352719: valor anterior do CODITEM, para log
+        V_CONF            NUMBER;
     BEGIN
 
         /* ###### Ticket 1273481 — ajuste de QUEBRA_SOBRA ###### */
@@ -40,8 +47,8 @@ COMPOUND TRIGGER
 
         /* ###### Ticket 1273853 — pesos / RETENPORTO ###### */
         BEGIN
-            SELECT SEQNOTA, NUMEROCM
-              INTO V_SEQNOTA, V_PESSOA
+            SELECT SEQNOTA, NUMEROCM, NOTACONF
+              INTO V_SEQNOTA, V_PESSOA, V_CONF
               FROM NFCAB
              WHERE CHAVEACESSONFE = :NEW.CHAVEACESSO
                AND ESTAB = :NEW.ESTAB;
@@ -49,7 +56,14 @@ COMPOUND TRIGGER
             WHEN NO_DATA_FOUND THEN
                 V_SEQNOTA := NULL;
                 V_PESSOA := NULL;
+                V_CONF := NULL;
         END;
+
+        IF V_CONF IN (387,1387) THEN
+            g_387_cnt := g_387_cnt + 1; 
+            g_387_estab(g_387_cnt) := :NEW.ESTAB; 
+            g_387_chave(g_387_cnt) := :NEW.CHAVEACESSO; 
+        END IF;
 
         /* ###### Ticket 1352719 — Validação de CODITEM contra NFITEM (fonte oficial) ######
            Regra: NFITEM sempre prevalece. Se houver mais de um item na nota
@@ -197,11 +211,18 @@ COMPOUND TRIGGER
               AND SEQNOTAITEM = 1;
         END LOOP;
 
+        FOR i in 1 .. g_387_cnt LOOP
+            OS_UPD_DESCARGA_387_TRG( P_ESTAB => g_387_estab(i), P_CHAVE387 => g_387_chave(i) ); 
+        END LOOP;
+
         g_estab.DELETE;
         g_seqnota.DELETE;
         g_coditem.DELETE;
         g_pessoa.DELETE;
         g_cnt := 0;
+        g_387_estab.DELETE; 
+        g_387_chave.DELETE; 
+        g_387_cnt := 0;
     END AFTER STATEMENT;
 
 END OS_UPD_PESOS;
