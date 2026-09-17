@@ -1,5 +1,5 @@
 CREATE OR REPLACE VIEW  OS_PLANEJAMENTO_ATIVIDADES as 
- WITH base AS (
+WITH base AS (
     SELECT
         fa.OSAPONTA,
         fa.SITUACAO,
@@ -29,7 +29,7 @@ CREATE OR REPLACE VIEW  OS_PLANEJAMENTO_ATIVIDADES as
         dr.OSTALHAO,
         0 AS HA_APLICADOS
     FROM dm_replanejamento dr
-    WHERE dr.CODIGOATV IN (89,24,88,71,92,96)
+    WHERE dr.CODIGOATV IN (89,24,88,71,92,96,29)
 
 ),
 
@@ -233,7 +233,6 @@ plantio_cap_71 AS (
 ),
 
 plantio_92 AS (
-
     SELECT
         b18.OSTALHAO,
         MAX(b18.DT_ABERTO) AS DT_2PLANTIO
@@ -261,7 +260,19 @@ plantio_96 AS (
     GROUP BY b18.OSTALHAO
 
 ),
+plantio_29 AS (
+    SELECT
+        b18.OSTALHAO,
+        MAX(b18.DT_ABERTO) AS DT_ESTRADA
+    FROM base b18
+    LEFT JOIN base b21
+        ON b18.OSTALHAO = b21.OSTALHAO
+       AND b21.COD_ATIVID = 29
+       AND b18.DT_ABERTO <= b21.DT_ABERTO
+    WHERE b18.COD_ATIVID = 18
+    GROUP BY b18.OSTALHAO
 
+),
 replan AS (
 
     SELECT
@@ -274,7 +285,8 @@ replan AS (
         MIN(CASE WHEN r.CODIGOATV = 21 THEN r.DTREPLANEJAMENTO END) AS replan_replantio,
         MIN(CASE WHEN r.CODIGOATV = 20 THEN r.DTREPLANEJAMENTO END) AS replan_coveta,
         MIN(CASE WHEN r.CODIGOATV = 18 THEN r.DTREPLANEJAMENTO END) AS replan_plantio,
-        MIN(CASE WHEN r.CODIGOATV = 86 THEN r.DTREPLANEJAMENTO END) AS replan_capcat
+        MIN(CASE WHEN r.CODIGOATV = 86 THEN r.DTREPLANEJAMENTO END) AS replan_capcat,
+        MIN(CASE WHEN r.CODIGOATV = 29 THEN r.DTREPLANEJAMENTO END) AS replan_estradas
 
     FROM dm_replanejamento r
     GROUP BY r.OSTALHAO
@@ -302,6 +314,7 @@ SELECT
 
     p92.DT_2PLANTIO AS DT_PLT_2PLANTIO,
     p96.DT_ADUB_REF AS DT_PLT_ADUB_REF,
+    p29.DT_ESTRADA, -- PLANTIO
 
     CASE
         WHEN b.COD_ATIVID = 18
@@ -423,4 +436,7 @@ LEFT JOIN plantio_92 p92
     ON p92.OSTALHAO = b.OSTALHAO
 
 LEFT JOIN plantio_96 p96
-    ON p96.OSTALHAO = b.OSTALHAO;
+    ON p96.OSTALHAO = b.OSTALHAO
+
+LEFT JOIN plantio_29 p29
+    ON p29.OSTALHAO = b.OSTALHAO;
