@@ -13,8 +13,10 @@ WITH MAX_DATA AS (
     ISALDO.codigosaldo in (1)
     AND ISALDO.LOCAL = 1
     AND U_TEMPRESA.GRAOS = 'S'
+    --AND ISALDO.ESTAB = 10
+    --AND ISALDO.ITEM = 1
     AND (0 IN (:ESTAB) OR ISALDO.ESTAB IN (:ESTAB))
-    AND (0 IN (:ESTAB) OR ISALDO.ITEM IN (:ESTAB))
+    AND (0 IN (:ITEM) OR ISALDO.ITEM IN (:ITEM))
     AND ('X' IN (:UF) OR CIDADE.UF IN (:UF))
     AND (TO_DATE('01/' || LPAD(COALESCE(ISALDO.MES, 1), 2, '0') || '/' || COALESCE(ISALDO.ANO, 1), 'DD/MM/YYYY')) <= CURRENT_DATE
   GROUP BY ISALDO.ITEM, ISALDO.ESTAB,CODIGOSALDO,LOCAL
@@ -89,12 +91,20 @@ CTRNOTA AS (
         AND NATAPARTIRDE.ENTRADASAIDA = NAT.ENTRADASAIDA
         AND NATAPARTIRDE.NATOPERORIGEM = CONTRATOCFG.NATUREZA
         AND NATAPARTIRDE.ENTRADASAIDAORIGEM = CONTRATOCFG.ENTRADASAIDA
-    WHERE CONTRATOCFG.ENTRADASAIDA IN ('E') AND CONTRATOITE.LOCAL = 1
-    AND U_TIPOCTR.TIPOCTR IN ('CTR-C') AND (0 IN (:ESTAB) OR CONTRATONFITE.ESTAB IN (:ESTAB))
+    LEFT JOIN CONTRATO_U ON
+        CONTRATO_U.ESTAB = CONTRATO.ESTAB
+        AND CONTRATO_U.CONTRATO = CONTRATO.CONTRATO
+    WHERE CONTRATOITE.LOCAL = 1
+    AND (
+        (U_TIPOCTR.TIPOCTR IN ('CTR-C') AND CONTRATOCFG.ENTRADASAIDA IN ('E'))
+        OR
+        (CONTRATO.CONTCONF NOT IN (24, 25, 51, 23, 52) AND CONTRATOCFG.ENTRADASAIDA IN ('S') AND CONTRATO_U.TIPOFRETES = 'FOB')
+    )
+    AND (0 IN (:ESTAB) OR CONTRATONFITE.ESTAB IN (:ESTAB))
     AND (0 IN (:ESTAB) OR CONTRATOITE.ITEM IN (:ESTAB))
 ),
 BAIXAS AS (
-    SELECT
+    SELECT /*+ MATERIALIZE */
     ESTAB,
     CONTRATO,
     SEQITEM,
@@ -105,7 +115,7 @@ BAIXAS AS (
     GROUP BY ESTAB, CONTRATO, SEQITEM
 ),
 CANC AS (
-    SELECT
+    SELECT /*+ MATERIALIZE */
     CONTRATOCANC.ESTAB,
     CONTRATOCANC.CONTRATO,
     CONTRATOCANC.SEQITEM,
@@ -115,7 +125,7 @@ CANC AS (
     INNER JOIN CONTRATOCFG ON CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
     INNER JOIN CONTRATOCFG_U ON CONTRATOCFG_U.CONTCONF = CONTRATO.CONTCONF
     LEFT JOIN U_TIPOCTR ON U_TIPOCTR.U_TIPOCTR_ID = CONTRATOCFG_U.U_TIPOCTR_ID
-    WHERE CONTRATOCFG.ENTRADASAIDA IN ('E') AND U_TIPOCTR.TIPOCTR IN ('CTR-C') 
+    WHERE CONTRATOCFG.ENTRADASAIDA IN ('E') AND U_TIPOCTR.TIPOCTR IN ('CTR-C')
     AND (0 IN (:ESTAB) OR CONTRATOCANC.ESTAB IN (:ESTAB))
     GROUP BY CONTRATOCANC.ESTAB, CONTRATOCANC.CONTRATO, CONTRATOCANC.SEQITEM
 ),
@@ -124,7 +134,10 @@ SELECT
     CONTRATO.ESTAB,
     FILIAL.REDUZIDO,
     CONTRATO.CONTRATO,
+    CONTRATOCFG.ENTRADASAIDA,
+    LOCALEST_U.NUMEROCM,
     CONTRATO.DTLIMENTIMP as limitent,
+    CONTRATO.DTMOVSALDO,
     U_AGRPRODGR.U_AGRPRODGR_ID AS ITEMAGR,
     CONTRATOITE.ITEM,
     ITEMAGRO.DESCRICAO,
@@ -140,12 +153,12 @@ LEFT JOIN U_TIPOCTR ON U_TIPOCTR.U_TIPOCTR_ID = CONTRATOCFG_U.U_TIPOCTR_ID
 INNER JOIN FILIAL ON FILIAL.ESTAB = CONTRATO.ESTAB
 INNER JOIN U_TEMPRESA U ON U.ESTAB = CONTRATO.ESTAB
 INNER JOIN CIDADE ON CIDADE.CIDADE = FILIAL.CIDADE
-LEFT JOIN ENDERECO ON
-    ENDERECO.NUMEROCM = CONTRATO.NUMEROCM
-    AND ENDERECO.SEQENDERECO =  CONTRATO.ENDALTERNATIVO
-INNER JOIN CONTAMOV ON CONTAMOV.NUMEROCM = CONTRATO.NUMEROCM
 LEFT JOIN FILIAL ON FILIAL.ESTAB = CONTRATO.ESTAB
 INNER JOIN CIDADE ON CIDADE.CIDADE = FILIAL.CIDADE
+
+LEFT JOIN CONTRATO_U ON
+    CONTRATO_U.ESTAB = CONTRATO.ESTAB
+    AND CONTRATO_U.CONTRATO = CONTRATO.CONTRATO
 
 LEFT JOIN CONTRATOITE ON
     CONTRATOITE.ESTAB = CONTRATO.ESTAB
@@ -154,6 +167,10 @@ LEFT JOIN CONTRATOITE ON
 LEFT JOIN LOCALEST ON
     LOCALEST.ESTAB = CONTRATOITE.ESTAB
     AND LOCALEST.LOCAL = CONTRATOITE.LOCAL
+
+LEFT JOIN LOCALEST_U ON
+    LOCALEST.ESTAB = LOCALEST_U.ESTAB
+    AND LOCALEST.LOCAL = LOCALEST_U.LOCAL
 
 LEFT JOIN BAIXAS ON
     BAIXAS.ESTAB = CONTRATOITE.ESTAB
@@ -170,17 +187,43 @@ LEFT JOIN ITEMAGRO_U ON ITEMAGRO_U.ITEM = ITEMAGRO.ITEM
 LEFT JOIN U_AGRPRODGR ON U_AGRPRODGR.U_AGRPRODGR_ID = ITEMAGRO_U.U_AGRPRODGR_ID
 
 WHERE
-CONTRATOCFG.ENTRADASAIDA IN ('E')
-AND CONTRATO.DTLIMENTIMP IS NOT NULL
+CONTRATOITE.LOCAL = 1
+AND (
+    (U_TIPOCTR.TIPOCTR IN ('CTR-C') AND CONTRATOCFG.ENTRADASAIDA IN ('E'))
+    OR
+    (CONTRATO.CONTCONF NOT IN (24, 25, 51, 23, 52) AND CONTRATOCFG.ENTRADASAIDA IN ('S') AND CONTRATO_U.TIPOFRETES = 'FOB')
+    )
 AND (0 IN (:ESTAB) OR CONTRATO.ESTAB IN (:ESTAB))
 AND (0 IN (:ITEM) OR CONTRATOITE.ITEM IN (:ITEM))
 AND ('X' IN (:UF) OR CIDADE.UF IN (:UF))
-AND CONTRATOITE.LOCAL = 1
+AND CONTRATO.DTMOVSALDO <= LAST_DAY(CURRENT_DATE)
 AND U.GRAOS='S'
 AND FILIAL.INATIVA = 'N'
 AND ARREDONDAR(CONTRATOITE.QUANTIDADE - COALESCE(BAIXAS.BAIXADO,0) - COALESCE(BAIXAS.CANCELADO,0) + COALESCE(BAIXAS.DEVOLIDO,0) - COALESCE(CANC.CANC,0), 0) >= 0
 /* v2: filtro antecipado (equivalente ao INNER JOIN final com BASE_SALDO) */
 AND (CONTRATOITE.ESTAB, CONTRATOITE.ITEM) IN (SELECT BS.ESTAB, BS.ITEM FROM BASE_SALDO BS)
+),
+SALDO_FOB AS (
+    select /*+ MATERIALIZE */
+    a.numerocm,
+    a.item,
+    sum(QTDSALDO) as saldo_fob
+    FROM SALDO_MANUAL a
+    where a.entradasaida = 'S' and a.numerocm is not null
+    group by a.numerocm, a.item
+),
+ESTOQUE AS (
+    SELECT
+    d.estab,
+    d.item,
+    d.saldo,
+    nvl(f.saldo_fob,0) as saldo_fob,
+    d.saldo - nvl(f.saldo_fob,0) as saldoreal
+    FROM BASE_SALDO d
+    left join SALDO_FOB f on
+        f.numerocm = d.estab      /* pendência de negócio - ver observação no cabeçalho */
+        and f.item = d.item
+    where (d.saldo - nvl(f.saldo_fob,0)) > 0
 ),
 RESULTADO AS (
     SELECT
@@ -195,15 +238,11 @@ RESULTADO AS (
     s.cancelado,
     s.devolido,
     s.qtdsaldo,
-    b.saldo as saldo_estoque,
-    CASE WHEN s.qtdsaldo > 0
-         THEN s.quantidade - s.cancelado - s.baixado
-         ELSE s.quantidade - s.cancelado
-    END AS qtd_a_debitar,
-    b.saldo - SUM(CASE WHEN s.qtdsaldo > 0
-                       THEN s.quantidade - s.cancelado - s.baixado
-                       ELSE s.quantidade - s.cancelado
-                  END) OVER (
+    s.quantidade - s.cancelado AS qtd_a_debitar,
+    e.saldo as saldo_estoque,
+    e.saldo_fob,
+    e.saldoreal,
+    e.saldoreal - SUM(s.quantidade - s.cancelado) OVER (
                     PARTITION BY s.estab, s.item
                     ORDER BY s.limitent DESC, s.contrato
                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
@@ -212,28 +251,46 @@ RESULTADO AS (
     inner join base_saldo b on
         b.estab = s.estab
         and b.item = s.item
+    left join ESTOQUE e on
+        e.estab = s.estab
+        and e.item = s.item
     where s.quantidade <>  s.qtdsaldo
     and s.quantidade <> s.cancelado
+    and s.entradasaida = 'E'
+),
+RESULTADO2 AS (
+    /* v8: marca se alguma linha ANTERIOR (mesma partição/ordem de débito)
+       já tinha saldo_corrente <= 0. ROWS ... AND 1 PRECEDING exclui a
+       própria linha atual - por isso a primeira linha <= 0 ainda entra
+       (nenhuma anterior a ela ficou <= 0), e as seguintes não entram. */
+    SELECT
+        r.*,
+        NVL(MAX(CASE WHEN r.saldo_corrente <= 0 THEN 1 ELSE 0 END) OVER (
+                PARTITION BY r.estab, r.item
+                ORDER BY r.limitent DESC, r.contrato
+                ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+            ), 0) AS TEVE_NEGATIVO_ANTES
+    FROM RESULTADO r
 )
-SELECT 
+SELECT
     r.estab,
     r.reduzido,
     r.contrato,
     r.limitent,
     r.item,
     r.descricao,
-    arredondar(divide(r.quantidade,60),2) as quantidade,
-    arredondar(divide(r.baixado,60),2) as baixado,
-    arredondar(divide(r.cancelado,60),2) as cancelado,
-    arredondar(divide(r.devolido,60),2) as devolido,
-    arredondar(divide(r.qtdsaldo,60),2) as saldoctr,
-    arredondar(divide(r.saldo_estoque,60),2) as saldo_estoque,
-    arredondar(divide(r.qtd_a_debitar,60),2) as qtd_a_debitar,
-    arredondar(divide(r.saldo_corrente,60),2) as saldo_corrente
-FROM RESULTADO r
-WHERE r.saldo_corrente >= 0
+    arredondar(r.quantidade,2) as quantidade,
+    arredondar(r.baixado,2) as baixado,
+    arredondar(r.cancelado,2) as cancelado,
+    arredondar(r.devolido,2) as devolido,
+    arredondar(r.qtdsaldo,2) as saldoctr,
+    arredondar(r.saldo_estoque,2) as saldo_estoque,
+    arredondar(r.qtd_a_debitar,2) as qtd_a_debitar,
+    arredondar(r.saldo_corrente,2) as saldo_corrente
+FROM RESULTADO2 r
+WHERE r.TEVE_NEGATIVO_ANTES = 0
 ORDER BY
     r.estab,
     r.item,
     r.limitent DESC,
-    r.contrato      /* mesmo desempate do saldo corrente: ordem exibida = ordem de débito */
+    r.contrato
