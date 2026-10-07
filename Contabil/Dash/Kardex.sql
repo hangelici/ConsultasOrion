@@ -32,7 +32,6 @@ WITH SALDO_INI AS
         MOVIT.ESTAB,
         MOVIT.ITEM
     ),
-    
 MOVS AS
     (SELECT
         MOVIT.ESTAB,
@@ -81,7 +80,20 @@ MOVS AS
             OR  MOVIT.ITEM IN (:ITEM)
             )
     ),
-    
+/* v1: 1 linha por item com movimento; sem histórico = saldo/custo 0 */
+INI AS
+    (SELECT
+        M.ESTAB,
+        M.ITEM,
+        NVL(SI.SALDOINI, 0)    AS SALDOINI,
+        NVL(SI.CUSTOINI, 0)    AS CUSTOINI,
+        NVL(SI.CUSTOTOTINI, 0) AS CUSTOTOTINI
+    FROM (SELECT DISTINCT ESTAB, ITEM FROM MOVS) M
+        LEFT JOIN SALDO_INI SI
+            ON  SI.ESTAB = M.ESTAB
+            AND SI.ITEM  = M.ITEM
+    ),
+
 RECURSIVO   (ESTAB, ITEM, DESCRICAO, GRUPO, DESCGRUPO, UNIDADE, SALDOINI, CUSTOINI, CUSTOTOTINI, DATAMOVIM, HORAMOVIM,
              DOC, NATUREZA, TIPODCTO, SOMADIMINUI, QUANTIDADE, VALORUNITARIO, RN, SALDO_QTD, SALDO_TOTAL, SALDO_UNIT
             ) AS
@@ -105,21 +117,28 @@ RECURSIVO   (ESTAB, ITEM, DESCRICAO, GRUPO, DESCGRUPO, UNIDADE, SALDOINI, CUSTOI
         M.QUANTIDADE,
         M.VALORUNITARIO,
         M.RN,
-        (SI.SALDOINI + NVL(M.QUANTIDADE, 0)) AS SALDO_QTD,
+        (SI.SALDOINI + CASE
+                           WHEN M.SOMADIMINUI = 'S' THEN NVL(M.QUANTIDADE, 0)
+                           ELSE -NVL(M.QUANTIDADE, 0)
+                       END
+        ) AS SALDO_QTD,
         (SI.CUSTOTOTINI +   CASE
                                 WHEN M.SOMADIMINUI = 'S' THEN (M.QUANTIDADE * M.VALORUNITARIO)
-                                ELSE 0
+                                ELSE -(M.QUANTIDADE * SI.CUSTOINI)
                             END
         ) AS SALDO_TOTAL,
         (   (SI.CUSTOTOTINI +   CASE
                                     WHEN M.SOMADIMINUI = 'S' THEN (M.QUANTIDADE * M.VALORUNITARIO)
-                                    ELSE 0
+                                    ELSE -(M.QUANTIDADE * SI.CUSTOINI)
                                 END
             ) /
-            COALESCE(NULLIF(SI.SALDOINI + NVL(M.QUANTIDADE, 0), 0), 1)
+            COALESCE(NULLIF(SI.SALDOINI + CASE
+                                              WHEN M.SOMADIMINUI = 'S' THEN NVL(M.QUANTIDADE, 0)
+                                              ELSE -NVL(M.QUANTIDADE, 0)
+                                          END, 0), 1)
         ) AS SALDO_UNIT
     FROM MOVS M
-        JOIN SALDO_INI SI
+        JOIN INI SI
             ON  M.ESTAB = SI.ESTAB
             AND M.ITEM  = SI.ITEM
         LEFT JOIN NFCAB
@@ -198,7 +217,9 @@ RECURSIVO   (ESTAB, ITEM, DESCRICAO, GRUPO, DESCGRUPO, UNIDADE, SALDOINI, CUSTOI
         ) AS SALDO_UNIT
     FROM RECURSIVO R
         JOIN MOVS M
-            ON  M.RN = (R.RN + 1)
+            ON  M.ESTAB = R.ESTAB      /* v1: casa também o item */
+            AND M.ITEM  = R.ITEM
+            AND M.RN    = (R.RN + 1)
             LEFT JOIN NFCAB
                 ON  M.ESTAB = NFCAB.ESTAB
                 AND M.SEQ = NFCAB.SEQNOTA
@@ -208,9 +229,6 @@ RECURSIVO   (ESTAB, ITEM, DESCRICAO, GRUPO, DESCGRUPO, UNIDADE, SALDOINI, CUSTOI
                         ON  NFCFG.NATUREZADAOPERACAO = N.NATUREZADAOPERACAO
                         AND NFCFG.ENTRADASAIDA = N.ENTRADASAIDA
     )
-    
-    
-    
 SELECT
     ESTABELECIMENTO,
     ITEM,
