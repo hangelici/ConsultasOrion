@@ -82,9 +82,9 @@ CHAVES AS (
     A materialização permite que o Oracle faça:
 
         CHAVES
-           ↓
+           ¿
         NFCAB relevante
-           ↓
+           ¿
         NFITEM por IDX_NFITEM_CARGA
 
     No teste realizado:
@@ -115,7 +115,7 @@ CHAVES_COM_CFOP_INVALIDO AS (
     )
 )
 
-SELECT
+SELECT 
     U_FISCAL_IO_CONT_ID,
     F.CHAVEACESSO,
 
@@ -192,7 +192,8 @@ SELECT
         'DD/MM/YYYY HH24:MI:SS'
     ) AS DT_INSERCAO,
 
-    T.MOTIVO AS OBS
+    T.MOTIVO AS OBS,
+    F.VUNTRIB
 
 FROM U_FISCAL_IO_CONT F
 
