@@ -8,17 +8,6 @@ WITH PROD AS (
        OR ITEMGRUPO.DESCRICAO LIKE '%FARELO%'
 ),
 
-EVENTOS AS (
-    SELECT CHAVE
-    FROM U_NOTASSIEG_EVENTOS
-    WHERE UPPER(XEVENTO) LIKE '%DESCONHE%'
-       OR UPPER(XEVENTO) = 'OPERACAO NAO REALIZADA'
-       OR (
-            UPPER(XEVENTO) LIKE '%CANCEL%'
-            AND UPPER(XEVENTO) NOT LIKE 'CANCELAMENTO%AUTORIZADO%'
-       )
-),
-
 MOTIVO AS (
     SELECT CHAVEACESSO
     FROM U_MOTIVO_TRADING
@@ -62,7 +51,7 @@ ROBO AS (
 */
 CHAVES AS (
     SELECT /*+ MATERIALIZE */
-           DISTINCT F.CHAVEACESSO
+           DISTINCT TO_CHAR(F.CHAVEACESSO) AS CHAVEACESSO
     FROM U_FISCAL_IO_CONT F
     JOIN U_TEMPRESA U
       ON U.ESTAB = F.ESTAB
@@ -82,10 +71,8 @@ CHAVES AS (
     A materialização permite que o Oracle faça:
 
         CHAVES
-           ¿
-        NFCAB relevante
-           ¿
-        NFITEM por IDX_NFITEM_CARGA
+           -> NFCAB relevante
+           -> NFITEM por IDX_NFITEM_CARGA
 
     No teste realizado:
         22.207 CHAVES
@@ -113,9 +100,25 @@ CHAVES_COM_CFOP_INVALIDO AS (
         6101,
         6102
     )
+),
+
+/* v3: substitui a antiga CTE EVENTOS (varredura de U_NOTASSIEG_EVENTOS
+   inteira). Mesma regra de eventos, restrita às chaves de CHAVES. */
+CHAVES_COM_EVENTO AS (
+    SELECT /*+ MATERIALIZE */
+           DISTINCT E.CHAVE AS CHAVEACESSO
+    FROM CHAVES C
+    JOIN U_NOTASSIEG_EVENTOS E
+      ON E.CHAVE = C.CHAVEACESSO
+    WHERE UPPER(E.XEVENTO) LIKE '%DESCONHE%'
+       OR UPPER(E.XEVENTO) = 'OPERACAO NAO REALIZADA'
+       OR (
+            UPPER(E.XEVENTO) LIKE '%CANCEL%'
+            AND UPPER(E.XEVENTO) NOT LIKE 'CANCELAMENTO%AUTORIZADO%'
+       )
 )
 
-SELECT 
+SELECT
     U_FISCAL_IO_CONT_ID,
     F.CHAVEACESSO,
 
@@ -154,8 +157,22 @@ SELECT
         WHEN R.TIPOPESSOA IS NULL THEN TO_CHAR(F.PRODUTOR)
     END AS PRODUTOR,
 
+    /* v2: 100 / 114 conforme a regra VALORUNIT x VUNTRIB.
+       Tolerância = 0 (BA, MT ou NOTACONF 255) ou 0,05 nos demais casos.
+       Comparação com valor nulo não é verdadeira -> mantém '100'. */
     CASE
-        WHEN R.CHAVEACESSONFE IS NOT NULL THEN '100'
+        WHEN R.CHAVEACESSONFE IS NOT NULL
+            THEN CASE
+                     WHEN ABS(CI.VALORUNIT - F.VUNTRIB) >
+                          CASE
+                              WHEN CIDADE.UF IN ('BA', 'MT')
+                                OR NVL(R.NOTACONF, F.NOTACONF) = 255
+                                  THEN 0
+                              ELSE 0.005
+                          END
+                         THEN '115'
+                     ELSE '100'
+                 END
         ELSE TO_CHAR(F.STATUS)
     END AS STATUS,
 
@@ -210,6 +227,11 @@ LEFT JOIN CONTRATO
   ON CONTRATO.ESTAB = F.ESTAB
  AND CONTRATO.CONTRATO = R.CONTRATO
 
+/* v2: item do contrato (1 item por contrato) para comparar VALORUNIT */
+LEFT JOIN CONTRATOITE CI
+  ON CI.ESTAB = CONTRATO.ESTAB
+ AND CI.CONTRATO = CONTRATO.CONTRATO
+
 LEFT JOIN CONCEITOPESSOA P
   ON P.NUMEROCM = F.NUMEROCM
 
@@ -230,22 +252,6 @@ WHERE NVL(F.STATUS_NOTA, '100') <> '101'
 
   AND NVL(P.CONCEITO, 0) <> 98
 
-  /*
-      OTIMIZAÇÃO DO ANTIGO:
-
-      AND NOT EXISTS (
-          SELECT 1
-          FROM NFCAB N
-          JOIN NFITEM I
-            ON I.ESTAB = N.ESTAB
-           AND I.SEQNOTA = N.SEQNOTA
-          WHERE N.CHAVEACESSONFE = F.CHAVEACESSO
-            AND I.CFOP NOT IN (...)
-      )
-
-      Agora a consulta utiliza o conjunto de chaves
-      previamente materializado.
-  */
   AND NOT EXISTS (
       SELECT 1
       FROM CHAVES_COM_CFOP_INVALIDO X
@@ -260,8 +266,8 @@ WHERE NVL(F.STATUS_NOTA, '100') <> '101'
 
   AND NOT EXISTS (
       SELECT 1
-      FROM EVENTOS E
-      WHERE E.CHAVE = F.CHAVEACESSO
+      FROM CHAVES_COM_EVENTO EV
+      WHERE EV.CHAVEACESSO = F.CHAVEACESSO
   )
 
   AND NOT EXISTS (
