@@ -59,7 +59,9 @@ COMPOUND TRIGGER
                 V_CONF := NULL;
         END;
 
-        IF V_CONF IN (387,1387) THEN
+        /* v2: não enfileira de novo quando a própria procedure 387 está
+           executando (quebra o ciclo da recursão) */
+        IF V_CONF IN (387,1387) AND NOT OS_PKG_CTRL_TRG.g_em_387 THEN
             g_387_cnt := g_387_cnt + 1; 
             g_387_estab(g_387_cnt) := :NEW.ESTAB; 
             g_387_chave(g_387_cnt) := :NEW.CHAVEACESSO; 
@@ -212,9 +214,21 @@ COMPOUND TRIGGER
               AND SEQNOTAITEM = 1;
         END LOOP;
 
-        FOR i in 1 .. g_387_cnt LOOP
-            OS_UPD_DESCARGA_387_TRG( P_ESTAB => g_387_estab(i), P_CHAVE387 => g_387_chave(i) ); 
-        END LOOP;
+        /* v2: trava ligada durante a procedure 387; sempre desligada ao
+           sair (inclusive em erro), para não vazar para a sessão */
+        IF g_387_cnt > 0 THEN
+            OS_PKG_CTRL_TRG.g_em_387 := TRUE;
+            BEGIN
+                FOR i in 1 .. g_387_cnt LOOP
+                    OS_UPD_DESCARGA_387_TRG( P_ESTAB => g_387_estab(i), P_CHAVE387 => g_387_chave(i) ); 
+                END LOOP;
+                OS_PKG_CTRL_TRG.g_em_387 := FALSE;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    OS_PKG_CTRL_TRG.g_em_387 := FALSE;
+                    RAISE;
+            END;
+        END IF;
 
         g_estab.DELETE;
         g_seqnota.DELETE;
