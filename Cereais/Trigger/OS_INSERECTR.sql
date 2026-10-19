@@ -56,7 +56,17 @@ BEGIN
 
 
                 IF V_ESTAB IS NULL THEN
-                    V_ESTAB := :NEW.NUMEROCM;
+                    /* ESTAB da filial cujo CNPJ é o CNPJF da pessoa (CONTAMOV) do contrato */
+                    BEGIN
+                        SELECT F.ESTAB
+                        INTO V_ESTAB
+                        FROM CONTAMOV C
+                        INNER JOIN FILIAL F ON F.CNPJ = C.CNPJF
+                        WHERE C.NUMEROCM = :NEW.NUMEROCM;
+                    EXCEPTION
+                        WHEN NO_DATA_FOUND THEN
+                            V_ESTAB := NULL;  -- sem filial para esse CNPJ: o contrato espelho não é criado
+                    END;
                 END IF;
 
 
