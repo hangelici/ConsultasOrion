@@ -167,7 +167,7 @@ SELECT
                           CASE
                               WHEN CIDADE.UF IN ('BA', 'MT')
                                 OR NVL(R.NOTACONF, F.NOTACONF) = 255
-                                  THEN 0
+                                  THEN 0.0005
                               ELSE 0.005
                           END
                          THEN '115'
@@ -282,4 +282,4 @@ WHERE NVL(F.STATUS_NOTA, '100') <> '101'
       SELECT 1
       FROM MOTIVO M
       WHERE M.CHAVEACESSO = F.CHAVEACESSO
-  );
+  )
