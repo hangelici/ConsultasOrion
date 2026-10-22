@@ -1,66 +1,131 @@
-WITH COTACOES AS (
-    select distinct
-    CASE 
-        WHEN cotacaocompra.status = 0 THEN 'Em Andamento'
-        WHEN cotacaocompra.status = 1 THEN 'Em Aprovação'
-        ELSE 'Pedido em Aberto'
-    END STATUS,
-    cotacaocompra.estab||'#'||cotacaocompra.idcotacaocompra AS CHAVE
-    from solmat
-    
-    left join solmatdet on solmatdet.estab = solmat.estab
-                        and solmatdet.idsolmat = solmat.idsolmat
-                        
-    left join solmat_u on solmat_u.estab = solmat.estab
-                        and solmat_u.idsolmat = solmat.idsolmat                                 
-    
-    left join solmatdetcotacao on solmatdetcotacao.estab = solmatdet.estab
-                            and solmatdetcotacao.idsolmat = solmatdet.idsolmat
-                            and solmatdetcotacao.idsolmatdet = solmatdet.idsolmatdet
-                            
-    left join cotacaocompra on cotacaocompra.idcotacaocompra = solmatdetcotacao.idcotacaocompra
-                              and cotacaocompra.estab = solmatdetcotacao.estab
-    
-    LEFT JOIN PUSUARIO ON PUSUARIO.USERID = solmat.usuariosol       
-    
-    LEFT JOIN PGRUPOS ON PGRUPOS.CODIGO = PUSUARIO.GRUPO
-    
-    LEFT JOIN FORNECEDORESCOTACAO ON
-        FORNECEDORESCOTACAO.IDCOTACAOCOMPRA = COTACAOCOMPRA.IDCOTACAOCOMPRA
-        
-    LEFT JOIN ITENSCOTACAO ON
-        ITENSCOTACAO.IDFORNECEDORES = FORNECEDORESCOTACAO.IDFORNECEDORES
-    
-    LEFT JOIN COTACAOPEDITEM ON
-        COTACAOPEDITEM.IDITEMCOTACAO = ITENSCOTACAO.IDITEMCOTACAO
-        
-    LEFT JOIN PEDITEM ON
-        PEDITEM.ESTAB = COTACAOPEDITEM.ESTAB
-        AND PEDITEM.SERIE = COTACAOPEDITEM.SERIE
-        AND PEDITEM.NUMERO = COTACAOPEDITEM.NUMERO
-        
-     LEFT JOIN PEDCAB ON 
-        PEDCAB.ESTAB = PEDITEM.ESTAB AND 
-        PEDCAB.SERIE = PEDITEM.SERIE AND
-        PEDCAB.NUMERO = PEDITEM.NUMERO
-                        
-    where
-    (
-        cotacaocompra.status IN (
-            0,
-            1
+WITH
+SOLMAT_FILTRADA AS (
+    SELECT /*+ MATERIALIZE */
+        SM.ESTAB,
+        SM.IDSOLMAT
+
+    FROM SOLMAT SM
+
+    WHERE
+        SM.USUARIOSOL IN (
+            'LUA.MARTINS',
+            'ELTON.SILVA',
+            'MURILO.LEMES',
+            'HENRI.GUARI'
         )
-        or pedcab.status not in ('B', 'C')
-    )
-    
-    AND (
-        PGRUPOS.CODIGO IN (59,60,61,62)
-        OR solmat.usuariosol in ('LUA.MARTINS','ELTON.SILVA','MURILO.LEMES','HENRI.GUARI')
-    )
+
+        OR EXISTS (
+            SELECT 1
+            FROM PUSUARIO PU
+            INNER JOIN PGRUPOS PG
+                ON PG.CODIGO = PU.GRUPO
+            WHERE PU.USERID = SM.USUARIOSOL
+              AND PG.CODIGO IN (59, 60, 61, 62)
+        )
+),
+
+COTACOES_BASE AS (
+    SELECT /*+ MATERIALIZE */
+        DISTINCT
+        CC.ESTAB,
+        CC.IDCOTACAOCOMPRA,
+        CC.STATUS
+
+    FROM SOLMAT_FILTRADA SM
+
+    INNER JOIN SOLMATDET SMD
+        ON SMD.ESTAB = SM.ESTAB
+       AND SMD.IDSOLMAT = SM.IDSOLMAT
+
+    INNER JOIN SOLMATDETCOTACAO SDC
+        ON SDC.ESTAB = SMD.ESTAB
+       AND SDC.IDSOLMAT = SMD.IDSOLMAT
+       AND SDC.IDSOLMATDET = SMD.IDSOLMATDET
+
+    INNER JOIN COTACAOCOMPRA CC
+        ON CC.ESTAB = SDC.ESTAB
+       AND CC.IDCOTACAOCOMPRA =
+           SDC.IDCOTACAOCOMPRA
+),
+
+COTACOES_VALIDAS AS (
+
+    -- Regra 1:
+    -- Status 0 e 1 entram independentemente
+    -- da existencia de pedidos.
+
+    SELECT
+        CASE
+            WHEN CB.STATUS = 0
+                THEN 'Em Andamento'
+            WHEN CB.STATUS = 1
+                THEN 'Em Aprovação'
+        END AS STATUS,
+
+        CB.ESTAB || '#' ||
+        CB.IDCOTACAOCOMPRA AS CHAVE
+
+    FROM COTACOES_BASE CB
+
+    WHERE CB.STATUS IN (0, 1)
+
+    UNION ALL
+
+    -- Regra 2:
+    -- Outros status somente entram quando
+    -- existe pedido com status diferente de B/C.
+
+    SELECT
+        'Pedido em Aberto' AS STATUS,
+
+        CB.ESTAB || '#' ||
+        CB.IDCOTACAOCOMPRA AS CHAVE
+
+    FROM COTACOES_BASE CB
+
+    WHERE
+        (
+            CB.STATUS NOT IN (0, 1)
+            OR CB.STATUS IS NULL
+        )
+
+        AND EXISTS (
+            SELECT 1
+
+            FROM FORNECEDORESCOTACAO FC
+
+            INNER JOIN ITENSCOTACAO IC
+                ON IC.IDFORNECEDORES =
+                   FC.IDFORNECEDORES
+
+            INNER JOIN COTACAOPEDITEM CPI
+                ON CPI.IDITEMCOTACAO =
+                   IC.IDITEMCOTACAO
+
+            INNER JOIN PEDITEM PI
+                ON PI.ESTAB = CPI.ESTAB
+               AND PI.SERIE = CPI.SERIE
+               AND PI.NUMERO = CPI.NUMERO
+
+            INNER JOIN PEDCAB PC
+                ON PC.ESTAB = PI.ESTAB
+               AND PC.SERIE = PI.SERIE
+               AND PC.NUMERO = PI.NUMERO
+
+            WHERE
+                FC.IDCOTACAOCOMPRA =
+                    CB.IDCOTACAOCOMPRA
+
+                AND PC.STATUS NOT IN ('B', 'C')
+        )
 )
 
 SELECT
     STATUS,
     COUNT(CHAVE) AS QUANTIDADE
-FROM COTACOES
+
+FROM COTACOES_VALIDAS
+
 GROUP BY STATUS
+
+ORDER BY STATUS
