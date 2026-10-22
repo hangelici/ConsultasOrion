@@ -1,63 +1,72 @@
-
 --- ### Responsavel Logistica
-select
-dados.*,
-case
-	when "IdFlow" in (27,28) then 'vermelho'
-	when "Min" > 10 and "IdFlow" = 18 then 'vermelho'
-	when ("Min" between 7 and 10) and "IdFlow" = 18 then 'amarelo'
-	when "Min" > 30 and "IdFlow" = 50 then 'vermelho'
-	when ("Min" between 25 and 30) and "IdFlow" = 50 then 'amarelo'
-	else 'verde'
-end cor_status
-
-from(
-
-select
+WITH workflow_max AS (
+    SELECT
+        sw."Referencia",
+        MAX(sw."Id") as maxid
+    FROM "sys_Workflow" sw
+    GROUP BY sw."Referencia"
+),
+workflow_filtrado AS (
+    SELECT
+        sw."Referencia",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM workflow_max w
+    JOIN "sys_Workflow" sw
+        ON sw."Id" = w.maxid
+       AND sw."Referencia" = w."Referencia"
+    WHERE sw."WorkflowAcaoId" IN (18,27,28,50)
+)
+SELECT
 lcd."Id",
 emp."NomeFantasia" as "Filial",
 se."UF",
-si."Descricao" as "Produto",
+item."Descricao" as "Produto",  -- lateral aqui
 lv."Placa",
 lcd."DataCriacao",
 acao."Descricao" as "Status",
-flow."WorkflowAcaoId" as "IdFlow", 
+flow."WorkflowAcaoId" as "IdFlow",
 lcd."DescrLocalEmbarque" as "Embarque",
 sem."Nome"||'-'||se."UF" as "Desembarque",
 lcd."Descarga",
-ROUND(EXTRACT(EPOCH from (current_timestamp - flow."DataCriacao")) / 60,0) as "Min",
-ROUND(EXTRACT(EPOCH from (current_timestamp - lcd."DataCriacao")) / 60,0) as "Min_Total"
-
-from "log_CargaDado" lcd
-left join "sys_Pessoa" sp on sp."Id" = lcd."DestinoId"
-left join "log_CargaTran" lct on lct."CargaDadoId" = lcd."Id"
-left join "log_Veiculo" lv on lv."Id" = lct."VeiculoId"
-left join "log_CargaItem" lci on lci."CargaDadoId" = lcd."Id"
-left join "sys_Item" si on si."Id" = lci."ProdutoId"
-left join "sys_Empresa" emp on emp."Id" = lcd."EmpresaId"
-left join "sys_EstadoMunicipio" sem on sem."Id" = emp."MunicipioId"
-left join "sys_Estado" se on se."Id" = sem."EstadoId"
-inner join (
-    select
-        sw1."DataCriacao",
-        sw1."WorkflowAcaoId",
-        sw1."Referencia"
-    from (
-        select
-            sw."Referencia",
-            max(sw."Id") as "maxid"
-        from "sys_Workflow" sw
-        group by "Referencia"
-    ) dados
-    inner join "sys_Workflow" sw1 on
-        sw1."Referencia" = dados."Referencia"
-        and sw1."Id" = dados."maxid"
-        and sw1."WorkflowAcaoId" in (18,27,28,50)
-) flow on
-    flow."Referencia" = lcd."Guid"
-left join "sys_WorkflowAcao" acao on acao."Id" = flow."WorkflowAcaoId"
-where
-lcd."CargaTipoStatusId" not in (7)
-and extract(year from lcd."DataCriacao") > 2024
-
-) dados
+vu.dispname as "AgLog",
+(EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60)::int as "Min",
+(EXTRACT(EPOCH FROM (current_timestamp - lcd."DataCriacao"))/60)::int as "Min_Total",
+CASE
+    WHEN flow."WorkflowAcaoId" IN (27,28) THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 18 AND
+         (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) > 10
+    THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 18 AND
+         (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) >= 7
+    THEN 'amarelo'
+    WHEN flow."WorkflowAcaoId" = 50 AND
+         (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) > 30
+    THEN 'vermelho'
+    WHEN flow."WorkflowAcaoId" = 50 AND
+         (EXTRACT(EPOCH FROM (current_timestamp - flow."DataCriacao"))/60) >= 25
+    THEN 'amarelo'
+    ELSE 'verde'
+END cor_status
+FROM "log_CargaDado" lcd
+JOIN workflow_filtrado flow ON flow."Referencia" = lcd."Guid"
+LEFT JOIN "sys_WorkflowAcao" acao ON acao."Id" = flow."WorkflowAcaoId"
+LEFT JOIN "sys_Pessoa" sp ON sp."Id" = lcd."DestinoId"
+LEFT JOIN "sys_Empresa" emp ON emp."Id" = lcd."EmpresaId"
+LEFT JOIN "sys_EstadoMunicipio" sem ON sem."Id" = emp."MunicipioId"
+LEFT JOIN "sys_Estado" se ON se."Id" = sem."EstadoId"
+LEFT JOIN "log_CargaTran" lct ON lct."CargaDadoId" = lcd."Id"
+LEFT JOIN "log_Veiculo" lv ON lv."Id" = lct."VeiculoId"
+LEFT JOIN LATERAL (
+    SELECT si."Descricao"
+    FROM "log_CargaItem" lci
+    JOIN "sys_Item" si ON si."Id" = lci."ProdutoId"
+    WHERE lci."CargaDadoId" = lcd."Id"
+    LIMIT 1
+) item ON true
+left join "log_CargaDemandaLote" lcdl on lcdl."Id" = lcd."CargaDemandaLoteId"
+left join "log_CargaDemandaOportunidade" lcdo on lcdo."Id" = lcdl."CargaDemandaOportunidadeId"
+left join vw_users vu on vu.username = coalesce(lcdo."Usuario",lcdl."Usuario")
+WHERE
+    lcd."CargaTipoStatusId" <> 7
+    AND lcd."DataCriacao" >= DATE '2025-01-01'
