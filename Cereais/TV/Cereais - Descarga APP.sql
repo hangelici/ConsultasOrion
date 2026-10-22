@@ -1,78 +1,127 @@
-
 -- ### DESCARGA - PAINEL
-select distinct
+SELECT DISTINCT
     lcd."Id",
-    swa."Descricao" as "Status",
-    emp."NomeFantasia" as "Filial",
-    si."Descricao" as "Produto",
+    swa."Descricao" AS "Status",
+    emp."NomeFantasia" AS "Filial",
+    si."Descricao" AS "Produto",
     lv."Placa",
     lcd."DataCriacao",
-    lcd."DescrLocalEmbarque" as "Embarque",
-    sem."Nome"||'-'||se."UF" as "Desembarque",
+    lcd."DescrLocalEmbarque" AS "Embarque",
+    sem."Nome" || '-' || se."UF" AS "Desembarque",
     lcd."Descarga",
-    ROUND(EXTRACT(EPOCH from (current_timestamp - flow."DataCriacao")) / 60,0) as "Min",
-    EXTRACT(DAY FROM (lcd."Descarga" - current_timestamp)) as "Dias",
-    case
-        when current_date >= cast(lcd."Descarga" as date) then 'vermelho'
-        when cast(lcd."Descarga" as date) - current_date < 2 then 'amarelo'
-        when cast(lcd."Descarga" as date) - current_date >= 2 then 'verde'
-    end cor
-from "log_CargaDado" lcd
-left join "sys_Pessoa" sp on sp."Id" = lcd."DestinoId"
-left join "sys_EstadoMunicipio" sem on sem."Id" = sp."MunicipioId"
-left join "sys_Estado" se on se."Id" = sem."EstadoId"
-left join "log_CargaTran" lct on lct."CargaDadoId" = lcd."Id"
-left join "log_Veiculo" lv on lv."Id" = lct."VeiculoId"
-left join "log_CargaItem" lci on lci."CargaDadoId" = lcd."Id"
-left join "sys_Item" si on si."Id" = lci."ProdutoId"
-left join "sys_Empresa" emp on emp."Id" = lcd."EmpresaId"
-left join (
-    select
-        sw1."DataCriacao",
-        sw1."WorkflowAcaoId",
-        sw1."Referencia"
-    from (
-        select
-            sw."Referencia",
-            max(sw."Id") as "maxid"
-        from "sys_Workflow" sw
-        where sw."WorkflowAcaoId" = 13
-        group by "Referencia"
-    ) dados
-    inner join "sys_Workflow" sw1 on
-        sw1."Referencia" = dados."Referencia"
-        and sw1."Id" = dados."maxid"
-) flow on
-flow."Referencia" = lcd."Guid"
-left join (
-    select
-        sw1."DataCriacao",
-        sw1."WorkflowAcaoId",
-        sw1."Referencia"
-    from (
-        select
-            sw."Referencia",
-            max(sw."Id") as "maxid"
-        from "sys_Workflow" sw
-        group by "Referencia"
-    ) dados
-    inner join "sys_Workflow" sw1 on
-        sw1."Referencia" = dados."Referencia"
-        and sw1."Id" = dados."maxid"
-) maximo on
-maximo."Referencia" = lcd."Guid"
-left join "sys_WorkflowAcao" swa on swa."Id" = maximo."WorkflowAcaoId"
-where
+
+    ROUND(
+        EXTRACT(
+            EPOCH FROM (
+                CURRENT_TIMESTAMP - flow."DataCriacao"
+            )
+        ) / 60,
+        0
+    ) AS "Min",
+
+    EXTRACT(
+        DAY FROM (
+            lcd."Descarga" - CURRENT_TIMESTAMP
+        )
+    ) AS "Dias",
+
+    CASE
+        WHEN CURRENT_DATE >= lcd."Descarga"::date
+            THEN 'vermelho'
+
+        WHEN lcd."Descarga"::date - CURRENT_DATE < 2
+            THEN 'amarelo'
+
+        WHEN lcd."Descarga"::date - CURRENT_DATE >= 2
+            THEN 'verde'
+    END AS cor
+
+FROM "log_CargaDado" lcd
+
+-- PESSOA / DESTINO
+LEFT JOIN "sys_Pessoa" sp
+    ON sp."Id" = lcd."DestinoId"
+
+LEFT JOIN "sys_EstadoMunicipio" sem
+    ON sem."Id" = sp."MunicipioId"
+
+LEFT JOIN "sys_Estado" se
+    ON se."Id" = sem."EstadoId"
+
+-- TRANSPORTE / VEICULO
+LEFT JOIN "log_CargaTran" lct
+    ON lct."CargaDadoId" = lcd."Id"
+
+LEFT JOIN "log_Veiculo" lv
+    ON lv."Id" = lct."VeiculoId"
+
+-- PRODUTO
+LEFT JOIN "log_CargaItem" lci
+    ON lci."CargaDadoId" = lcd."Id"
+
+LEFT JOIN "sys_Item" si
+    ON si."Id" = lci."ProdutoId"
+
+-- EMPRESA
+LEFT JOIN "sys_Empresa" emp
+    ON emp."Id" = lcd."EmpresaId"
+
+-- ULTIMO WORKFLOW COM ACAO 13
+-- Substitui o GROUP BY + MAX(Id) original
+LEFT JOIN LATERAL (
+    SELECT
+        sw."DataCriacao",
+        sw."WorkflowAcaoId",
+        sw."Referencia"
+    FROM "sys_Workflow" sw
+    WHERE sw."Referencia" = lcd."Guid"
+      AND sw."WorkflowAcaoId" = 13
+    ORDER BY sw."Id" DESC
+    LIMIT 1
+) flow ON true
+
+-- ULTIMO WORKFLOW GERAL DA CARGA
+-- Substitui o GROUP BY + MAX(Id) original
+LEFT JOIN LATERAL (
+    SELECT
+        sw."DataCriacao",
+        sw."WorkflowAcaoId",
+        sw."Referencia"
+    FROM "sys_Workflow" sw
+    WHERE sw."Referencia" = lcd."Guid"
+    ORDER BY sw."Id" DESC
+    LIMIT 1
+) maximo ON true
+
+-- DESCRICAO DO STATUS ATUAL
+LEFT JOIN "sys_WorkflowAcao" swa
+    ON swa."Id" = maximo."WorkflowAcaoId"
+
+WHERE
+    -- PRECISA POSSUIR WORKFLOW 13
     lcd."Guid" IN (
-        SELECT sw1."Referencia"
+        SELECT
+            sw1."Referencia"
         FROM "sys_Workflow" sw1
-        WHERE sw1."WorkflowAcaoId" in (13)
+        WHERE sw1."WorkflowAcaoId" = 13
     )
+
+    -- NAO PODE POSSUIR WORKFLOW 12 OU 14
     AND lcd."Guid" NOT IN (
-        SELECT sw2."Referencia"
+        SELECT
+            sw2."Referencia"
         FROM "sys_Workflow" sw2
-        WHERE sw2."WorkflowAcaoId" in (12,14)
+        WHERE sw2."WorkflowAcaoId" IN (12, 14)
     )
-    and lcd."CargaTipoStatusId" not in (7)
-    AND CAST(lcd."Descarga" AS DATE) - CURRENT_DATE < 2
-    AND lcd."Descarga" NOT IN ('infinity', '-infinity')
+
+    -- EXCLUI STATUS 7
+    AND lcd."CargaTipoStatusId" NOT IN (7)
+
+    -- DESCARGAS ANTERIORES A D+2
+    AND lcd."Descarga"::date - CURRENT_DATE < 2
+
+    -- EXCLUI DATAS INFINITAS
+    AND lcd."Descarga" NOT IN (
+        'infinity',
+        '-infinity'
+    )
