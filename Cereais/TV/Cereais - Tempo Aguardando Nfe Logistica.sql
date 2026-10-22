@@ -1,54 +1,140 @@
-select
-dados.*,
-RANK() OVER (ORDER BY "Min" DESC NULLS LAST) AS "Rank"
-from(
- 
-select
-lcd."Id",
-emp."NomeFantasia" as "Filial",
-si."Descricao" as "Produto",
-lv."Placa",
-acao."Descricao" as "Status",
-lcd."DataCriacao",
-lcd."DescrLocalEmbarque" as "Embarque",
-sem."Nome"||'-'||se."UF" as "Desembarque",
-lcd."Descarga",
-ROUND(EXTRACT(EPOCH from (current_timestamp - flow."DataCriacao")) / 60,0) as "Min",
-ROUND(EXTRACT(EPOCH from (current_timestamp - lcd."DataCriacao")) / 60,0) as "Min_Total"
- 
-from "log_CargaDado" lcd
-left join "sys_Pessoa" sp on sp."Id" = lcd."DestinoId"
-left join "sys_EstadoMunicipio" sem on sem."Id" = sp."MunicipioId"
-left join "sys_Estado" se on se."Id" = sem."EstadoId"
-left join "log_CargaTran" lct on lct."CargaDadoId" = lcd."Id"
-left join "log_Veiculo" lv on lv."Id" = lct."VeiculoId"
-left join "log_CargaItem" lci on lci."CargaDadoId" = lcd."Id"
-left join "sys_Item" si on si."Id" = lci."ProdutoId"
-left join "sys_Empresa" emp on emp."Id" = lcd."EmpresaId"
- 
-inner join (
-    select
-        sw1."DataCriacao",
-        sw1."WorkflowAcaoId",
-        sw1."Referencia"
-    from (
-        select
-            sw."Referencia",
-            max(sw."Id") as "maxid"
-        from "sys_Workflow" sw
-        group by "Referencia"
-    ) dados
-    inner join "sys_Workflow" sw1 on
-        sw1."Referencia" = dados."Referencia"
-        and sw1."Id" = dados."maxid"
-       and sw1."WorkflowAcaoId" in (50,28)
-) flow on
-    flow."Referencia" = lcd."Guid"
-left join "sys_WorkflowAcao" acao on acao."Id" = flow."WorkflowAcaoId"
-where
-lcd."CargaTipoStatusId" not in (7)
-and extract(year from lcd."DataCriacao") > 2024
-and lcd."DataCriacao" >= DATE '2025-01-01'
-and lcd."DataCriacao" <= current_date
- 
-) dados
+WITH workflow_candidato AS MATERIALIZED (
+
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."Id",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+
+    FROM "sys_Workflow" sw
+
+    WHERE sw."WorkflowAcaoId" IN (28, 50)
+      AND sw."Referencia" IS NOT NULL
+
+    ORDER BY
+        sw."Referencia",
+        sw."Id" DESC
+),
+
+cargas_filtradas AS MATERIALIZED (
+
+    SELECT
+        lcd."Id",
+        lcd."EmpresaId",
+        lcd."DestinoId",
+        lcd."DataCriacao",
+        lcd."DescrLocalEmbarque",
+        lcd."Descarga",
+
+        w."WorkflowAcaoId" AS "IdFlow",
+        w."DataCriacao" AS "DataWorkflow"
+
+    FROM workflow_candidato w
+
+    INNER JOIN "log_CargaDado" lcd
+        ON lcd."Guid" = w."Referencia"
+
+    WHERE
+        lcd."CargaTipoStatusId" <> 7
+
+        AND lcd."DataCriacao" >= DATE '2025-01-01'
+
+        AND lcd."DataCriacao" <= CURRENT_DATE
+
+        -- Confirma que nao existe workflow posterior,
+        -- independentemente do tipo de acao.
+
+        AND NOT EXISTS (
+            SELECT 1
+            FROM "sys_Workflow" sw2
+            WHERE sw2."Referencia" = w."Referencia"
+              AND sw2."Id" > w."Id"
+        )
+),
+
+dados AS (
+
+    SELECT
+        c."Id",
+
+        emp."NomeFantasia" AS "Filial",
+
+        si."Descricao" AS "Produto",
+
+        lv."Placa",
+
+        acao."Descricao" AS "Status",
+
+        c."DataCriacao",
+
+        c."DescrLocalEmbarque" AS "Embarque",
+
+        sem."Nome" || '-' || se."UF" AS "Desembarque",
+
+        c."Descarga",
+
+        ROUND(
+            EXTRACT(
+                EPOCH FROM (
+                    CURRENT_TIMESTAMP - c."DataWorkflow"
+                )
+            ) / 60,
+            0
+        ) AS "Min",
+
+        ROUND(
+            EXTRACT(
+                EPOCH FROM (
+                    CURRENT_TIMESTAMP - c."DataCriacao"
+                )
+            ) / 60,
+            0
+        ) AS "Min_Total"
+
+    FROM cargas_filtradas c
+
+    -- PESSOA DE DESTINO
+    LEFT JOIN "sys_Pessoa" sp
+        ON sp."Id" = c."DestinoId"
+
+    -- MUNICIPIO DO DESTINO
+    LEFT JOIN "sys_EstadoMunicipio" sem
+        ON sem."Id" = sp."MunicipioId"
+
+    -- ESTADO DO DESTINO
+    LEFT JOIN "sys_Estado" se
+        ON se."Id" = sem."EstadoId"
+
+    -- TRANSPORTE
+    LEFT JOIN "log_CargaTran" lct
+        ON lct."CargaDadoId" = c."Id"
+
+    -- VEICULO
+    LEFT JOIN "log_Veiculo" lv
+        ON lv."Id" = lct."VeiculoId"
+
+    -- ITEM DA CARGA
+    LEFT JOIN "log_CargaItem" lci
+        ON lci."CargaDadoId" = c."Id"
+
+    -- PRODUTO
+    LEFT JOIN "sys_Item" si
+        ON si."Id" = lci."ProdutoId"
+
+    -- FILIAL
+    LEFT JOIN "sys_Empresa" emp
+        ON emp."Id" = c."EmpresaId"
+
+    -- DESCRICAO DO WORKFLOW
+    LEFT JOIN "sys_WorkflowAcao" acao
+        ON acao."Id" = c."IdFlow"
+)
+
+SELECT
+    dados.*,
+
+    RANK() OVER (
+        ORDER BY "Min" DESC NULLS LAST
+    ) AS "Rank"
+
+FROM dados
