@@ -15,8 +15,8 @@ WHERE
 workflow_atual AS (
 SELECT
     cf."Guid",
-    sw."WorkflowAcaoId",
-    sw."DataCriacao"
+    swa."WorkflowAcaoId",
+    swa."DataCriacao"
 FROM cargas_filtradas cf
 JOIN LATERAL (
     SELECT
@@ -26,33 +26,67 @@ JOIN LATERAL (
     WHERE sw."Referencia" = cf."Guid"
     ORDER BY sw."Id" DESC
     LIMIT 1
-) sw ON sw."WorkflowAcaoId" IN (52,17)
+)swa ON swa."WorkflowAcaoId" IN (4,15,22,23,42,49,51,52,17,66)
+),
+workflow_ag AS (
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE sw."WorkflowAcaoId" IN (16,18)
+    ORDER BY sw."Referencia", sw."Id" ASC
+),
+workflow_ag18 AS (
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE sw."WorkflowAcaoId" IN (18)
+    ORDER BY sw."Referencia", sw."Id" DESC
+),
+workflow_ag16 AS (
+    SELECT DISTINCT ON (sw."Referencia")
+        sw."Referencia",
+        sw."WorkflowAcaoId",
+        sw."DataCriacao"
+    FROM "sys_Workflow" sw
+    WHERE sw."WorkflowAcaoId" IN (16)
+    ORDER BY sw."Referencia", sw."Id" DESC
 )
-SELECT
-cf."Id",
+select
+c."Id",
+c."Guid",
 emp."NomeFantasia" as "Filial",
+se."UF",
 si."Descricao" as "Produto",
-lv."Placa",
+wa."DataCriacao",
 acao."Descricao" as "Status",
-cf."DataCriacao",
-cf."DescrLocalEmbarque" as "Embarque",
-sem."Nome"||'-'||se."UF" as "Desembarque",
-cf."Descarga",
-(EXTRACT(EPOCH FROM (current_timestamp - wa."DataCriacao"))/60)::int as "Min",
-(EXTRACT(EPOCH FROM (current_timestamp - cf."DataCriacao"))/60)::int as "Min_Total",
-CASE
-    WHEN (EXTRACT(EPOCH FROM (current_timestamp - wa."DataCriacao"))/60) > 15 THEN 'vermelho'
-    WHEN (EXTRACT(EPOCH FROM (current_timestamp - wa."DataCriacao"))/60) >= 10 THEN 'amarelo'
-    ELSE 'verde'
-END cor_status
-FROM cargas_filtradas cf
-JOIN workflow_atual wa ON wa."Guid" = cf."Guid"
-LEFT JOIN "sys_WorkflowAcao" acao ON acao."Id" = wa."WorkflowAcaoId"
-LEFT JOIN "sys_Pessoa" sp ON sp."Id" = cf."DestinoId"
-LEFT JOIN "sys_EstadoMunicipio" sem ON sem."Id" = sp."MunicipioId"
-LEFT JOIN "sys_Estado" se ON se."Id" = sem."EstadoId"
-LEFT JOIN "log_CargaTran" lct ON lct."CargaDadoId" = cf."Id"
-LEFT JOIN "log_Veiculo" lv ON lv."Id" = lct."VeiculoId"
-LEFT JOIN "log_CargaItem" lci ON lci."CargaDadoId" = cf."Id"
-LEFT JOIN "sys_Item" si ON si."Id" = lci."ProdutoId"
-LEFT JOIN "sys_Empresa" emp ON emp."Id" = cf."EmpresaId";
+c."DescrLocalEmbarque" as "Embarque",
+case 
+	when wa."WorkflowAcaoId" in (4,15,22,23,42,49,51,66) then sem."Nome"||'-'||se."UF"
+	else semp."Nome"||'-'||sep."UF"
+end "Desembarque",
+c."Descarga",
+ROUND(EXTRACT(EPOCH from (current_timestamp - coalesce(ag18."DataCriacao",ag16."DataCriacao"))) / 60,0) as "Min", -- agora para status atual
+ROUND(EXTRACT(EPOCH from (current_timestamp - coalesce(ag16."DataCriacao",ag."DataCriacao"))) / 60,0) as "Min_Total",
+case
+	when ROUND(EXTRACT(EPOCH from (current_timestamp - ag18."DataCriacao")) / 60,0) between 10 and 15 then 'amarelo'
+	when ROUND(EXTRACT(EPOCH from (current_timestamp - ag18."DataCriacao")) / 60,0) > 15 then 'vermelho'
+	else 'verde'
+end cor_status
+from cargas_filtradas c
+inner join workflow_atual wa ON wa."Guid" = c."Guid"
+inner join "sys_Empresa" emp on emp."Id" = c."EmpresaId"
+inner join "sys_EstadoMunicipio" sem on sem."Id" = emp."MunicipioId"
+inner join "sys_Estado" se on se."Id" = sem."EstadoId"
+inner join "log_CargaItem" lci on lci."CargaDadoId" = c."Id"
+left join "sys_Item" si on si."Id" = lci."ProdutoId"
+inner join "sys_WorkflowAcao" acao on acao."Id" = wa."WorkflowAcaoId"
+left join "sys_Pessoa" sp on sp."Id" = c."DestinoId"
+left join "sys_EstadoMunicipio" semp on semp."Id" = sp."MunicipioId"
+left join "sys_Estado" sep on sep."Id" = semp."EstadoId"
+left join workflow_ag ag on ag."Referencia" = c."Guid"
+left join workflow_ag18 ag18 on ag18."Referencia" = c."Guid"
+left join workflow_ag16 ag16 on ag16."Referencia" = c."Guid"
