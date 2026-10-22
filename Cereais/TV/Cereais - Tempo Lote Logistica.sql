@@ -1,42 +1,149 @@
-SELECT
-    dados.*,
-    RANK() OVER (ORDER BY "Vencimento" ASC NULLS LAST) AS "Rank",
-    CASE 
-        -- Regras FOB
-        WHEN "TipoFrete" = 'FOB' AND "Vencimento" > 0 THEN 'VERMELHO'
-        WHEN "TipoFrete" = 'FOB' AND "Vencimento" = 0 THEN 'AMARELO'
-        -- Regras CIF
-        WHEN "TipoFrete" = 'CIF' AND "Tempo" > 25 THEN 'VERMELHO'
-        WHEN "TipoFrete" = 'CIF' AND "Tempo" > 15 THEN 'AMARELO'
-        ELSE NULL -- não exibe
-    END AS "CorStatus"
-FROM (
-    SELECT 
+-- ### LOTES DE DEMANDA LOGISTICA
+WITH empresa_uf AS MATERIALIZED (
+    SELECT
+        se."Id" AS "EmpresaId",
+        est."UF"
+
+    FROM "sys_Empresa" se
+
+    LEFT JOIN "sys_EstadoMunicipio" mun
+        ON mun."Id" = se."MunicipioId"
+
+    LEFT JOIN "sys_Estado" est
+        ON est."Id" = mun."EstadoId"
+),
+
+lotes_calculados AS MATERIALIZED (
+    SELECT
         lcdl."StatusId",
-        TO_CHAR(lcdl."DataCriacao", 'DD/MM/YYYY') AS "DataCriacao",
-        TO_CHAR(lcdl."Validade", 'DD/MM/YYYY') AS "Validade",
-        FLOOR(EXTRACT(EPOCH FROM (NOW() - lcdl."DataCriacao")) / 86400) AS "Tempo",
-        ROUND(FLOOR(EXTRACT(EPOCH FROM (NOW() - lcdl."InicioEmbarque")) / 86400),0)  AS "Vencimento",
+        lcdl."DataCriacao",
+        lcdl."Validade",
+        lcdl."InicioEmbarque",
         lcdl."Id",
-        se2."UF",
-        vu.username AS "AgenteLogistico",
+        lcdl."Usuario",
+        lcdl."EmpresaId",
         lcdl."Excluido",
-        CASE 
+
+        CASE
             WHEN lcdl."Valor" = 0 THEN 'FOB'
             ELSE 'CIF'
-        END AS "TipoFrete"
+        END AS "TipoFrete",
+
+        FLOOR(
+            EXTRACT(
+                EPOCH FROM (
+                    NOW() - lcdl."DataCriacao"
+                )
+            ) / 86400
+        ) AS "Tempo",
+
+        ROUND(
+            FLOOR(
+                EXTRACT(
+                    EPOCH FROM (
+                        NOW() - lcdl."InicioEmbarque"
+                    )
+                ) / 86400
+            ),
+            0
+        ) AS "Vencimento"
+
     FROM "log_CargaDemandaLote" lcdl
-    LEFT JOIN vw_users vu ON vu.userid = lcdl."Usuario"         -- agente logístico
-    LEFT JOIN "sys_Empresa" se ON se."Id" = lcdl."EmpresaId"    -- filial
-    LEFT JOIN "sys_EstadoMunicipio" sem ON sem."Id" = se."MunicipioId" -- cidade
-    LEFT JOIN "sys_Estado" se2 ON se2."Id" = sem."EstadoId"     -- uf
-    WHERE lcdl."StatusId" NOT IN (3,7,8,4,6)  AND lcdl."StatusId" = 1 
-  	and lcdl."DataCriacao" >=  DATE '2025-01-01' 
-  	and lcdl."DataCriacao" <= current_date
-) dados
-WHERE 
-    -- FOB: só mostra vencimento >= 0
-    ("TipoFrete" = 'FOB' AND "Vencimento" >= 0)
-    -- CIF: só mostra se tempo > 15
-    OR ("TipoFrete" = 'CIF' AND "Tempo" > 15)
-ORDER BY "TipoFrete", "Tempo" DESC
+
+    WHERE lcdl."StatusId" = 1
+
+      AND lcdl."DataCriacao" >= DATE '2025-01-01'
+
+      AND lcdl."DataCriacao" <= CURRENT_DATE
+),
+
+lotes_filtrados AS (
+    SELECT
+        l.*
+    FROM lotes_calculados l
+    WHERE
+        (
+            l."TipoFrete" = 'FOB'
+            AND l."Vencimento" >= 0
+        )
+        OR
+        (
+            l."TipoFrete" = 'CIF'
+            AND l."Tempo" > 15
+        )
+),
+
+dados AS (
+    SELECT
+        l."StatusId",
+
+        TO_CHAR(
+            l."DataCriacao",
+            'DD/MM/YYYY'
+        ) AS "DataCriacao",
+
+        TO_CHAR(
+            l."Validade",
+            'DD/MM/YYYY'
+        ) AS "Validade",
+
+        l."Tempo",
+
+        l."Vencimento",
+
+        l."Id",
+
+        eu."UF",
+
+        vu.username AS "AgenteLogistico",
+
+        l."Excluido",
+
+        l."TipoFrete"
+
+    FROM lotes_filtrados l
+
+    LEFT JOIN vw_users vu
+        ON vu.userid = l."Usuario"
+
+    LEFT JOIN empresa_uf eu
+        ON eu."EmpresaId" = l."EmpresaId"
+)
+
+SELECT
+    dados.*,
+
+    RANK() OVER (
+        ORDER BY
+            "Vencimento" ASC NULLS LAST
+    ) AS "Rank",
+
+    CASE
+
+        -- FOB
+        WHEN "TipoFrete" = 'FOB'
+             AND "Vencimento" > 0
+            THEN 'VERMELHO'
+
+        WHEN "TipoFrete" = 'FOB'
+             AND "Vencimento" = 0
+            THEN 'AMARELO'
+
+        -- CIF
+        WHEN "TipoFrete" = 'CIF'
+             AND "Tempo" > 25
+            THEN 'VERMELHO'
+
+        WHEN "TipoFrete" = 'CIF'
+             AND "Tempo" > 15
+            THEN 'AMARELO'
+
+        ELSE NULL
+
+    END AS "CorStatus"
+
+FROM dados
+
+ORDER BY
+    "TipoFrete",
+    "Tempo" DESC
