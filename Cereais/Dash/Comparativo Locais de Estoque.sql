@@ -1,89 +1,110 @@
-with maxdata as (
-    SELECT
-    i.estab,i.codigosaldo,i.local,i.item,
-    MAX(TO_DATE('01/' || LPAD(COALESCE(i.MES, 1), 2, '0') || '/' || COALESCE(i.ANO, 1), 'DD/MM/YYYY')) AS DATA_MAX
-    from itemsaldo i
-    inner join u_tempresa e on e.estab = i.estab
-    where i.codigosaldo in (:CODIGOSALDO) and e.GRAOS = 'S'
-    AND (TO_DATE('01/' || LPAD(COALESCE(i.MES, 1), 2, '0') || '/' || COALESCE(i.ANO, 1), 'DD/MM/YYYY')) <= :DATA
-    group by i.estab,i.codigosaldo,i.local,i.item
+WITH BASE AS (
+    /* saldo por (filial, item, local) na última competência <= :DATA */
+    SELECT /*+ MATERIALIZE NO_MERGE(X) */
+           X.ESTAB,
+           X.ITEM,
+           X.LOCAL,
+           SUM(X.SALDO_DT_MAX) AS SALDO
+      FROM (SELECT I.ESTAB,
+                   I.ITEM,
+                   I.LOCAL,
+                   I.CODIGOSALDO,
+                   SUM(I.SALDOQUANTIDADE)
+                       KEEP (DENSE_RANK LAST
+                             ORDER BY TO_DATE('01/' || LPAD(COALESCE(I.MES, 1), 2, '0') || '/' || COALESCE(I.ANO, 1), 'DD/MM/YYYY')
+                            ) AS SALDO_DT_MAX
+              FROM ITEMSALDO I
+             INNER JOIN U_TEMPRESA E ON E.ESTAB = I.ESTAB
+             WHERE I.CODIGOSALDO IN (:CODIGOSALDO)
+               AND E.GRAOS = 'S'
+               AND TO_DATE('01/' || LPAD(COALESCE(I.MES, 1), 2, '0') || '/' || COALESCE(I.ANO, 1), 'DD/MM/YYYY') <= :DATA
+  <#if ITEM?has_content>
+               AND I.ITEM IN ( :ITEM )
+  </#if>
+             GROUP BY I.ESTAB, I.ITEM, I.LOCAL, I.CODIGOSALDO
+           ) X
+     WHERE EXISTS (SELECT /*+ NO_UNNEST */ 1
+                     FROM ITEMAGROESTAB T
+                    WHERE T.ESTAB = X.ESTAB
+                      AND T.ITEM  = X.ITEM)
+     GROUP BY X.ESTAB, X.ITEM, X.LOCAL
 ),
-base as (
-    select
-    t.estab,
-    t.item,
-    itemsaldo.local,
-    sum(itemsaldo.SALDOQUANTIDADE) saldo
-    from itemagroestab t
-    left join itemsaldo on
-        itemsaldo.estab = t.estab
-        and itemsaldo.item = t.item
-    inner join maxdata m on
-        m.estab = itemsaldo.estab
-        and m.item = itemsaldo.ITEM
-        and m.local = itemsaldo.local
-        and m.codigosaldo = itemsaldo.codigosaldo
-        and m.DATA_MAX = TO_DATE('01/' || LPAD(COALESCE(itemsaldo.MES, 1), 2, '0') || '/' || COALESCE(itemsaldo.ANO, 1), 'DD/MM/YYYY')
-    group by t.estab,t.item,itemsaldo.local
-)
-SELECT  FILIAL.ESTAB AS ESTABORIGEM,
-        LOCALEST.LOCAL AS LOCALORIGEM,
-        LOCEQUI_U.ESTAB AS ESTABDESTINO,
-        LOCEQUI_U.LOCAL AS LOCALDESTINO,    
-        ITEMAGRO.DESCRICAO||' - '||FILIAL.ESTAB||'-'||LOCALEST.DESCRICAO||' / '||LOCEQUI.ESTAB||'-'||LOCEQUI.DESCRICAO AS LOCALXLOCAL,        
-        nvl(baseori.saldo,0) as SALDOORIGEM,
-        nvl(baseeq.saldo,0) as SALDOEQUIVALENTE,
-        ABS(NVL(baseori.saldo,0) + NVL(baseeq.saldo,0)) AS DIFSALDO
-       -- SALDOITEM(LOCALEST.ESTAB, ITEMAGROESTAB.ITEM, :CODIGOSALDO, LOCALEST.LOCAL, LOCALEST.LOCAL,:DATA,NULL,NULL,NULL,NULL) AS SALDOORIGEM,
-        --SALDOITEM(LOCEQUI_U.ESTAB, ITEMAGROESTAB.ITEM, :CODIGOSALDO, LOCEQUI_U.LOCAL, LOCEQUI_U.LOCAL,:DATA,NULL,NULL,NULL,NULL) AS SALDOEQUIVALENTE
-FROM FILIAL
-INNER JOIN LOCALEST
-  ON FILIAL.ESTAB = LOCALEST.ESTAB
-INNER JOIN LOCALEST_U
-  ON LOCALEST.ESTAB = LOCALEST_U.ESTAB
-  AND LOCALEST.LOCAL = LOCALEST_U.LOCAL
-
--- NUMEROCM da origem identifica a empresa destino
-INNER JOIN CONTAMOV CMDEST
-  ON CMDEST.NUMEROCM = LOCALEST_U.NUMEROCM
-
-INNER JOIN FILIAL FILIALDEST
-  ON FILIALDEST.CNPJ = CMDEST.CNPJF
-  AND FILIALDEST.ESTAB <> FILIAL.ESTAB
-
--- Dentro da filial destino,
--- NUMEROCM = ESTAB da origem identifica o local equivalente
-INNER JOIN LOCALEST_U LOCEQUI_U
-  ON LOCEQUI_U.ESTAB = FILIALDEST.ESTAB
-  AND LOCEQUI_U.NUMEROCM = FILIAL.ESTAB
-
-INNER JOIN LOCALEST LOCEQUI
-  ON LOCEQUI_U.ESTAB = LOCEQUI.ESTAB
-  AND LOCEQUI_U.LOCAL = LOCEQUI.LOCAL
-INNER JOIN ITEMAGROESTAB
-  ON ITEMAGROESTAB.ESTAB = FILIAL.ESTAB
-INNER JOIN ITEMAGRO
-  ON ITEMAGROESTAB.ITEM = ITEMAGRO.ITEM
-LEFT JOIN ITEMGRUPO
-  ON ITEMAGRO.GRUPO = ITEMGRUPO.GRUPO
-
-left join base baseori on
-    baseori.estab = LOCALEST.ESTAB
-    and baseori.item = ITEMAGROESTAB.ITEM
-    and baseori.local = LOCALEST.LOCAL
-
-left join base baseeq on
-    baseeq.estab = LOCEQUI_U.ESTAB
-    and baseeq.item = ITEMAGROESTAB.ITEM
-    and baseeq.local = LOCEQUI_U.LOCAL
-    
-WHERE 0=0
- <#if ESTABORIGEM?has_content>
-    AND FILIAL.ESTAB IN ( :ESTABORIGEM )
+/* pares de locais: origem -> local equivalente na filial destino */
+PARES AS (
+    SELECT FILIAL.ESTAB     AS ESTABORIGEM,
+           LOCALEST.LOCAL   AS LOCALORIGEM,
+           LOCEQUI_U.ESTAB  AS ESTABDESTINO,
+           LOCEQUI_U.LOCAL  AS LOCALDESTINO,
+           FILIAL.ESTAB || '-' || LOCALEST.DESCRICAO || ' / ' ||
+           LOCEQUI.ESTAB || '-' || LOCEQUI.DESCRICAO AS TRECHO_LOCAL
+      FROM FILIAL
+     INNER JOIN LOCALEST
+        ON FILIAL.ESTAB = LOCALEST.ESTAB
+     INNER JOIN LOCALEST_U
+        ON LOCALEST.ESTAB = LOCALEST_U.ESTAB
+       AND LOCALEST.LOCAL = LOCALEST_U.LOCAL
+     -- NUMEROCM da origem identifica a empresa destino
+     INNER JOIN CONTAMOV CMDEST
+        ON CMDEST.NUMEROCM = LOCALEST_U.NUMEROCM
+     INNER JOIN FILIAL FILIALDEST
+        ON FILIALDEST.CNPJ = CMDEST.CNPJF
+       AND FILIALDEST.ESTAB <> FILIAL.ESTAB
+     -- Dentro da filial destino, NUMEROCM = ESTAB da origem identifica o
+     -- local equivalente
+     INNER JOIN LOCALEST_U LOCEQUI_U
+        ON LOCEQUI_U.ESTAB = FILIALDEST.ESTAB
+       AND LOCEQUI_U.NUMEROCM = FILIAL.ESTAB
+     INNER JOIN LOCALEST LOCEQUI
+        ON LOCEQUI_U.ESTAB = LOCEQUI.ESTAB
+       AND LOCEQUI_U.LOCAL = LOCEQUI.LOCAL
+     WHERE 0=0
+  <#if ESTABORIGEM?has_content>
+       AND FILIAL.ESTAB IN ( :ESTABORIGEM )
   </#if>
   <#if ESTABDESTINO?has_content>
-    AND LOCEQUI_U.ESTAB IN ( :ESTABDESTINO )
+       AND LOCEQUI_U.ESTAB IN ( :ESTABDESTINO )
   </#if>
+),
+/* itens candidatos por par: os que têm saldo na origem ou no equivalente */
+CAND AS (
+    SELECT P.ESTABORIGEM, P.LOCALORIGEM, P.ESTABDESTINO, P.LOCALDESTINO,
+           P.TRECHO_LOCAL, B.ITEM
+      FROM PARES P
+      JOIN BASE B ON B.ESTAB = P.ESTABORIGEM
+                 AND B.LOCAL = P.LOCALORIGEM
+    UNION
+    SELECT P.ESTABORIGEM, P.LOCALORIGEM, P.ESTABDESTINO, P.LOCALDESTINO,
+           P.TRECHO_LOCAL, B.ITEM
+      FROM PARES P
+      JOIN BASE B ON B.ESTAB = P.ESTABDESTINO
+                 AND B.LOCAL = P.LOCALDESTINO
+)
+SELECT C.ESTABORIGEM,
+       C.LOCALORIGEM,
+       C.ESTABDESTINO,
+       C.LOCALDESTINO,
+       ITEMAGRO.DESCRICAO || ' - ' || C.TRECHO_LOCAL AS LOCALXLOCAL,
+       NVL(BASEORI.SALDO, 0) AS SALDOORIGEM,
+       NVL(BASEEQ.SALDO, 0)  AS SALDOEQUIVALENTE,
+       ABS(NVL(BASEORI.SALDO, 0) + NVL(BASEEQ.SALDO, 0)) AS DIFSALDO
+  FROM CAND C
+ -- item cadastrado na filial de origem (mesma regra da consulta original)
+ INNER JOIN ITEMAGROESTAB
+    ON ITEMAGROESTAB.ESTAB = C.ESTABORIGEM
+   AND ITEMAGROESTAB.ITEM  = C.ITEM
+ INNER JOIN ITEMAGRO
+    ON ITEMAGRO.ITEM = C.ITEM
+  LEFT JOIN ITEMGRUPO
+    ON ITEMAGRO.GRUPO = ITEMGRUPO.GRUPO
+  LEFT JOIN BASE BASEORI
+    ON BASEORI.ESTAB = C.ESTABORIGEM
+   AND BASEORI.ITEM  = C.ITEM
+   AND BASEORI.LOCAL = C.LOCALORIGEM
+  LEFT JOIN BASE BASEEQ
+    ON BASEEQ.ESTAB = C.ESTABDESTINO
+   AND BASEEQ.ITEM  = C.ITEM
+   AND BASEEQ.LOCAL = C.LOCALDESTINO
+ WHERE 0=0
   <#if GRUPO?has_content>
     AND ITEMAGRO.GRUPO IN ( :GRUPO )
   </#if>
@@ -94,5 +115,5 @@ WHERE 0=0
     AND ITEMGRUPO.GRUPOCONTABIL IN ( :GRUPOCONTABIL )
   </#if>
   <#if ITEM?has_content>
-    AND ITEMAGRO.ITEM IN ( :ITEM)
+    AND ITEMAGRO.ITEM IN ( :ITEM )
   </#if>
