@@ -1,4 +1,4 @@
-SELECT
+SELECT 
                 CASE WHEN PEDIDO.ACAO = 'B'
                         THEN 'BLOQUEADO'
                         ELSE 'N-BLOQUEADO'
@@ -49,7 +49,7 @@ SELECT
                 DADOS.REPRESENTANTE,
                 CLIENTELJ
             FROM (
-                SELECT DISTINCT
+                SELECT /*+ DYNAMIC_SAMPLING(PEDCAB 4) */ DISTINCT
                     HIST.IDAPRVPEDCABHIST,
                     FILIAL.ESTAB,
                     FILIAL.REDUZIDO AS FILIAL,
