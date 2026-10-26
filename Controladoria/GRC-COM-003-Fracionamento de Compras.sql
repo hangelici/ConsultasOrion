@@ -1,27 +1,24 @@
 /* =====================================================================
-   NOTAS DE ENTRADA REPETIDAS EM ATÉ 7 DIAS
-   Chave: CNPJ do fornecedor + CENTROCUS + ITEM
+   COMPRAS REPETIDAS EM ATÉ 7 DIAS (fracionamento de compras) - v2
+   Chave: CNPJ do fornecedor + ESTAB + CENTROCUS + ITEM
    ---------------------------------------------------------------------
-   Para cada nota (por item), conta quantas OUTRAS notas da mesma chave
-   foram emitidas:
-     - nos 7 dias seguintes (inclusive o 7º dia: 01/07 -> até 08/07), e
-     - nos 7 dias anteriores.
-   Emissões no MESMO dia também contam (nas duas contagens).
-   Retorna só as notas que fazem parte de uma repetição (alguma das duas
-   contagens maior que zero).
+   Retorna SOMENTE a nota que repete a compra: aquela para a qual existe uma
+   emissão anterior da mesma chave com no máximo 7 dias de diferença
+   (23/07 e 29/07 -> aparece só a nota de 29/07, com a data e a nota
+   anterior para referência). A primeira nota não aparece mais.
+   "Anterior" = a nota imediatamente anterior da chave, ordenada por data e
+   por SEQNOTA (emissões no mesmo dia: a de maior SEQNOTA é a repetida).
+   Como a nota imediatamente anterior é sempre a mais próxima, ela está
+   dentro de 7 dias se e somente se existe QUALQUER nota anterior dentro de
+   7 dias.
+   Intervalo inclusivo: 01/07 -> até 08/07. Para mudar, trocar o 7 no WHERE.
 
-   Ajustes em relação à consulta base (resultado das linhas de nota igual):
-   - NFCABAGRFIN + AGRFINDUPPAG viraram um único EXISTS: o INNER JOIN com
-     NFCABAGRFIN repetiria a linha da nota se houver mais de uma
-     NFCABAGRFIN por nota, e isso inflaria as contagens. O filtro
-     (fornecedor com título em AGRFINDUPPAG) é o mesmo.
-   - Uma linha por (nota, item), com VALORTOTAL somado: uma nota que traz o
-     mesmo item em duas linhas não conta como "duas emissões".
-   - DTEMISSAO truncada (sem hora): a regra é por dia.
-   - Excluídas notas sem CNPJ (sem CNPJ, fornecedores diferentes seriam
-     agrupados como se fossem o mesmo).
+   Ajustes em relação à consulta base (linhas de nota iguais):
+   - NFCABAGRFIN + AGRFINDUPPAG viraram um único EXISTS (o INNER JOIN com
+     NFCABAGRFIN repetiria a nota se houver mais de uma NFCABAGRFIN por nota).
+   - Uma linha por (nota, item), com VALORTOTAL somado.
+   - DTEMISSAO truncada (regra por dia); notas sem CNPJ excluídas.
    - Incluídos ESTAB e SEQNOTA para localizar a nota no sistema.
-   Para mudar o intervalo, trocar os dois "7" das janelas (RANGE).
    ===================================================================== */
 WITH NOTAS AS (
     SELECT
@@ -35,6 +32,7 @@ WITH NOTAS AS (
         NFCAB.CENTROCUS,
         NFCAB.CENCUSCOD,
         NFITEM.ITEM,
+        ITEMAGRO.DESCRICAO AS PRODUTO,
         SUM(NFITEM.VALORTOTAL)              AS VALORTOTAL
     FROM NFCAB
     INNER JOIN NFCFG
@@ -47,10 +45,12 @@ WITH NOTAS AS (
     INNER JOIN NFITEM
         ON NFITEM.ESTAB = NFCAB.ESTAB
        AND NFITEM.SEQNOTA = NFCAB.SEQNOTA
+      INNER JOIN ITEMAGRO ON ITEMAGRO.ITEM = NFITEM.ITEM
     WHERE NFCAB.STATUS <> 'C'
       AND NFCFG.ENTRADASAIDA = 'E'
       AND NFCAB.CENTROCUS IS NOT NULL
       AND NVL(ENDERECO.CNPJF, CONTAMOV.CNPJF) IS NOT NULL
+      AND NFCAB.DTEMISSAO > = '01/01/2025'
       AND EXISTS (SELECT 1
                     FROM NFCABAGRFIN
                    INNER JOIN AGRFINDUPPAG AGR
@@ -69,22 +69,16 @@ WITH NOTAS AS (
         TRUNC(NFCAB.DTEMISSAO),
         NFCAB.CENTROCUS,
         NFCAB.CENCUSCOD,
-        NFITEM.ITEM
+        NFITEM.ITEM,
+        ITEMAGRO.DESCRICAO
 ),
 JANELA AS (
     SELECT
         N.*,
-        /* outras emissões da mesma chave nos 7 dias anteriores (e no mesmo dia) */
-        COUNT(*) OVER (PARTITION BY N.CNPJF, N.CENTROCUS, N.ITEM
-                       ORDER BY N.DTEMISSAO
-                       RANGE BETWEEN 7 PRECEDING AND CURRENT ROW) - 1 AS QTD_ANTERIORES_7D,
-        /* outras emissões da mesma chave nos 7 dias seguintes (e no mesmo dia) */
-        COUNT(*) OVER (PARTITION BY N.CNPJF, N.CENTROCUS, N.ITEM
-                       ORDER BY N.DTEMISSAO
-                       RANGE BETWEEN CURRENT ROW AND 7 FOLLOWING) - 1 AS QTD_POSTERIORES_7D,
-        MAX(N.DTEMISSAO) OVER (PARTITION BY N.CNPJF, N.CENTROCUS, N.ITEM
-                       ORDER BY N.DTEMISSAO
-                       RANGE BETWEEN CURRENT ROW AND 7 FOLLOWING)     AS DT_ULTIMA_JANELA
+        LAG(N.DTEMISSAO) OVER (PARTITION BY N.CNPJF, N.ESTAB, N.CENTROCUS, N.ITEM
+                               ORDER BY N.DTEMISSAO, N.SEQNOTA) AS DT_ANTERIOR,
+        LAG(N.NOTA)      OVER (PARTITION BY N.CNPJF, N.ESTAB, N.CENTROCUS, N.ITEM
+                               ORDER BY N.DTEMISSAO, N.SEQNOTA) AS NOTA_ANTERIOR
     FROM NOTAS N
 )
 SELECT
@@ -93,18 +87,18 @@ SELECT
     J.CENTROCUS,
     J.CENCUSCOD,
     J.ITEM,
+    J.PRODUTO,
     J.ESTAB,
     J.SEQNOTA,
     J.NOTA,
     J.SERIE,
     J.DTEMISSAO,
     J.VALORTOTAL,
-    J.QTD_ANTERIORES_7D,
-    J.QTD_POSTERIORES_7D,
-    CASE WHEN J.QTD_POSTERIORES_7D > 0 THEN J.DT_ULTIMA_JANELA END AS DT_ULTIMA_EMISSAO_7D,
-    CASE WHEN J.QTD_ANTERIORES_7D = 0 THEN 'PRIMEIRA' ELSE 'REPETIDA' END AS SITUACAO
+    J.NOTA_ANTERIOR,
+    J.DT_ANTERIOR,
+    J.DTEMISSAO - J.DT_ANTERIOR AS DIAS_DESDE_ANTERIOR
 FROM JANELA J
-WHERE J.QTD_ANTERIORES_7D > 0
-   OR J.QTD_POSTERIORES_7D > 0
-ORDER BY J.CNPJF, J.CENTROCUS, J.ITEM, J.DTEMISSAO, J.NOTA
+WHERE J.DT_ANTERIOR IS NOT NULL
+  AND J.DTEMISSAO - J.DT_ANTERIOR <= 7
+ORDER BY J.CNPJF, J.ESTAB, J.CENTROCUS, J.ITEM, J.DTEMISSAO, J.NOTA
 ;
