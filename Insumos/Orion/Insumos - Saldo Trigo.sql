@@ -1,3 +1,4 @@
+-- SALDO MILHO NOVO
 WITH MAX_DATA AS (
     SELECT 
         ISALDO.ITEM,
@@ -289,8 +290,8 @@ TRANSFERENCIAS_SAIDA AS (
     --AND PEDCAB.ESTAB IN (:ESTAB)
     AND ((0 IN (:ESTAB)) OR U_TEMPRESA.ESTABC IN (:ESTAB))
     AND (PEDITEM.QUANTIDADE - COALESCE(PEDITEM.CANCELADO,0)) -  COALESCE(PEDNOTA.QTD,0) > 0
-)
-
+),
+base as (
 select
 ESTAB,
 ITEM ,
@@ -486,3 +487,10 @@ CULTIVAR,
 0 custogerencial_ori
 
 from custo_gerencial
+)
+select
+base.*,
+cidade.uf
+from base
+left join filial on filial.estab = base.estab
+left join cidade on cidade.cidade = filial.cidade
