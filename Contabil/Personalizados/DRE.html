@@ -298,6 +298,28 @@
           </div>
         </div>
       </details>
+      <details class="multi" id="f-uf">
+        <summary>UF: Todas</summary>
+        <div class="multi-painel">
+          <input type="search" class="multi-busca" id="busca-uf" placeholder="Localizar UF" aria-label="Localizar UF na lista">
+          <div class="multi-lista" id="lista-uf"></div>
+          <div class="multi-rodape">
+            <button type="button" class="lnk" id="uf-marcar">Marcar visíveis</button>
+            <button type="button" class="lnk" id="uf-limpar">Limpar seleção</button>
+          </div>
+        </div>
+      </details>
+      <details class="multi" id="f-filial">
+        <summary>Filial: Todas</summary>
+        <div class="multi-painel">
+          <input type="search" class="multi-busca" id="busca-filial" placeholder="Localizar filial" aria-label="Localizar filial na lista">
+          <div class="multi-lista" id="lista-filial"></div>
+          <div class="multi-rodape">
+            <button type="button" class="lnk" id="filial-marcar">Marcar visíveis</button>
+            <button type="button" class="lnk" id="filial-limpar">Limpar seleção</button>
+          </div>
+        </div>
+      </details>
       <details class="multi" id="f-conta">
         <summary>Conta: Todas</summary>
         <div class="multi-painel">
@@ -481,6 +503,7 @@
       }
 
       const descConta = txt(r.DESC_CONTA), desc1 = txt(r.DESC1), desc2 = txt(r.DESC2), conta = txt(r.CONTA);
+      const uf = txt(r.UF), filial = txt(r.FILIAL);
       const ordem = (r.ORDEM === undefined || r.ORDEM === null || r.ORDEM === '') ? null : num(r.ORDEM);
       if (ordem !== null) temOrdem = true;
       const nivel1 = (r.NIVEL1 === undefined || r.NIVEL1 === null || r.NIVEL1 === '') ? null : num(r.NIVEL1);
@@ -502,11 +525,11 @@
       }
 
       if (sub) return;   // subtotais são recalculados no painel
-      const chave = [descConta, desc1, desc2, conta, p].join(SEP);
+      const chave = [descConta, desc1, desc2, conta, p, uf, filial].join(SEP);
       const atual = detalhe.get(chave);
       if (atual) atual.mov += num(r.MOVIMENTACAO);
       else detalhe.set(chave, {
-        descConta, desc1, desc2, conta, p, seq, mov: num(r.MOVIMENTACAO),
+        descConta, desc1, desc2, conta, p, uf, filial, seq, mov: num(r.MOVIMENTACAO),
         _t: norm([descConta, desc1, desc2, conta].join(' '))
       });
     });
@@ -520,7 +543,8 @@
 
   // ---------------------------------------------------------------------
   let DADOS = { linhasDre: [], periodos: [], detalhe: [] };
-  const estado = { periodos: new Set(), contas: new Set(), busca: '', abertos: new Set(), mesAMes: !!CONFIG.mesAMesPadrao };   // conjuntos vazios = todos
+  const estado = { periodos: new Set(), contas: new Set(), busca: '', abertos: new Set(), mesAMes: !!CONFIG.mesAMesPadrao,
+                   ufs: new Set(), filiais: new Set() };   // conjuntos vazios = todos
 
   const $ = id => document.getElementById(id);
   const el = {
@@ -533,11 +557,13 @@
 
   const periodoAtivo = p => !estado.periodos.size || estado.periodos.has(p);
   const periodosVisiveis = () => DADOS.periodos.filter(x => periodoAtivo(x.p));
+  /** UF e filial valem para as duas abas (DRE e Custos). */
+  const localAtivo = r => (!estado.ufs.size || estado.ufs.has(r.uf)) && (!estado.filiais.size || estado.filiais.has(r.filial));
 
   function detalheFiltrado() {
     const b = norm(estado.busca).trim();
     return DADOS.detalhe.filter(r =>
-      periodoAtivo(r.p) &&
+      periodoAtivo(r.p) && localAtivo(r) &&
       (!estado.contas.size || estado.contas.has(r.conta)) &&
       (!b || r._t.includes(b)));
   }
@@ -600,7 +626,7 @@
   function totalBaseAV(pers) {
     const l = linhaBaseAV();
     if (!l) return null;
-    const no = montar(DADOS.detalhe.filter(r => periodoAtivo(r.p))).find(n => n.rotulo === l.nome);
+    const no = montar(DADOS.detalhe.filter(r => periodoAtivo(r.p) && localAtivo(r))).find(n => n.rotulo === l.nome);
     if (!no) return null;
     let t = 0, tem = false;
     for (const { p } of pers) { const v = no.vals.get(p); if (v !== undefined) { t += v; tem = true; } }
@@ -671,7 +697,7 @@
       el.tbody.innerHTML = '';
       el.vazio.hidden = false;
       el.vazio.textContent = DADOS.detalhe.length
-        ? 'Nenhuma conta corresponde aos filtros. Revise o período, a seleção de contas ou a busca.'
+        ? 'Nenhuma conta corresponde aos filtros. Revise período, UF, filial, contas ou a busca.'
         : 'A consulta não retornou movimentação.';
       return;
     }
@@ -799,8 +825,85 @@
     el.listaConta.querySelectorAll('input').forEach(c => { c.checked = false; });
     resumoContas(); render();
   });
+  // ---------- filtros: UF e filial (valem para DRE e Custos) ----------
+  const filtrosLocal = {};
+  let ufsPorFilial = new Map();
+
+  function configurarFiltroLocal(nome, opcoes) {
+    const f = { det: $(`f-${nome}`), lista: $(`lista-${nome}`), busca: $(`busca-${nome}`), sel: estado[opcoes.chave], opcoes };
+    f.resumo = () => {
+      const n = f.sel.size;
+      f.det.querySelector('summary').textContent = `${opcoes.titulo}: ` +
+        (!n ? 'Todas' : (n === 1 ? [...f.sel].at(0) : `${n} selecionadas`));
+      f.det.classList.toggle('ativo', n > 0);
+    };
+    // filial: além da busca, mostra só as filiais das UFs selecionadas
+    f.visibilidade = () => {
+      const b = norm(f.busca.value).trim();
+      f.lista.querySelectorAll('label').forEach(l => {
+        const okBusca = !b || l.dataset.t.includes(b);
+        const okUf = !opcoes.porUf || !estado.ufs.size || l.dataset.ufs.split(SEP).some(u => estado.ufs.has(u));
+        l.hidden = !(okBusca && okUf);
+      });
+    };
+    f.lista.addEventListener('change', e => {
+      if (e.target.type !== 'checkbox') return;
+      e.target.checked ? f.sel.add(e.target.value) : f.sel.delete(e.target.value);
+      aoMudarLocal(nome);
+    });
+    f.busca.addEventListener('input', f.visibilidade);
+    $(`${nome}-marcar`).addEventListener('click', () => {
+      f.lista.querySelectorAll('label:not([hidden]) input').forEach(c => { c.checked = true; f.sel.add(c.value); });
+      aoMudarLocal(nome);
+    });
+    $(`${nome}-limpar`).addEventListener('click', () => {
+      f.sel.clear();
+      f.lista.querySelectorAll('input').forEach(c => { c.checked = false; });
+      aoMudarLocal(nome);
+    });
+    filtrosLocal[nome] = f;
+  }
+
+  function aoMudarLocal(nome) {
+    if (nome === 'uf' && estado.ufs.size) {
+      // desmarca filiais que não pertencem às UFs selecionadas
+      for (const fi of [...estado.filiais]) {
+        const ufs = ufsPorFilial.get(fi);
+        if (!ufs || ![...ufs].some(u => estado.ufs.has(u))) estado.filiais.delete(fi);
+      }
+      filtrosLocal.filial.lista.querySelectorAll('input').forEach(c => { c.checked = estado.filiais.has(c.value); });
+    }
+    filtrosLocal.uf.resumo();
+    filtrosLocal.filial.resumo();
+    filtrosLocal.filial.visibilidade();
+    render();
+    renderCustos();
+  }
+
+  function montarLocais() {
+    const ufs = new Set();
+    ufsPorFilial = new Map();
+    for (const r of DADOS.detalhe) {
+      ufs.add(r.uf);
+      if (!ufsPorFilial.has(r.filial)) ufsPorFilial.set(r.filial, new Set());
+      ufsPorFilial.get(r.filial).add(r.uf);
+    }
+    filtrosLocal.uf.lista.innerHTML = [...ufs].sort(cmpTexto).map(u =>
+      `<label data-t="${esc(norm(u))}"><input type="checkbox" value="${esc(u)}"><span>${esc(u)}</span></label>`).join('');
+    filtrosLocal.filial.lista.innerHTML = [...ufsPorFilial.entries()].sort((a, b) => cmpTexto(a[0], b[0])).map(([fi, us]) => {
+      const lu = [...us].sort(cmpTexto);
+      return `<label data-t="${esc(norm(fi + ' ' + lu.join(' ')))}" data-ufs="${esc(lu.join(SEP))}">` +
+        `<input type="checkbox" value="${esc(fi)}"><span>${esc(fi)}<br><small>${esc(lu.join(', '))}</small></span></label>`;
+    }).join('');
+    filtrosLocal.uf.resumo();
+    filtrosLocal.filial.resumo();
+  }
+
+  configurarFiltroLocal('uf', { chave: 'ufs', titulo: 'UF' });
+  configurarFiltroLocal('filial', { chave: 'filiais', titulo: 'Filial', porUf: true });
+
   // fecha os seletores ao clicar fora ou com Esc; abre um de cada vez
-  const seletores = [el.fPeriodo, el.fConta];
+  const seletores = [el.fPeriodo, filtrosLocal.uf.det, filtrosLocal.filial.det, el.fConta];
   document.addEventListener('click', e => {
     seletores.forEach(d => { if (d.open && !d.contains(e.target)) d.open = false; });
   });
@@ -1050,7 +1153,7 @@
     if (!DADOS.detalhe.length || !pers.length) { alvo.innerHTML = '<p class="vazio-bloco">Sem dados para exibir.</p>'; return; }
 
     const receita = totalBaseAV(pers);
-    const det = DADOS.detalhe.filter(r => periodoAtivo(r.p));
+    const det = DADOS.detalhe.filter(r => periodoAtivo(r.p) && localAtivo(r));
     const nMeses = pers.length;
     const [cv, cf] = CLASSES.map(c => calcularClasse(c, det, receita, nMeses));
     ultimoCustos = { cv, cf, receita, nMeses, pers };
@@ -1191,6 +1294,7 @@
       DADOS = prepararBase(registros);
       montarPeriodos();
       montarContas();
+      montarLocais();
       $('carimbo').textContent = 'Consultado em ' + new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
       render();
     })
