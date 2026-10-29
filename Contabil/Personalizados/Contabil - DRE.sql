@@ -1,23 +1,18 @@
 WITH
-/* filtro por mês: as datas informadas vão para o dia 1; nulo = sem limite */
-
+/* filtro por mês: as datas informadas vão para o dia 1 */
 FILTRO AS (
-    
 SELECT
     TRUNC(CAST(:DTINI AS DATE), 'MM') AS DT_INI,
     TRUNC(CAST(:DTFIM AS DATE), 'MM') AS DT_FIM
 FROM DUAL
-
 ),
-/* REDUZIDAs que têm algum plano em U_PCC com NIVEL1 = 3 (só pela REDUZIDA,
-   chave de partição das janelas LAG: filtro seguro antes das janelas) */
+/* REDUZIDAs que têm algum plano em U_PCC com NIVEL1 = 3 */
 RED3 AS (
     SELECT DISTINCT P.REDUZIDA
       FROM U_PCC P
      WHERE P.NIVEL1 = 3
 ),
-/* meses do calendário (de 01/2020 até hoje) dentro do período do filtro
-   (v6: limite inferior E superior; só alimentam FALTANTES, linhas nulas) */
+/* meses do calendário (de 01/2020 até hoje) dentro do período do filtro */
 MESES AS (
     SELECT DISTINCT
            EXTRACT(MONTH FROM D.DDATA) AS MES,
@@ -35,14 +30,19 @@ CONTAS AS (
            U.OSPLANO,
            U.REDUZIDA,
            U.COD_CC,
-           CE.CENTROPAI
+           CE.CENTROPAI,
+           CIDADE.UF,
+           FILIAL.REDUZIDO AS FILIAL
       FROM VIASOFT.U_LANCF U
       INNER JOIN CENCUSCE CE ON
         CE.CENTROCUS = U.COD_CC
         AND CE.CENCUSCOD = 2
+      INNER JOIN VIASOFT.FILIAL FILIAL ON FILIAL.ESTAB = TO_NUMBER(CE.CENTROPAI)
+      INNER JOIN CIDADE ON CIDADE.CIDADE = FILIAL.CIDADE
      WHERE U.OSESTAB = 1
        AND U.REDUZIDA IN (SELECT REDUZIDA FROM RED3)
-       AND TO_NUMBER(CE.CENTROPAI) = :ESTAB
+       AND FILIAL.ESTAB IN (:ESTAB)
+       AND ('X' IN (:UF) OR CIDADE.UF IN (:UF))
 ),
 /* meses SEM lançamento para cada combinação (mesma ordem de colunas da U_LANCF) */
 FALTANTES AS (
@@ -57,7 +57,9 @@ FALTANTES AS (
            NULL AS CREDITOS,
            NULL AS RDEBITOS,
            NULL AS RCREDITOS,
-           C.CENTROPAI
+           C.CENTROPAI,
+           C.UF,
+           C.FILIAL
       FROM CONTAS C
      CROSS JOIN MESES M
      WHERE NOT EXISTS (SELECT 1
@@ -78,7 +80,6 @@ DRE AS (
     REDUZIDA
     FROM U_DRE
 ),
-/* consulta v6 completa, sem alteração */
 BASE AS (
 SELECT
 RESULTADO.*,
@@ -113,21 +114,28 @@ COALESCE(DEBITOS,0)DEBITOS,
 COALESCE(RCREDITOS,0)RCREDITOS,
 COALESCE(RDEBITOS,0)RDEBITOS,
 CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DT_AT,
-CENTROPAI
+CENTROPAI,                                   -- vírgula que faltava
+UF,
+FILIAL
 
 FROM(
 
 SELECT
 U_LANCF.*,
-CE.CENTROPAI
+CE.CENTROPAI,
+CIDADE.UF,
+FILIAL.REDUZIDO AS FILIAL
 FROM VIASOFT.U_LANCF U_LANCF 
 INNER JOIN CENCUSCE CE ON
     CE.CENTROCUS = U_LANCF.COD_CC
     AND CE.CENCUSCOD = 2
+INNER JOIN VIASOFT.FILIAL ON FILIAL.ESTAB = TO_NUMBER(CE.CENTROPAI)
+INNER JOIN CIDADE ON CIDADE.CIDADE = FILIAL.CIDADE
 WHERE U_LANCF.OSESTAB = 1
 AND TO_DATE('01/'||U_LANCF.MES||'/'||U_LANCF.ANO, 'DD/MM/YYYY') <= (SELECT DT_FIM FROM FILTRO)
 AND U_LANCF.REDUZIDA IN (SELECT REDUZIDA FROM RED3)
-AND TO_NUMBER(CE.CENTROPAI) = :ESTAB
+AND FILIAL.ESTAB IN (:ESTAB)
+AND ('X' IN (:UF) OR CIDADE.UF IN (:UF))
 
 UNION ALL
 
@@ -140,7 +148,7 @@ FROM FALTANTES
 
 UNION ALL
 
-/* ---------- v2: movimentos de SALCONCE (plano 1#1) ---------- */
+/* ---------- movimentos de SALCONCE (plano 1#1) ---------- */
 SELECT
  1 AS OSESTAB,
     '1#1' AS OSPLANO,
@@ -154,16 +162,21 @@ SELECT
     (RCREDITOS) AS RCREDITOS,
     (RDEBITOS) AS RDEBITOS,
     CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DT_AT,
-    CENCUSCE.CENTROPAI
+    CENCUSCE.CENTROPAI,
+    CIDADE.UF,
+    FILIAL.REDUZIDO AS FILIAL
 FROM SALCONCE 
 
 INNER JOIN CENCUSCE ON
     SALCONCE.CENTROCUS = CENCUSCE.CENTROCUS
+INNER JOIN VIASOFT.FILIAL ON FILIAL.ESTAB = TO_NUMBER(CENCUSCE.CENTROPAI)     -- era CE (apelido inexistente aqui)
+INNER JOIN CIDADE ON CIDADE.CIDADE = FILIAL.CIDADE
 
 WHERE LENGTH(SALCONCE.CENTROCUS) = 9
 AND  CENCUSCE.CENCUSCOD = 2
 AND SALCONCE.ESTAB = 1
-AND TO_NUMBER(CENCUSCE.CENTROPAI) = :ESTAB
+AND FILIAL.ESTAB IN (:ESTAB)                          -- era CE
+AND ('X' IN (:UF) OR CIDADE.UF IN (:UF))
 AND TO_DATE('01/'||SALCONCE.MES||'/'||SALCONCE.ANO, 'DD/MM/YYYY')
     BETWEEN (SELECT DT_INI FROM FILTRO) AND (SELECT DT_FIM FROM FILTRO)
 AND EXISTS (SELECT 1 FROM U_PCC P
@@ -173,7 +186,7 @@ AND EXISTS (SELECT 1 FROM U_PCC P
 
 UNION ALL
 
-/* ---------- v2: saldos iniciais de U_SALDOC (plano 1#1) ---------- */
+/* ---------- saldos iniciais de U_SALDOC (plano 1#1) ---------- */
 SELECT
  1 AS OSESTAB,
     '1#1' AS OSPLANO,
@@ -187,15 +200,20 @@ SELECT
     0 AS RCREDITOS,
     0 AS RDEBITOS,
     CAST(CURRENT_TIMESTAMP AS TIMESTAMP) AS DT_AT,
-    CENCUSCE.CENTROPAI
+    CENCUSCE.CENTROPAI,
+    CIDADE.UF,
+    FILIAL.REDUZIDO AS FILIAL
 FROM U_SALDOC
 
 INNER JOIN CENCUSCE ON
     U_SALDOC.CENTROCUS = CENCUSCE.CENTROCUS
+INNER JOIN VIASOFT.FILIAL ON FILIAL.ESTAB = TO_NUMBER(CENCUSCE.CENTROPAI)     -- era CE
+INNER JOIN CIDADE ON CIDADE.CIDADE = FILIAL.CIDADE
 
 WHERE LENGTH(U_SALDOC.CENTROCUS) = 9
 AND  CENCUSCE.CENCUSCOD = 2
-AND TO_NUMBER(CENCUSCE.CENTROPAI) = :ESTAB
+AND FILIAL.ESTAB IN (:ESTAB)                          -- era CE
+AND ('X' IN (:UF) OR CIDADE.UF IN (:UF))
 AND TO_DATE('01/'||U_SALDOC.MES||'/'||U_SALDOC.ANO, 'DD/MM/YYYY')
     BETWEEN (SELECT DT_INI FROM FILTRO) AND (SELECT DT_FIM FROM FILTRO)
 AND EXISTS (SELECT 1 FROM U_PCC P
@@ -216,7 +234,7 @@ WHERE PCC.NIVEL1 = 3
   AND TO_DATE('01/'||RESULTADO.MES||'/'||RESULTADO.ANO, 'DD/MM/YYYY')
       BETWEEN (SELECT DT_INI FROM FILTRO) AND (SELECT DT_FIM FROM FILTRO)
 ),
-/* detalhe: MOVIMENTACAO por linha do DRE, conta, ano e mês */
+/* detalhe: MOVIMENTACAO por linha do DRE, conta, ano, mês e filial */
 MOV AS (
     SELECT /*+ MATERIALIZE */
            D.ORDEM,
@@ -228,35 +246,51 @@ MOV AS (
            B.CONTA,
            B.ANO,
            B.MES,
-           SUM(COALESCE(B.CREDITOS, 0) - COALESCE(B.DEBITOS, 0)) AS MOVIMENTACAO
+           SUM(COALESCE(B.CREDITOS, 0) - COALESCE(B.DEBITOS, 0)) AS MOVIMENTACAO,
+           B.CENTROPAI,
+           B.UF,
+           B.FILIAL
       FROM BASE B
      INNER JOIN U_DRECONSOLIDADO D
         ON D.NIVEL1   = B.NIVEL1
        AND D.SUBTOTAL = '0'
-     GROUP BY D.ORDEM, D.DESC_CONTA, B.DESC1, B.DESC2, B.CONTA, B.ANO, B.MES, B.NIVEL1, B.NIVEL2
+     GROUP BY D.ORDEM, D.DESC_CONTA, B.DESC1, B.DESC2, B.CONTA, B.ANO, B.MES, B.NIVEL1, B.NIVEL2,
+              B.CENTROPAI, B.UF, B.FILIAL
 ),
+/* total de cada linha de detalhe do DRE por ano, mês e filial */
 NIVEIS AS (
-    SELECT ORDEM, ANO, MES, SUM(MOVIMENTACAO) AS MOVIMENTACAO
+    SELECT ORDEM, ANO, MES, CENTROPAI, UF, FILIAL,
+           SUM(MOVIMENTACAO) AS MOVIMENTACAO
       FROM MOV
-     GROUP BY ORDEM, ANO, MES
+     GROUP BY ORDEM, ANO, MES, CENTROPAI, UF, FILIAL
 ),
+/* combinações de ano, mês e filial que têm movimento */
 PERIODOS AS (
-    SELECT DISTINCT ANO, MES FROM MOV
+    SELECT DISTINCT ANO, MES, CENTROPAI, UF, FILIAL
+      FROM MOV
 ),
-/* subtotais: soma acumulada dos níveis de ORDEM anterior, por ano e mês */
+/* subtotais: soma das linhas de ORDEM anterior, por ano, mês e filial
+   (DECODE compara tratando nulo = nulo) */
 SUBTOTAIS AS (
     SELECT S.ORDEM,
            S.DESC_CONTA,
            P.ANO,
            P.MES,
-           NVL((SELECT SUM(N.MOVIMENTACAO)
-                  FROM NIVEIS N
-                 WHERE N.ANO = P.ANO
-                   AND N.MES = P.MES
-                   AND N.ORDEM < S.ORDEM), 0) AS MOVIMENTACAO
+           P.CENTROPAI,
+           P.UF,
+           P.FILIAL,
+           NVL(SUM(N.MOVIMENTACAO), 0) AS MOVIMENTACAO
       FROM U_DRECONSOLIDADO S
      CROSS JOIN PERIODOS P
+      LEFT JOIN NIVEIS N
+        ON N.ANO = P.ANO
+       AND N.MES = P.MES
+       AND DECODE(N.CENTROPAI, P.CENTROPAI, 1, 0) = 1
+       AND DECODE(N.UF,        P.UF,        1, 0) = 1
+       AND DECODE(N.FILIAL,    P.FILIAL,    1, 0) = 1
+       AND N.ORDEM < S.ORDEM
      WHERE S.SUBTOTAL = '1'
+     GROUP BY S.ORDEM, S.DESC_CONTA, P.ANO, P.MES, P.CENTROPAI, P.UF, P.FILIAL
 )
 SELECT
        T.DESC_CONTA,
@@ -267,24 +301,29 @@ SELECT
        T.MES,
        T.MOVIMENTACAO,
        CASE
-        WHEN MES = 1 THEN 'jan'
-        WHEN MES = 2 THEN 'fev'
-        WHEN MES = 3 THEN 'mar'
-        WHEN MES = 4 THEN 'abr'
-        WHEN MES = 5 THEN 'mai'
-        WHEN MES = 6 THEN 'jun'
-        WHEN MES = 7 THEN 'jul'
-        WHEN MES = 8 THEN 'ago'
-        WHEN MES = 9 THEN 'set'
-        WHEN MES = 10 THEN 'out'
-        WHEN MES = 11 THEN 'nov'
-        WHEN MES = 12 THEN 'dez'
-    END ||'/'||ANO AS MES_ANO
+        WHEN T.MES = 1 THEN 'jan'
+        WHEN T.MES = 2 THEN 'fev'
+        WHEN T.MES = 3 THEN 'mar'
+        WHEN T.MES = 4 THEN 'abr'
+        WHEN T.MES = 5 THEN 'mai'
+        WHEN T.MES = 6 THEN 'jun'
+        WHEN T.MES = 7 THEN 'jul'
+        WHEN T.MES = 8 THEN 'ago'
+        WHEN T.MES = 9 THEN 'set'
+        WHEN T.MES = 10 THEN 'out'
+        WHEN T.MES = 11 THEN 'nov'
+        WHEN T.MES = 12 THEN 'dez'
+       END ||'/'||T.ANO AS MES_ANO,
+       T.CENTROPAI,
+       T.UF,
+       T.FILIAL
   FROM (
-        SELECT ORDEM, DESC_CONTA, NIVEL1, DESC1, NIVEL2, DESC2, CONTA, ANO, MES, MOVIMENTACAO
+        SELECT ORDEM, DESC_CONTA, NIVEL1, DESC1, NIVEL2, DESC2, CONTA, ANO, MES, MOVIMENTACAO,
+               CENTROPAI, UF, FILIAL
           FROM MOV
         UNION ALL
-        SELECT ORDEM, DESC_CONTA, ORDEM, DESC_CONTA, ORDEM, DESC_CONTA, DESC_CONTA, ANO, MES, MOVIMENTACAO
+        SELECT ORDEM, DESC_CONTA, ORDEM, DESC_CONTA, ORDEM, DESC_CONTA, DESC_CONTA, ANO, MES, MOVIMENTACAO,
+               CENTROPAI, UF, FILIAL
           FROM SUBTOTAIS
        ) T
- ORDER BY T.ANO, T.MES, T.ORDEM, T.NIVEL1, T.NIVEL2, T.CONTA
+ ORDER BY T.ANO, T.MES, T.CENTROPAI, T.ORDEM, T.NIVEL1, T.NIVEL2, T.CONTA
