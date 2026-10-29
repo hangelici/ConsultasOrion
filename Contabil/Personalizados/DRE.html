@@ -131,6 +131,13 @@
     tbody td.col-av { z-index: 1; background: var(--ouro-suave); }
     tbody tr.sub td.col-av { background: var(--marca); color: var(--ouro); border-left-color: color-mix(in srgb, white 25%, transparent); }
     tbody tr.sub td.col-av.neg { color: var(--laranja); }
+    .flag {
+      display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; cursor: pointer;
+      border: 1px solid var(--linha); border-radius: 6px; background: var(--superficie); white-space: nowrap;
+    }
+    .flag:hover { border-color: var(--marca); }
+    .flag input { accent-color: var(--marca); margin: 0; }
+    .flag:has(input:checked) { background: var(--ouro-claro); border-color: var(--marca); }
     .pivo-cab .nota-av { margin: 2px 0 0; font-size: 13px; color: var(--tinta-2); }
     thead th.col-total { z-index: 3; background: var(--ouro-claro); }
     tbody td.col-total { z-index: 1; font-weight: 650; background: var(--ouro-suave); }
@@ -322,6 +329,7 @@
       </div>
       <div class="acoes">
         <input type="search" id="busca" placeholder="Filtrar linha do DRE, grupo, subgrupo ou conta" aria-label="Filtrar linhas">
+        <label class="flag"><input type="checkbox" id="flag-mes">Mostrar mês a mês</label>
         <button class="btn" type="button" id="btn-expandir">Expandir tudo</button>
         <button class="btn" type="button" id="btn-recolher">Recolher tudo</button>
         <button class="btn" type="button" id="btn-csv">Exportar CSV</button>
@@ -360,6 +368,7 @@
     // Base da análise vertical (AV %). Vazio = linha com ORDEM = 1 (ou, sem a coluna
     // ORDEM no resultado, a 1ª linha do DRE). Para fixar pelo nome, informe a DESC_CONTA.
     linhaBaseAV: '',
+    mesAMesPadrao: false,    // aba DRE: true = abre já exibindo as colunas de cada mês
     // Aba Custos: linhas do DRE de cada classe. Com ORDEM/NIVEL1 no resultado, usa os
     // dois; sem eles, usa a posição (ORDEM) no DRE. descConta fixa pelo nome, se preferir.
     custosVariaveis: { ordem: 2, nivel1: 2, descConta: '' },
@@ -511,7 +520,7 @@
 
   // ---------------------------------------------------------------------
   let DADOS = { linhasDre: [], periodos: [], detalhe: [] };
-  const estado = { periodos: new Set(), contas: new Set(), busca: '', abertos: new Set() };   // conjuntos vazios = todos
+  const estado = { periodos: new Set(), contas: new Set(), busca: '', abertos: new Set(), mesAMes: !!CONFIG.mesAMesPadrao };   // conjuntos vazios = todos
 
   const $ = id => document.getElementById(id);
   const el = {
@@ -617,12 +626,13 @@
       if (v !== undefined) { total += v; tem = true; }
       return celula(v);
     }).join('');
+    const colunasMes = estado.mesAMes ? tds : '';
     let av = '<td class="vazio-cel col-av">–</td>';
     if (tem && baseAV !== null) {
       const pct = limpa(total / baseAV * 100);
       av = `<td class="col-av${pct < 0 ? ' neg' : ''}">${fmtPct.format(pct)}%</td>`;
     }
-    return tds + celula(tem ? total : undefined, 'col-total') + av;
+    return colunasMes + celula(tem ? total : undefined, 'col-total') + av;
   }
 
   function linhaHtml(no, pers, out) {
@@ -651,7 +661,7 @@
           : `AV % = total do período da conta ÷ total de ${lb.nome} no período.`);
 
     el.thead.innerHTML = '<tr><th scope="col">DRE › Grupo › Subgrupo › Conta</th>' +
-      pers.map(x => `<th scope="col">${esc(x.rotulo)}</th>`).join('') +
+      (estado.mesAMes ? pers.map(x => `<th scope="col">${esc(x.rotulo)}</th>`).join('') : '') +
       '<th scope="col" class="col-total">Total do período</th>' +
       `<th scope="col" class="col-av" title="Análise vertical sobre ${esc(lb ? lb.nome : '')}">AV %</th></tr>`;
 
@@ -816,6 +826,10 @@
     tBusca = setTimeout(() => { estado.busca = el.busca.value; render(); }, 200);   // mantém expandido/recolhido
   });
 
+  const flagMes = $('flag-mes');
+  flagMes.checked = estado.mesAMes;
+  flagMes.addEventListener('change', () => { estado.mesAMes = flagMes.checked; render(); });
+
   $('btn-expandir').addEventListener('click', () => { abrirTudo(arvoreAtual); render(); });
   $('btn-recolher').addEventListener('click', () => { estado.abertos.clear(); render(); });
 
@@ -823,7 +837,8 @@
   $('btn-csv').addEventListener('click', () => {
     const pers = periodosVisiveis();
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const cabecalho = ['NIVEL', ...NIVEIS.map(n => n.csv), ...pers.map(x => x.rotulo), 'TOTAL_PERIODO', 'AV_PERC'];
+    const mesAMes = estado.mesAMes;   // exporta o que está na tela
+    const cabecalho = ['NIVEL', ...NIVEIS.map(n => n.csv), ...(mesAMes ? pers.map(x => x.rotulo) : []), 'TOTAL_PERIODO', 'AV_PERC'];
     const linhas = [];
     linhas.push(cabecalho.join(';'));
     const visitar = (no, trilha) => {
@@ -832,7 +847,7 @@
       const vals = pers.map(({ p }) => { const v = no.vals.get(p) || 0; total += v; return fmtCsv.format(limpa(v)); });
       const cols = NIVEIS.map((_, i) => q(t[i] ?? ''));
       const av = baseAV === null ? '' : fmtCsv.format(limpa(total / baseAV * 100));
-      linhas.push([q(no.sub ? 'SUBTOTAL' : NIVEIS[no.nivel].csv), ...cols, ...vals, fmtCsv.format(limpa(total)), av].join(';'));
+      linhas.push([q(no.sub ? 'SUBTOTAL' : NIVEIS[no.nivel].csv), ...cols, ...(mesAMes ? vals : []), fmtCsv.format(limpa(total)), av].join(';'));
       if (!no.sub) for (const f of filhosOrdenados(no)) visitar(f, t);
     };
     arvoreAtual.forEach(no => visitar(no, []));
