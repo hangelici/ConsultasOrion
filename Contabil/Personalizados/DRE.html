@@ -124,8 +124,13 @@
     td.neg { color: var(--neg); }
 
     /* colunas fixas à direita: total do período + análise vertical */
-    :root { --larg-av: 96px; }
-    .col-total { position: sticky; right: var(--larg-av); border-left: 3px solid var(--ouro); }
+    :root { --larg-av: 96px; --larg-var: 112px; }
+    .col-total { position: sticky; right: calc(var(--larg-av) + var(--larg-var)); border-left: 3px solid var(--ouro); }
+    .col-var { position: sticky; right: var(--larg-av); width: var(--larg-var); min-width: var(--larg-var); border-left: 1px solid var(--linha); }
+    thead th.col-var { z-index: 3; background: var(--ouro-claro); }
+    tbody td.col-var { z-index: 1; background: var(--ouro-suave); }
+    tbody tr.sub td.col-var { background: var(--marca); color: var(--ouro); border-left-color: color-mix(in srgb, white 25%, transparent); }
+    tbody tr.sub td.col-var.neg { color: var(--laranja); }
     .col-av { position: sticky; right: 0; width: var(--larg-av); min-width: var(--larg-av); border-left: 1px solid var(--linha); }
     thead th.col-av { z-index: 3; background: var(--ouro-claro); }
     tbody td.col-av { z-index: 1; background: var(--ouro-suave); }
@@ -488,7 +493,8 @@
     const periodos = new Map();        // AAAAMM -> rótulo
     const seqPorPeriodo = new Map();   // AAAAMM -> [DESC_CONTA na ordem de aparição]
     const vistosPorPeriodo = new Map();
-    const detalhe = new Map();
+    const detalhe = new Map();        // FILTRO = 1: período informado
+    const detalheAnt = new Map();     // FILTRO = 0: mesmos meses, 12 meses antes
     let temOrdem = false;
 
     registros.forEach((bruto, seq) => {
@@ -498,7 +504,9 @@
       const ano = parseInt(r.ANO, 10), mes = parseInt(r.MES, 10);
       if (!ano || !mes) return;
       const p = ano * 100 + mes;
-      if (!periodos.has(p)) {
+      // sem a coluna FILTRO (consulta antiga), tudo conta como período informado
+      const atualPer = (r.FILTRO === undefined || r.FILTRO === null || r.FILTRO === '') ? true : num(r.FILTRO) === 1;
+      if (atualPer && !periodos.has(p)) {
         periodos.set(p, r.MES_ANO ? String(r.MES_ANO).replace('.', '').toUpperCase() : `${MESES_PT[mes - 1]}/${ano}`);
       }
 
@@ -526,9 +534,10 @@
 
       if (sub) return;   // subtotais são recalculados no painel
       const chave = [descConta, desc1, desc2, conta, p, uf, filial].join(SEP);
-      const atual = detalhe.get(chave);
+      const destino = atualPer ? detalhe : detalheAnt;
+      const atual = destino.get(chave);
       if (atual) atual.mov += num(r.MOVIMENTACAO);
-      else detalhe.set(chave, {
+      else destino.set(chave, {
         descConta, desc1, desc2, conta, p, uf, filial, seq, mov: num(r.MOVIMENTACAO),
         _t: norm([descConta, desc1, desc2, conta].join(' '))
       });
@@ -537,12 +546,13 @@
     return {
       linhasDre: ordenarLinhasDre(linhas, seqPorPeriodo, temOrdem),
       periodos: [...periodos.entries()].sort((a, b) => a[0] - b[0]).map(([p, rotulo]) => ({ p, rotulo })),
-      detalhe: [...detalhe.values()]
+      detalhe: [...detalhe.values()],
+      detalheAnt: [...detalheAnt.values()]
     };
   }
 
   // ---------------------------------------------------------------------
-  let DADOS = { linhasDre: [], periodos: [], detalhe: [] };
+  let DADOS = { linhasDre: [], periodos: [], detalhe: [], detalheAnt: [] };
   const estado = { periodos: new Set(), contas: new Set(), busca: '', abertos: new Set(), mesAMes: !!CONFIG.mesAMesPadrao,
                    ufs: new Set(), filiais: new Set() };   // conjuntos vazios = todos
 
@@ -658,7 +668,40 @@
       const pct = limpa(total / baseAV * 100);
       av = `<td class="col-av${pct < 0 ? ' neg' : ''}">${fmtPct.format(pct)}%</td>`;
     }
-    return colunasMes + celula(tem ? total : undefined, 'col-total') + av;
+    const x = variacaoAnual(no, total, tem);
+    const vr = x === null
+      ? '<td class="vazio-cel col-var">–</td>'
+      : `<td class="col-var${x < 0 ? ' neg' : ''}">${x > 0 ? '+' : ''}${fmtPct.format(x)}%</td>`;
+    return colunasMes + celula(tem ? total : undefined, 'col-total') + vr + av;
+  }
+
+  // ---------- comparação com o ano anterior (FILTRO = 0) ----------
+  let totaisAnt = new Map();   // caminho do nó -> total do período anterior
+
+  /** Mesmos filtros da tabela, nos mesmos meses do ano anterior aos selecionados. */
+  function detalheAnteriorFiltrado(pers) {
+    const alvo = new Set(pers.map(x => x.p - 100));
+    const b = norm(estado.busca).trim();
+    return DADOS.detalheAnt.filter(r =>
+      alvo.has(r.p) && localAtivo(r) &&
+      (!estado.contas.size || estado.contas.has(r.conta)) &&
+      (!b || r._t.includes(b)));
+  }
+
+  function indexarTotais(nos, alvo) {
+    for (const no of nos) {
+      let t = 0, tem = false;
+      for (const v of no.vals.values()) { t += v; tem = true; }
+      if (tem) alvo.set(no.caminho, t);
+      if (no.filhos && no.filhos.size) indexarTotais(no.filhos.values(), alvo);
+    }
+  }
+
+  /** Var. % = (atual − anterior) ÷ |anterior|. Sinal positivo = melhora no resultado. */
+  function variacaoAnual(no, total, tem) {
+    const ant = totaisAnt.get(no.caminho);
+    if (!tem || ant === undefined || Math.abs(ant) < 0.005) return null;
+    return limpa((total - ant) / Math.abs(ant) * 100);
   }
 
   function linhaHtml(no, pers, out) {
@@ -678,17 +721,20 @@
     const pers = periodosVisiveis();
     const det = detalheFiltrado();
     arvoreAtual = montar(det);
+    totaisAnt = new Map();
+    indexarTotais(montar(detalheAnteriorFiltrado(pers)), totaisAnt);
     baseAV = totalBaseAV(pers);
     const lb = linhaBaseAV();
     $('nota-av').textContent = !lb
       ? ''
       : (baseAV === null
           ? `AV % indisponível: ${lb.nome} sem valor no período selecionado.`
-          : `AV % = total do período da conta ÷ total de ${lb.nome} no período.`);
+          : `AV % = total do período da conta ÷ total de ${lb.nome} no período. Var. % = total do período comparado aos mesmos meses do ano anterior.`);
 
     el.thead.innerHTML = '<tr><th scope="col">DRE › Grupo › Subgrupo › Conta</th>' +
       (estado.mesAMes ? pers.map(x => `<th scope="col">${esc(x.rotulo)}</th>`).join('') : '') +
       '<th scope="col" class="col-total">Total do período</th>' +
+      '<th scope="col" class="col-var" title="Variação do total do período sobre os mesmos meses do ano anterior. Positivo = melhora no resultado.">Var. % ano ant.</th>' +
       `<th scope="col" class="col-av" title="Análise vertical sobre ${esc(lb ? lb.nome : '')}">AV %</th></tr>`;
 
     el.nota.hidden = !(estado.contas.size || estado.busca.trim());
@@ -941,7 +987,7 @@
     const pers = periodosVisiveis();
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const mesAMes = estado.mesAMes;   // exporta o que está na tela
-    const cabecalho = ['NIVEL', ...NIVEIS.map(n => n.csv), ...(mesAMes ? pers.map(x => x.rotulo) : []), 'TOTAL_PERIODO', 'AV_PERC'];
+    const cabecalho = ['NIVEL', ...NIVEIS.map(n => n.csv), ...(mesAMes ? pers.map(x => x.rotulo) : []), 'TOTAL_PERIODO', 'VAR_PERC_ANO_ANT', 'AV_PERC'];
     const linhas = [];
     linhas.push(cabecalho.join(';'));
     const visitar = (no, trilha) => {
@@ -950,7 +996,9 @@
       const vals = pers.map(({ p }) => { const v = no.vals.get(p) || 0; total += v; return fmtCsv.format(limpa(v)); });
       const cols = NIVEIS.map((_, i) => q(t[i] ?? ''));
       const av = baseAV === null ? '' : fmtCsv.format(limpa(total / baseAV * 100));
-      linhas.push([q(no.sub ? 'SUBTOTAL' : NIVEIS[no.nivel].csv), ...cols, ...(mesAMes ? vals : []), fmtCsv.format(limpa(total)), av].join(';'));
+      const vx = variacaoAnual(no, total, true);
+      linhas.push([q(no.sub ? 'SUBTOTAL' : NIVEIS[no.nivel].csv), ...cols, ...(mesAMes ? vals : []), fmtCsv.format(limpa(total)),
+        vx === null ? '' : fmtCsv.format(vx), av].join(';'));
       if (!no.sub) for (const f of filhosOrdenados(no)) visitar(f, t);
     };
     arvoreAtual.forEach(no => visitar(no, []));
