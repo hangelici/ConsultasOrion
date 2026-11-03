@@ -38,118 +38,117 @@ WITH
     AND U_TEMPRESA.TRADING <> 'S'
     AND T.ATIVO = 'S'
     AND T.SEGMENTO = 2
-        ),
-        COMPRADO AS
-        (
-            SELECT
-                SUM(QTDSC) - SUM(QTDCANC) AS QTDSC,
-                SUM(QTDMES_ACUMULADO) AS QTDMES_ACUMULADO
-            FROM
-            (
-                -- COMPRA NORMAL
-                SELECT
-                    COALESCE(ROUND((CONTRATOITE.QUANTIDADE / 60), 2), 0) AS QTDSC,
-                    0 AS QTDCANC, 
-                    CASE 
-                        WHEN CAST(CONTRATO.DTEMISSAO AS DATE) BETWEEN TRUNC(SYSDATE, 'MM') AND TRUNC(LAST_DAY(SYSDATE)) 
-                        THEN COALESCE(ROUND((CONTRATOITE.QUANTIDADE / 60), 2), 0) 
-                        ELSE 0 
-                    END AS QTDMES_ACUMULADO
-                FROM 
-                    CONTRATO
-                INNER JOIN
-                    (SELECT DISTINCT
-                        ESTAB,
-                        CONTRATO,
-                        NUMEROCM
-                    FROM 
-                        OS_CONTRATOCOM
-                    WHERE 
-                        META > 0
-                    ) CONTRATOCOM ON CONTRATOCOM.CONTRATO = CONTRATO.CONTRATO AND CONTRATOCOM.ESTAB = CONTRATO.ESTAB
-                INNER JOIN 
-                    CONTRATOITE ON CONTRATOITE.ESTAB = CONTRATO.ESTAB AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
-                WHERE 
-                    CAST(CONTRATO.DTEMISSAO AS DATE) BETWEEN CAST(TO_DATE(:startDate) AS DATE) AND CAST(TO_DATE(:endDate) AS DATE)
-                    AND CONTRATO.CONTCONF IN (1, 2, 0)
-                    AND CONTRATO.DTLIMENTIMP IS NOT NULL
-                UNION ALL
-                -- COMPRA LIMITE
-                SELECT
-                    COALESCE(ROUND((CONTRATOITE.QUANTIDADE / 60), 2), 0) AS QTDSC,
-                    0 AS QTDCANC,
-                    CASE 
-                        WHEN CAST(CONTRATO.DTLIMENTIMP AS DATE) BETWEEN TRUNC(SYSDATE, 'MM') AND TRUNC(LAST_DAY(SYSDATE)) 
-                        THEN COALESCE(ROUND((CONTRATOITE.QUANTIDADE / 60), 2), 0) 
-                        ELSE 0 
-                    END AS QTDMES_ACUMULADO
-                FROM 
-                    CONTRATO
-                INNER JOIN
-                    (SELECT DISTINCT
-                        ESTAB,
-                        CONTRATO,
-                        NUMEROCM
-                    FROM 
-                        OS_CONTRATOCOM
-                    WHERE 
-                        META > 0
-                    ) CONTRATOCOM ON CONTRATOCOM.CONTRATO = CONTRATO.CONTRATO AND CONTRATOCOM.ESTAB = CONTRATO.ESTAB
-                INNER JOIN 
-                    CONTRATOITE ON CONTRATOITE.ESTAB = CONTRATO.ESTAB AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
-                WHERE 
-                    CAST(CONTRATO.DTLIMENTIMP AS DATE) BETWEEN CAST(TO_DATE(:startDate) AS DATE) AND CAST(TO_DATE(:endDate) AS DATE)
-                    AND CAST(CONTRATO.DTEMISSAO AS DATE) < CAST(TO_DATE(:startDate) AS DATE)
-                    AND CONTRATO.CONTCONF IN (1, 2, 0)
-                UNION ALL
-                -- CANCELADOS
-                SELECT
-                    DADOSX.QTDSC,
-                    DADOSX.QTDCANC,
-                    CASE 
-                        WHEN CAST(LIMITEENT AS DATE) BETWEEN TRUNC(SYSDATE, 'MM') AND TRUNC(LAST_DAY(SYSDATE)) 
-                        THEN DADOSX.QTDCANC * -1 
-                        ELSE 0 
-                    END AS QTDMES_ACUMULADO
-                FROM
-                (
-                    SELECT
-                        0 AS QTDSC,
-                        CASE 
-                            WHEN CONTRATO.DTLIMENTIMP > COALESCE(CONTRATOCANC.DTCANCELAMENTO, CONTRATOCANC.DATA) 
-                            THEN CONTRATO.DTLIMENTIMP
-                            ELSE COALESCE(CONTRATOCANC.DTCANCELAMENTO, CONTRATOCANC.DATA)
-                        END AS LIMITEENT,
-                        COALESCE(ROUND((CONTRATOCANC.QUANTIDADE / 60), 2), 0) AS QTDCANC
-                    FROM 
-                        CONTRATO
-                    INNER JOIN 
-                        CONTRATOITE ON CONTRATOITE.ESTAB = CONTRATO.ESTAB AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
-                    INNER JOIN
-                        (SELECT DISTINCT
-                            ESTAB,
-                            CONTRATO,
-                            NUMEROCM
-                        FROM 
-                            OS_CONTRATOCOM
-                        WHERE 
-                            META > 0
-                        ) CONTRATOCOM ON CONTRATOCOM.CONTRATO = CONTRATO.CONTRATO AND CONTRATOCOM.ESTAB = CONTRATO.ESTAB
-                    INNER JOIN 
-                        CONTRATOCANC ON CONTRATOCANC.CONTRATO = CONTRATOITE.CONTRATO AND CONTRATOCANC.ESTAB = CONTRATOITE.ESTAB AND CONTRATOCANC.SEQITEM = CONTRATOITE.SEQITEM
-                    LEFT JOIN 
-                        LOCALEST ON LOCALEST.LOCAL = CONTRATOITE.LOCAL AND LOCALEST.ESTAB = CONTRATOITE.ESTAB
-                    WHERE
-                        CONTRATO.CONTCONF IN (1, 2, 0)
-                ) DADOSX
-                WHERE 
-                    CAST(LIMITEENT AS DATE) BETWEEN CAST(TO_DATE(:startDate) AS DATE) AND CAST(TO_DATE(:endDate) AS DATE)
+),
+COMPRADO AS (
+SELECT
+SUM(QTDSC - NVL(QTDCANC,0)) AS COMPRADO,
+SUM(QTDMES) AS QTDMES_ACUMULADO
+FROM (
+
+SELECT
+    (COALESCE(ROUND((CONTRATOITE.QUANTIDADE / 60), 2), 0)) AS QTDSC,
+     0 AS QTDCANC,
+    (ARREDONDAR(DIVIDE(CASE WHEN CAST(CONTRATO.DTEMISSAO AS DATE) BETWEEN TRUNC(SYSDATE, 'MM') AND TRUNC(LAST_DAY(SYSDATE)) THEN CONTRATOITE.QUANTIDADE ELSE 0 END,60),2)) AS QTDMES
+   
+FROM CONTRATO
+
+INNER JOIN (
+    SELECT DISTINCT
+        ESTAB,
+        CONTRATO,
+        NUMEROCM
+    FROM OS_CONTRATOCOM
+    WHERE META > 0
+) CONTRATOCOM
+    ON CONTRATOCOM.CONTRATO = CONTRATO.CONTRATO
+    AND CONTRATOCOM.ESTAB = CONTRATO.ESTAB
+
+INNER JOIN CONTRATOITE
+    ON CONTRATOITE.ESTAB = CONTRATO.ESTAB
+    AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
+
+INNER JOIN CONTRATOCFG ON  CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
+INNER JOIN CONTRATOCFG_U ON  CONTRATOCFG_U.CONTCONF = CONTRATOCFG.CONTCONF
+INNER JOIN U_TIPOCTR ON  U_TIPOCTR.U_TIPOCTR_ID = CONTRATOCFG_U.U_TIPOCTR_ID
+inner join u_tempresa
+                    on  u_tempresa.estab = contrato.estab
+
+WHERE CAST(CONTRATO.dtlimentimp AS DATE) BETWEEN CAST(TO_DATE(:startDate) AS DATE) AND CAST(TO_DATE(:endDate) AS DATE)
+AND CONTRATO.DTLIMENTIMP IS NOT NULL
+AND U_TIPOCTR.TIPOCTR IN ('CTR-C')
+AND u_tempresa.trading <> 'S'
+
+UNION ALL
+
+-- CANCELADOS
+    SELECT
+        0 AS QTDSC,
+        COALESCE(ROUND((CONTRATOCANC.QUANTIDADE / 60), 2),0) AS QTDCANC,
+    CASE
+        WHEN
+                (CASE
+            WHEN CONTRATO.DTLIMENTIMP >
+                 COALESCE(
+                     CONTRATOCANC.DTCANCELAMENTO,
+                     CONTRATOCANC.DATA
+                 )
+            THEN CONTRATO.DTLIMENTIMP
+            ELSE COALESCE(
+                CONTRATOCANC.DTCANCELAMENTO,
+                CONTRATOCANC.DATA
             )
-        )
-        SELECT
-            META.META,
-            COMPRADO.QTDSC AS COMPRADO,
-            COMPRADO.QTDMES_ACUMULADO
-        FROM
-            META
-        CROSS JOIN COMPRADO
+        END) BETWEEN TRUNC(SYSDATE, 'MM') AND TRUNC(LAST_DAY(SYSDATE)) THEN COALESCE(ROUND((CONTRATOCANC.QUANTIDADE / 60), 2),0)*-1 ELSE 0
+
+        END QTDMES
+    FROM CONTRATO
+
+    INNER JOIN CONTRATOITE
+        ON CONTRATOITE.ESTAB = CONTRATO.ESTAB
+        AND CONTRATOITE.CONTRATO = CONTRATO.CONTRATO
+
+    INNER JOIN (
+        SELECT DISTINCT
+            ESTAB,
+            CONTRATO,
+            NUMEROCM
+        FROM OS_CONTRATOCOM
+        WHERE META > 0
+    ) CONTRATOCOM
+        ON CONTRATOCOM.CONTRATO = CONTRATO.CONTRATO
+        AND CONTRATOCOM.ESTAB = CONTRATO.ESTAB
+
+    INNER JOIN CONTRATOCANC
+        ON CONTRATOCANC.CONTRATO = CONTRATOITE.CONTRATO
+        AND CONTRATOCANC.ESTAB = CONTRATOITE.ESTAB
+        AND CONTRATOCANC.SEQITEM = CONTRATOITE.SEQITEM
+
+INNER JOIN CONTRATOCFG ON  CONTRATOCFG.CONTCONF = CONTRATO.CONTCONF
+INNER JOIN CONTRATOCFG_U ON  CONTRATOCFG_U.CONTCONF = CONTRATOCFG.CONTCONF
+INNER JOIN U_TIPOCTR ON  U_TIPOCTR.U_TIPOCTR_ID = CONTRATOCFG_U.U_TIPOCTR_ID
+INNER JOIN U_TEMPRESA ON  U_TEMPRESA.ESTAB = CONTRATO.ESTAB
+
+WHERE  U_TIPOCTR.TIPOCTR IN ('CTR-C')
+AND u_tempresa.trading <> 'S'
+AND
+(CASE
+            WHEN CONTRATO.DTLIMENTIMP >
+                 COALESCE(
+                     CONTRATOCANC.DTCANCELAMENTO,
+                     CONTRATOCANC.DATA
+                 )
+            THEN CONTRATO.DTLIMENTIMP
+            ELSE COALESCE(
+                CONTRATOCANC.DTCANCELAMENTO,
+                CONTRATOCANC.DATA
+            )
+        END) BETWEEN CAST(TO_DATE(:startDate) AS DATE) AND CAST(TO_DATE(:endDate) AS DATE)
+)DADOS
+
+)
+SELECT
+META.META,
+COMPRADO.COMPRADO,
+COMPRADO.QTDMES_ACUMULADO
+FROM
+META
+CROSS JOIN COMPRADO
