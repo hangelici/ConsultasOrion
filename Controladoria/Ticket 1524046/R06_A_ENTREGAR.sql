@@ -14,7 +14,8 @@ with base as (
     nvl(peditem.dtentrega,pedcab.dtprevisao) as data_prevista_entrega,
     peditem.quantidade,
     peditem.cancelado,
-    peditem.item
+    peditem.item,
+    peditem.valorunitario
     from pedcab
     inner join peditem on
         peditem.estab = pedcab.estab
@@ -50,7 +51,6 @@ notas_ped as (
     inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
     left join nfcfg_u on nfcfg_u.notaconf = nfcfg.notaconf
     left join u_tipoop on u_tipoop.u_tipoop_id = nfcfg_u.u_tipoop_id
-    -- and nfcab.status <> 'C'   -- ver observação sobre notas canceladas
 ),
 nivel1 as (
     -- destinos das notas do pedido: remessas (saída) ou desfazimento/devolução (entrada)
@@ -73,7 +73,7 @@ nivel1 as (
         and np.seqnotaitem = nfi.seqnotaitemorigem
     inner join nfcab nf on
         nf.estab = nfi.estab
-        and nf.seqnota = nfi.seqnota            -- corrigido (era nfi.seqnota = nfi.seqnota)
+        and nf.seqnota = nfi.seqnota
     inner join nfcfg on nfcfg.notaconf = nf.notaconf
 ),
 dev as (
@@ -144,21 +144,33 @@ base.quantidade as qtd_vendida,
 base.cancelado as qtd_cancelada,
 nvl(fat.qtd_faturada, 0) as qtd_faturada,
 case 
-    when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0) 
+    when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
     else nvl(fat.qtd_faturada, 0)
 end as qtd_entregue,
 case 
     when fat.tipo = 'VF' then nvl(dev.qtd_devolvida_remessa, 0)
     else nvl(mov.qtd_devolvida_venda, 0)
 end as qtd_devolvida,
-nvl(mov.qtd_desfeita, 0) as qtd_desfeita,
-null as qtd_saldo_entregar, -------- revisar
-null as qtd_saldo_calculado, -------- revisar
-null as qtd_faturado_nao_entregue, -------- revisar
-case 
-    when fat.tipo = 'VF' then mov.dt_ultima_remessa 
-    else fat.dt_ultimo_fat
-end as data_ultima_entrega,
+nvl(fat.qtd_faturada, 0) - nvl(mov.qtd_desfeita, 0) - 
+    case 
+        when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
+        else nvl(fat.qtd_faturada, 0)
+    end as qtd_saldo_entregar,
+null as qtd_saldo_calculado, 
+nvl(fat.qtd_faturada, 0) - nvl(mov.qtd_desfeita, 0) - 
+    case 
+        when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
+        else nvl(fat.qtd_faturada, 0)
+    end as qtd_faturada_nao_entregue,
+(
+    nvl(fat.qtd_faturada, 0) - nvl(mov.qtd_desfeita, 0) - 
+    case 
+        when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
+        else nvl(fat.qtd_faturada, 0)
+    end
+) * base.valorunitario as valor_faturado_nao_entregue,
+trunc(cast(:DTFIM as date) - base.dtemissao)  as dias_desde_venda,
+case when fat.tipo = 'VF' then mov.dt_ultima_remessa else fat.dt_ultimo_fat end as data_ultima_entrega,
 base.data_prevista_entrega
 from base
 inner join filial on filial.estab = base.estab
