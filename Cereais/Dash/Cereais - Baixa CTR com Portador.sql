@@ -73,8 +73,52 @@ base_pag as (
         and base.seqpagamento = g.seqpagamento
         and base.numerocm = g.fornecedor
     )
+),
+/* v2: MATERIALIZE - calculada uma única vez */
+ctamov as (
+    select /*+ MATERIALIZE */
+    pcm.duppag  as dpl,
+    pcm.empresa,
+    pcm.estabfornecedor,
+    pcm.fornecedor,
+    sum(PPDUPPAG.valor) as bx
+    from ppaducm pcm
+    inner join contamovlan cm on
+        cm.estab = pcm.empresa
+        and cm.seqcm = pcm.seqcm
+        and cm.numerocm = pcm.numerocm
+    inner join contamovlanac cl on
+        cl.estabacertado = cm.estab
+        and cl.seqacertada = cm.seqcm
+        and cl.numerocm = cm.numerocm
+        and cl.tipo = 'B'
+    inner join contamovdupp cp on
+        cp.estab = cl.estab
+        and cp.seqcm = cl.seqcm
+        and cp.numerocm = cl.numerocm
+    inner join PDUPPAGA on
+        PDUPPAGA.empresa = cp.estab
+        and PDUPPAGA.fornecedor = cp.fornecedor
+        and PDUPPAGA.duppag = cp.duppag
+        and PDUPPAGA.estabfornecedor = cp.estabfornecedor
+    inner join PPDUPPAG on
+        PDUPPAGA.empresa = PPDUPPAG.empresa
+        and PDUPPAGA.fornecedor = PPDUPPAG.fornecedor
+        and PDUPPAGA.duppag = PPDUPPAG.duppag
+        and PDUPPAGA.estabfornecedor = PPDUPPAG.estabfornecedor
+        and PPDUPPAG.TIPOPAG = 'P'
+
+    where exists  (
+        select 1 from base_pag
+        where base_pag.empresa = pcm.empresa
+        and base_pag.duppag = pcm.duppag
+        and base_pag.fornecedor = pcm.fornecedor
+        and base_pag.estabfornecedor = pcm.estabfornecedor
+    )
+    group by
+    pcm.duppag,pcm.empresa,pcm.estabfornecedor,pcm.fornecedor
 )
-select
+select 
 b.reduzido||'-'||bp.empresa as empresa,
 b.contrato,
 bp.duppag,
@@ -94,6 +138,7 @@ SUM( nvl(ppaduche.VLRCHEQUEP,0) + nvl(ppaduchr.VLRCHEQUE,0)  ) AS CHEQUE,
 0 AS OUTROS,
 0 AS CARTAO,
 SUM(ppaducm.VALOR) AS CONTAMOV,
+ctamov.bx as bx_dpl_contamov,
 SUM(ppduppadup.VALOR) AS DINHEIRO
 from base_pag bp
 
@@ -109,6 +154,12 @@ inner join base b on
     b.estab = bp.empresa
     and b.seqpagamento = bp.seqpagamento
     and b.numerocm = bp.fornecedor
+
+left join ctamov on
+    (ctamov.empresa = bp.empresa)
+    and (ctamov.fornecedor = bp.fornecedor)
+    and (ctamov.estabfornecedor = bp.estabfornecedor)
+    and (ctamov.dpl = bp.duppag)
 
 left join ppduppad
     on (ppduppad.empresa = bp.empresa)
@@ -163,7 +214,8 @@ b.nota,
 contamov.nome,
 contamov.numerocm,
 b.valor,
-pd.valor
+pd.valor,
+ctamov.bx
 
 union all
 
@@ -188,6 +240,7 @@ SUM(PRDURECH.VLRCHEQREC) AS CHEQUE,
 SUM(PRDUREOUT.VALOR) AS OUTROS,
 SUM(PRDURECAR.VALOR) AS CARTAO,
 SUM(PRDURECM.VALOR) AS CONTAMOV,
+0 as bx_dpl_contamov,
 SUM(prduredup.VALOR) AS DINHEIRO
 from base_rec br
 
@@ -230,7 +283,7 @@ left join prdurecm on (prdurecm.empresa = br.empresa)
   and (prdurecm.seqrecbto = br.seqrecbto)
   and (prdurecm.troco = 'N')
 
- /* Recebimentos em Cart:1o */
+ /* Recebimentos em Cartão */
 left join prdurecar on (prdurecar.empresa = br.empresa)
   and (prdurecar.duprec = br.duprec)
   and (prdurecar.seqrecbto = br.seqrecbto)
