@@ -9,7 +9,7 @@ WITH MAX_DATA AS (
 
    -- INNER JOIN U_TEMPRESA ON U_TEMPRESA.ESTAB = ISALDO.ESTAB
     WHERE
-    codigosaldo in (8,7,2,1,6,11,20)
+    codigosaldo in (8,7,2,1,6,11,20,26)
   -- AND U_TEMPRESA.ESTABC IN (:ESTAB)
     GROUP BY ISALDO.ITEM, ISALDO.ESTAB,CODIGOSALDO,LOCAL
 ),
@@ -313,7 +313,10 @@ case when codigosaldo = 20 then divide(saldokg,40) else 0 end emtransito_sc,
 0 PEDTRANSF_KG,
 0 PEDTRANSF_SC,
 0 custogerencial,
-0 custogerencial_ori
+0 custogerencial_ori,
+case when codigosaldo = 26 then saldo else 0 end pedcarteira,
+case when codigosaldo = 26 then saldokg else 0 end pedcarteira_kg,
+case when codigosaldo = 26 then divide(saldokg,40) else 0 end pedcarteira_sc
 from base_dados
 
 where saldo <> 0
@@ -354,7 +357,10 @@ PEDTRANSF,
 PEDTRANSF_KG,
 PEDTRANSF_SC,
 0 custogerencial,
-0 custogerencial_ori
+0 custogerencial_ori,
+0  pedcarteira,
+0  pedcarteira_kg,
+0  pedcarteira_sc
 
 from TRANSFERENCIAS_SAIDA
 
@@ -393,7 +399,10 @@ PEDTRANSF,
 PEDTRANSF_KG,
 PEDTRANSF_SC,
 0 custogerencial,
-0 custogerencial_ori
+0 custogerencial_ori,
+0  pedcarteira,
+0  pedcarteira_kg,
+0  pedcarteira_sc
 
 from TRANSFERENCIAS_ENTRADA
 
@@ -432,7 +441,10 @@ CULTIVAR,
 0 PEDTRANSF_KG,
 0 PEDTRANSF_SC,
 0 custogerencial,
-0 custogerencial_ori
+0 custogerencial_ori,
+0  pedcarteira,
+0  pedcarteira_kg,
+0  pedcarteira_sc
 
 from custo_gerencial
 )
