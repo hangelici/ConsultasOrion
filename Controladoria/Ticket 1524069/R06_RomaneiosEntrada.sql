@@ -40,7 +40,7 @@ inner join contamov on contamov.numerocm = roma.numerocm
 left join romadesc on
     romadesc.estab = roma.estab
     and romadesc.romaneio = roma.romaneio
-    and romadesc.numerocm = roma.romaneio
+    and romadesc.numerocm = roma.numerocm
     and romadesc.entradasaida = roma.entradasaida
 where roma.ENTRADASAIDA = 'E'
 and roma.dtemissao between :DTINI and :DTFIM
