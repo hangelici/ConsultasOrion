@@ -121,11 +121,6 @@ trunc(la.validade - cast(:DTFIM as date)) as dias_para_vencer,
 sum(dados.quantidade) as qtd,
 sum(dados.saldoant) as saldoant,
 sum(dados.quantidade + nvl(dados.saldoant,0)) as qtd_saldo,
-0 as qtd_reservada, --- revisar
-0 as qtd_bloqueada, --- revisar
-0 as custo_unitario, --- revisar
-0 as valor_saldo, --- revisar
-null as data_ultima_saida, --- revisar
 :DTFIM as data_hora_posicao
 from (
     
