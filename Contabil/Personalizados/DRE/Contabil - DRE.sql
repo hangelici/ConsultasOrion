@@ -75,13 +75,7 @@ FALTANTES AS (
                           AND F.OSESTAB = 1)
 ),
 DRE AS (
-    SELECT DISTINCT
-    NIVEL1, 
-    DESC1, 
-    NIVEL2, 
-    DESC2, 
-    REDUZIDA
-    FROM U_DRE
+    SELECT * FROM OS_DRE2
 ),
 BASE AS (
 SELECT
