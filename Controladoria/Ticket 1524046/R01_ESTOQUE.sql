@@ -76,6 +76,33 @@ base as (
     and (m.item = :ITEM OR 0 = :ITEM)
 )
 select
+cod_loja,
+nome_loja,
+local,
+nome_local,
+titularidade,
+localizacao_fisica,
+cod_produto,
+desc_produto,
+grupo_produto,
+controla_lote,
+unidade,
+lote,
+data_fabricacao,
+data_validade,
+dias_para_vencer,
+qtd,
+saldoant,
+qtd_saldo,
+0 as qtd_reservada, --- revisar
+0 as qtd_bloqueada, --- revisar
+pcusto(cod_loja, cod_produto, 3, :DTFIM, null, null) as custo_unitario,
+pcusto(cod_loja, cod_produto, 3, :DTFIM, null, null) * qtd_saldo as valor_saldo, 
+null as data_ultima_saida, --- revisar
+:DTFIM as data_hora_posicao
+from(
+
+select
 dados.estab as cod_loja,
 dados.reduzido as nome_loja,
 dados.local,
@@ -93,7 +120,7 @@ la.validade as data_validade,
 trunc(la.validade - cast(:DTFIM as date)) as dias_para_vencer,
 sum(dados.quantidade) as qtd,
 sum(dados.saldoant) as saldoant,
-sum(dados.quantidade + nvl(dados.saldoant,0)) as saldo,
+sum(dados.quantidade + nvl(dados.saldoant,0)) as qtd_saldo,
 0 as qtd_reservada, --- revisar
 0 as qtd_bloqueada, --- revisar
 0 as custo_unitario, --- revisar
@@ -101,6 +128,7 @@ sum(dados.quantidade + nvl(dados.saldoant,0)) as saldo,
 null as data_ultima_saida, --- revisar
 :DTFIM as data_hora_posicao
 from (
+    
 select
 base.estab,
 base.reduzido,
@@ -164,3 +192,5 @@ la.datafabricacao,
 la.validade,
 localest.descricao,
 itemagro.lotectrl
+
+)dados1
