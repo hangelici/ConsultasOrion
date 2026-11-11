@@ -37,29 +37,58 @@ with base_venda as (
     where nfcab.status <> 'C'
     and u_tipoop.tipoop in ('VF','V','RF','DF-V','DV')
     and nfcab.dtemissao between :DTINI and :DTFIM
-    --and nfcab.represent = 44821
-    --and itemgrupo_u.u_gestoque_id = 4
+    --and nfcab.represent = 48837
+    --and itemgrupo_u.u_gestoque_id = 1
 ),
 base_devol as (
     select
     nfi.estab,
     nfi.seqnota,
     nfi.seqnotaitem,
-    bv.custocmvp as custocmvp_ori,
-    bv.custocmv as custocmv_ori
+    case
+        when u_tipoop.tipoop = 'RF' and nvl(nfori.custocmvp,0) <> 0 then nfori.custocmvp
+        when u_tipoop.tipoop <> 'RF' and nvl(nfitem.custocmvp,0) <> 0 then nfitem.custocmvp
+        when u_tipoop.tipoop = 'RF' and nvl(nfori.custocmvp,0) = 0 then nfori.custocmv
+        when u_tipoop.tipoop <> 'RF' and nvl(nfitem.custocmvp,0) = 0 then nfitem.custocmv 
+        else 0 
+    end as custocmvp_ori,
+    case
+        when u_tipoop.tipoop = 'RF' and nvl(nfori.custocmv,0) <> 0 then nfori.custocmv
+        when u_tipoop.tipoop <> 'RF' and nvl(nfitem.custocmv,0) <> 0 then nfitem.custocmv
+        else 0 
+    end as custocmv_ori/*
+    nfitem.custocmvp as cmvp_vf_v,
+    nfitem.custocmv as cmv_vf_v,
+    nfori.custocmvp as cmvp_rf,
+    nfori.custocmv as cmv_rf*/
     from nfitemapartirde nfi
-    --- notas de venda e remessa
-    inner join base_venda bv on
-        bv.estab = nfi.estaborigem
-        and bv.seqnota = nfi.seqnotaorigem
-        and bv.seqnotaitem = nfi.seqnotaitemorigem
-        and bv.tipoop in ('VF','V','RF')
-    --- desfazimento e devolução
+    --- notas de desfazimento/devolução
     inner join base_venda dev on
         dev.estab = nfi.estab
         and dev.seqnota = nfi.seqnota
         and dev.seqnotaitem = nfi.seqnotaitem
         and dev.tipoop in ('DF-V','DV')
+    --- DV -> Venda ou RF | DF - > VF
+    -- Custo de NFITEM se Origem = VF e V
+    left join nfitem on
+        nfitem.estab = nfi.estaborigem
+        and nfitem.seqnota = nfi.seqnotaorigem
+        and nfitem.seqnotaitem = nfi.seqnotaitemorigem
+    inner join nfcab on
+        nfcab.estab = nfitem.estab
+        and nfcab.seqnota = nfitem.seqnota
+    inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
+    inner join nfcfg_u on nfcfg_u.notaconf = nfcfg.notaconf
+    inner join u_tipoop on u_tipoop.u_tipoop_id = nfcfg_u.u_tipoop_id
+    --- Se for RF, precisa pegar custo da VF
+    left join nfitemapartirde nf on
+        nf.estab = nfitem.estab
+        and nf.seqnota = nfitem.seqnota
+        and nf.seqnotaitem = nfitem.seqnotaitem
+    left join nfitem nfori on
+        nfori.estab = nf.estaborigem
+        and nfori.seqnota = nf.seqnota
+        and nfori.seqnotaitem = nf.seqnotaitem
 )
 select
 b.estab,
@@ -86,7 +115,10 @@ sum(case
     when tipoop in ('VF','V') then custocmvp
     when tipoop in ('DF-V','DV') and (custocmvp_ori is not null and custocmvp_ori <> 0) then -custocmvp_ori
     when tipoop in ('DF-V','DV') and (custocmv_ori is not null and custocmv_ori <> 0) then -custocmv_ori
-    else 0 
+    when tipoop in ('DF-V','DV') and custocmvp_ori = 0 then -custocmvp
+    when tipoop in ('DF-V','DV') and custocmvp_ori is null and custocmv_ori is null and custocmvp <> 0 then -custocmvp
+    when tipoop in ('DF-V','DV') and custocmvp_ori is null and custocmv_ori is null and custocmv <> 0 then -custocmv
+    else 0
 end*quantidade) as custo_vvf,
 sum(case
     when tipoop in ('RF','V') then custocmv
