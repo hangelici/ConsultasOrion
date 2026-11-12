@@ -91,8 +91,11 @@ base_devol as (
         and nfori.seqnotaitem = nf.seqnotaitem
 )
 select
+filial.reduzido as filial,
+cidade.uf,
 b.estab,
 b.represent,
+contamov.nome as rtv,
 b.data,
 b.grupo,
 --tipoop,
@@ -131,9 +134,14 @@ left join base_devol d on
     d.estab = b.estab
     and d.seqnota = b.seqnota
     and d.seqnotaitem = b.seqnotaitem
-
+left join filial on filial.estab = b.estab
+left join contamov on contamov.numerocm = b.represent
+left join cidade on cidade.cidade = filial.cidade
 group by
 b.estab,
 b.represent,
 b.data,
-b.grupo
+b.grupo,
+filial.reduzido,
+cidade.uf,
+contamov.nome
