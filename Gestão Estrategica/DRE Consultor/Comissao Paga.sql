@@ -1,12 +1,15 @@
 -- comis paga
 select
 comisacdoc.estab,
+cidade.uf,
 comisacdoc.numerocm as represent,
 contamov.nome as rtv,
 u_gestoque.descricao as grupo,
 trunc(datacred,'MM') as data,
 sum(comisvalor) as comiss_paga
 from comisacdoc
+inner join filial on filial.estab = comisacdoc.estab
+inner join cidade on cidade.cidade = filial.cidade
 inner join nfitem on
     nfitem.estab = comisacdoc.estab
     and nfitem.seqnota = comisacdoc.seqnota
@@ -22,4 +25,5 @@ comisacdoc.estab,
 comisacdoc.numerocm,
 trunc(datacred,'MM'),
 u_gestoque.descricao,
+cidade.uf,
 contamov.nome
