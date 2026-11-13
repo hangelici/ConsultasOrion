@@ -137,6 +137,10 @@
       background: var(--superficie); overflow: hidden;
     }
     .chip.on { border-color: var(--tinta); background: var(--ouro-claro); }
+    .chip[draggable=true] { cursor: grab; }
+    .chip.arrastando { opacity: .4; }
+    .chip.alvo-antes { box-shadow: -4px 0 0 var(--ouro-escuro); }
+    .chip.alvo-depois { box-shadow: 4px 0 0 var(--ouro-escuro); }
     .chip label { display: flex; align-items: center; gap: 6px; padding: 0 6px; cursor: pointer; white-space: nowrap; }
     .chip input { accent-color: var(--marca); margin: 0; }
     .chip .ordem { font-size: 11px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; background: var(--marca); color: var(--ouro); display: inline-grid; place-items: center; padding: 0 4px; }
@@ -304,7 +308,7 @@
 
   <section class="config">
     <div class="niveis">
-      <span class="rotulo">Linhas da tabela (marque e ordene)</span>
+      <span class="rotulo">Linhas da tabela (marque e arraste ou use as setas para ordenar)</span>
       <div class="chips" id="niveis"></div>
     </div>
     <div class="acoes">
@@ -920,7 +924,7 @@
       const def = dimDef(d);
       const on = pivo.ativos.has(d);
       if (on) ordem++;
-      return `<div class="chip${on ? ' on' : ''}">` +
+      return `<div class="chip${on ? ' on' : ''}" draggable="true" data-chip="${d}" title="Arraste para reordenar">` +
         `<button type="button" class="mover" data-d="${d}" data-mover="-1"${i === 0 ? ' disabled' : ''} aria-label="Mover ${esc(def.rotulo)} para antes">←</button>` +
         `<label><input type="checkbox" data-d="${d}"${on ? ' checked' : ''}>` +
           (on ? `<span class="ordem" aria-hidden="true">${ordem}</span>` : '') + `${esc(def.rotulo)}</label>` +
@@ -950,6 +954,56 @@
     render();
     const alvo = el.niveis.querySelector(`.mover[data-d="${b.dataset.d}"][data-mover="${b.dataset.mover}"]`);
     if (alvo && !alvo.disabled) alvo.focus();
+  });
+
+  // arrastar e soltar os chips para reordenar (as setas continuam valendo, inclusive pelo teclado)
+  let arrastado = null;
+  const limparAlvos = () => el.niveis.querySelectorAll('.alvo-antes, .alvo-depois')
+    .forEach(c => c.classList.remove('alvo-antes', 'alvo-depois'));
+  /** Solta antes ou depois do chip conforme a metade (esquerda/direita) em que o cursor está. */
+  const posicaoAlvo = e => {
+    const chip = e.target.closest('.chip');
+    if (!chip || !arrastado || chip.dataset.chip === arrastado) return null;
+    const r = chip.getBoundingClientRect();
+    return { chip, depois: e.clientX > r.left + r.width / 2 };
+  };
+  el.niveis.addEventListener('dragstart', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    arrastado = chip.dataset.chip;
+    chip.classList.add('arrastando');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', arrastado);
+  });
+  el.niveis.addEventListener('dragover', e => {
+    if (!arrastado) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const p = posicaoAlvo(e);
+    limparAlvos();
+    if (p) p.chip.classList.add(p.depois ? 'alvo-depois' : 'alvo-antes');
+  });
+  el.niveis.addEventListener('dragleave', e => { if (!el.niveis.contains(e.relatedTarget)) limparAlvos(); });
+  el.niveis.addEventListener('drop', e => {
+    if (!arrastado) return;
+    e.preventDefault();
+    const p = posicaoAlvo(e);
+    if (p) {
+      const ordem = pivo.ordemDims.filter(d => d !== arrastado);
+      const j = ordem.indexOf(p.chip.dataset.chip) + (p.depois ? 1 : 0);
+      ordem.splice(j, 0, arrastado);
+      pivo.ordemDims = ordem;
+      pivo.abertos.clear();
+      montarNiveis();
+      render();
+    }
+    arrastado = null;
+    limparAlvos();
+  });
+  el.niveis.addEventListener('dragend', () => {
+    arrastado = null;
+    limparAlvos();
+    el.niveis.querySelectorAll('.arrastando').forEach(c => c.classList.remove('arrastando'));
   });
 
   // ---------- interação com a tabela ----------
