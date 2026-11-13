@@ -118,7 +118,7 @@
     .per-meses[hidden] { display: none; }
 
     /* KPIs */
-    .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
     .kpi { background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; }
     .kpi:first-child { border-top: 3px solid var(--ouro); }
     .kpi h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
@@ -219,7 +219,7 @@
   <header class="topo">
     <div>
       <h1>Vendas</h1>
-      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões e margem</p>
+      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões, custo de veículo e margem</p>
     </div>
     <p class="carimbo" id="carimbo">Carregando…</p>
   </header>
@@ -326,7 +326,8 @@
     Lucro bruto = Venda líquida − Custo. Margem = Lucro bruto ÷ Venda líquida; nos subtotais e no total,
     é calculada sobre os valores somados (não é a média das margens). Período e Data de/até são aplicados juntos.
     Comissão paga (COMISPAGA) e comissão futura (COMISFUT) são ligadas à venda por estabelecimento, representante,
-    mês e grupo, e não variam com o Tipo venda.
+    mês e grupo, e não variam com o Tipo venda. Custo veículo (VEIC) é ligado à venda por representante e mês;
+    como não é aberto por grupo, fica em branco nas linhas de Grupo e abaixo delas.
   </p>
 </main>
 
@@ -345,6 +346,8 @@
                         "Tipo venda".
      comissoes        : consultas COMISPAGA e COMISFUT, ligadas à VENDAS
                         por ESTAB + REPRESENT + mês da data + GRUPO.
+     veic             : consulta VEIC (custo do veículo), ligada à VENDAS
+                        por REPRESENT + mês da data (sem GRUPO/ESTAB/UF).
      ===================================================================== */
   const CONFIG = {
     fonte: 'thymeleaf',
@@ -353,6 +356,7 @@
       cp: { fonte: 'COMISPAGA', urlApi: '/api/consultas/comispaga', valor: 'COMISS_PAGA', data: 'DATA' },
       cf: { fonte: 'COMISFUT',  urlApi: '/api/consultas/comisfut',  valor: 'PROVISAOLIQ', data: 'DTEMISSAO' }
     },
+    veic: { fonte: 'VEIC', urlApi: '/api/consultas/veic', valor: 'CUSTO_DISTANCIA', data: 'DATA' },
     tiposVenda: {
       VF_V: { rotulo: 'Venda Futura e Venda', venda: 'V_VF', custo: 'CUSTO_VVF' },
       V_R:  { rotulo: 'Venda e Remessa',      venda: 'V_RF', custo: 'CUSTO_VRF' }
@@ -363,15 +367,16 @@
       { campo: 'UF',      rotulo: 'UF' },
       { campo: 'FILIAL',  rotulo: 'Filial' },
       { campo: 'RTV',     rotulo: 'RTV' },
-      { campo: 'GRUPO',   rotulo: 'Grupo' },
-      { campo: 'MES_ANO', rotulo: 'Mês/Ano' }
+      { campo: 'MES_ANO', rotulo: 'Mês/Ano' },
+      { campo: 'GRUPO',   rotulo: 'Grupo' }
     ],
-    niveisPadrao: ['UF', 'FILIAL', 'RTV', 'GRUPO', 'MES_ANO']   // ordem e níveis ativos ao abrir
+    niveisPadrao: ['UF', 'FILIAL', 'RTV', 'MES_ANO', 'GRUPO']   // ordem e níveis ativos ao abrir
   };
   /*<![CDATA[*/
   const DADOS_THYMELEAF = /*[[${VENDAS}]]*/ null;
   const DADOS_COMISPAGA = /*[[${COMISPAGA}]]*/ null;
   const DADOS_COMISFUT  = /*[[${COMISFUT}]]*/ null;
+  const DADOS_VEIC      = /*[[${VEIC}]]*/ null;
   /*]]>*/
   const DADOS_COMISSAO = { cp: DADOS_COMISPAGA, cf: DADOS_COMISFUT };
 
@@ -386,6 +391,7 @@
     { k: 'l', rotulo: 'Lucro Bruto',   csv: 'LUCRO_BRUTO' },
     { k: 'cp', rotulo: 'Comissão Paga',   csv: 'COMISSAO_PAGA' },
     { k: 'cf', rotulo: 'Comissão Futura', csv: 'COMISSAO_FUTURA' },
+    { k: 'cv', rotulo: 'Custo Veículo',   csv: 'CUSTO_VEICULO' },
     { k: 'm', rotulo: 'Margem %',      csv: 'MARGEM_PERC' }
   ];
 
@@ -462,6 +468,7 @@
   let PERIODOS = [];               // AAAAMM distintos
   let ufsPorFilial = new Map();
   let locaisPorRtv = new Map();    // RTV -> Set de [UF, FILIAL]
+  let VEIC_POR_CHAVE = new Map();  // REPRESENT + AAAAMM -> custo do veículo no mês
 
   /** Registro com chaves em maiúsculas (os nomes de coluna variam conforme o driver). */
   function maiusculo(r0, presentes) {
@@ -472,8 +479,10 @@
   const idTxt = v => { const s = String(v ?? '').trim(); const n = Number(s); return s !== '' && Number.isFinite(n) ? String(n) : s; };
   /** Chave de ligação VENDAS x comissões: ESTAB + REPRESENT + AAAAMM + GRUPO. */
   const chaveLiga = (estab, rep, p, grupo) => [idTxt(estab), idTxt(rep), p ?? '', norm(String(grupo ?? '').trim())].join(SEP);
+  /** Chave de ligação VENDAS x VEIC: REPRESENT + AAAAMM. */
+  const chaveVeic = (rep, p) => [idTxt(rep), p ?? ''].join(SEP);
 
-  function preparar(registros, comissoes) {
+  function preparar(registros, comissoes, veic) {
     const presentes = new Set();
     const linhas = [];
     const avisos = [];
@@ -492,7 +501,8 @@
       linhas.push({
         dims, vals, cp: 0, cf: 0, p,
         dia: dt ? dt.a * 10000 + dt.m * 100 + dt.d : null,
-        estab: r.ESTAB, rep: r.REPRESENT, chave: chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO)
+        estab: r.ESTAB, rep: r.REPRESENT, chave: chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO),
+        kv: chaveVeic(r.REPRESENT, p)
       });
     }
 
@@ -519,6 +529,26 @@
       }
       if (regs.length) {
         const falta = [def.valor, def.data, 'ESTAB', 'REPRESENT', 'GRUPO'].filter(c => !pres.has(c));
+        if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
+      }
+    }
+
+    // ---- custo do veículo: um valor por REPRESENT/mês; só conta onde houver venda (ver montarArvore) ----
+    VEIC_POR_CHAVE = new Map();
+    {
+      const def = CONFIG.veic;
+      const pres = new Set();
+      for (const r0 of veic || []) {
+        if (!r0 || typeof r0 !== 'object') continue;
+        const r = maiusculo(r0, pres);
+        const valor = num(r[def.valor]);
+        if (!valor) continue;
+        const dt = lerData(r[def.data]);
+        const k = chaveVeic(r.REPRESENT, dt ? dt.a * 100 + dt.m : null);
+        VEIC_POR_CHAVE.set(k, (VEIC_POR_CHAVE.get(k) || 0) + valor);
+      }
+      if ((veic || []).length) {
+        const falta = [def.valor, def.data, 'REPRESENT'].filter(c => !pres.has(c));
         if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
       }
     }
@@ -597,30 +627,43 @@
   }
 
   // ---------- tabela dinâmica ----------
+  /**
+   * Custo do veículo (VEIC) não é aberto por grupo: cada nó soma o custo dos pares REPRESENT/mês
+   * distintos presentes nas suas vendas. Do nível GRUPO para baixo o nó não recebe VEIC (célula vazia).
+   */
   function montarArvore(linhas, niv) {
-    const raiz = { v: 0, c: 0, cp: 0, cf: 0, filhos: new Map(), nivel: -1, caminho: '' };
+    const raiz = { v: 0, c: 0, cp: 0, cf: 0, kv: new Set(), filhos: new Map(), nivel: -1, caminho: '' };
+    const iGrupo = niv.indexOf('GRUPO');
     for (const l of linhas) {
       const { v, c } = l.vals[estado.tipo];
       const { cp, cf } = l;
-      raiz.v += v; raiz.c += c; raiz.cp += cp; raiz.cf += cf;
+      raiz.v += v; raiz.c += c; raiz.cp += cp; raiz.cf += cf; raiz.kv.add(l.kv);
       let no = raiz;
       niv.forEach((dim, i) => {
         const val = l.dims[dim];
         let f = no.filhos.get(val);
         if (!f) {
-          f = { rotulo: val, dim, nivel: i, caminho: no.caminho + SEP + dim + '=' + val, v: 0, c: 0, cp: 0, cf: 0, filhos: new Map() };
+          f = { rotulo: val, dim, nivel: i, caminho: no.caminho + SEP + dim + '=' + val, v: 0, c: 0, cp: 0, cf: 0,
+            kv: (iGrupo < 0 || i < iGrupo) ? new Set() : null, filhos: new Map() };
           no.filhos.set(val, f);
         }
         f.v += v; f.c += c; f.cp += cp; f.cf += cf;
+        if (f.kv) f.kv.add(l.kv);
         no = f;
       });
     }
+    const somarVeic = no => {
+      no.cv = no.kv ? Array.from(no.kv).reduce((s, k) => s + (VEIC_POR_CHAVE.get(k) || 0), 0) : null;
+      no.kv = null;
+      for (const f of no.filhos.values()) somarVeic(f);
+    };
+    somarVeic(raiz);
     return raiz;
   }
 
   function met(no) {
     const l = no.v - no.c;
-    return { v: no.v, c: no.c, l, cp: no.cp, cf: no.cf, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
+    return { v: no.v, c: no.c, l, cp: no.cp, cf: no.cf, cv: no.cv, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
   }
 
   function cmpRotulo(a, b) {
@@ -682,6 +725,7 @@
       kpi('Lucro Bruto', fmtMoeda.format(limpa(t.l)), t.l < 0) +
       kpi('Comissão Paga', fmtMoeda.format(limpa(t.cp)), t.cp < 0) +
       kpi('Comissão Futura', fmtMoeda.format(limpa(t.cf)), t.cf < 0) +
+      kpi('Custo Veículo', fmtMoeda.format(limpa(t.cv)), t.cv < 0) +
       kpi('Margem', t.m === null ? '–' : fmtPct.format(limpa(t.m)) + '%', t.m !== null && t.m < 0);
 
     // cabeçalho com ordenação
@@ -997,17 +1041,20 @@
   async function carregar() {
     let bruto = DADOS_THYMELEAF;
     const brutoCom = { ...DADOS_COMISSAO };
+    let brutoVeic = DADOS_VEIC;
     if (CONFIG.fonte === 'api') {
       const chaves = Object.keys(CONFIG.comissoes);
       const res = await Promise.all([
         buscar(CONFIG.urlApi, 'VENDAS'),
+        buscar(CONFIG.veic.urlApi, CONFIG.veic.fonte),
         ...chaves.map(k => buscar(CONFIG.comissoes[k].urlApi, CONFIG.comissoes[k].fonte))
       ]);
       bruto = res.at(0);
-      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 1); });
+      brutoVeic = res.at(1);
+      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 2); });
     }
     const comissoes = Object.fromEntries(Object.keys(CONFIG.comissoes).map(k => [k, extrairRegistros(brutoCom[k])]));
-    return { registros: extrairRegistros(bruto), comissoes };
+    return { registros: extrairRegistros(bruto), comissoes, veic: extrairRegistros(brutoVeic) };
   }
 
   configurarMulti('uf', 'UF', 'ufs');
@@ -1016,8 +1063,8 @@
   montarTipo();
   montarNiveis();
 
-  carregar().then(({ registros, comissoes }) => {
-    LINHAS = preparar(registros, comissoes);
+  carregar().then(({ registros, comissoes, veic }) => {
+    LINHAS = preparar(registros, comissoes, veic);
     el.carimbo.textContent = `${fmtInt.format(LINHAS.length)} registros`;
     configurarDatas();
     montarPeriodos();
