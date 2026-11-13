@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vendas | Ouro Safra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+  <style>
+    /* ==================================================================
+       PALETA OURO SAFRA (mesma do DRE gerencial / ourosafra.com.br)
+       Troque apenas os valores de "base"; o restante é derivado.
+       ================================================================== */
+    :root {
+      /* base */
+      --marca: #0A0A0A;
+      --ouro: #FFC20F;
+      --laranja: #FF3D00;
+      --tinta: #0A0A0A;
+      --fundo: #F5F5F5;
+      --superficie: #FFFFFF;
+
+      /* derivadas */
+      --neg: color-mix(in srgb, var(--laranja) 80%, black);
+      --tinta-2: color-mix(in srgb, var(--tinta) 68%, white);
+      --linha: color-mix(in srgb, var(--tinta) 15%, white);
+      --linha-fina: color-mix(in srgb, var(--tinta) 8%, white);
+      --hover: color-mix(in srgb, var(--tinta) 5%, var(--superficie));
+      --ouro-claro: color-mix(in srgb, var(--ouro) 22%, white);
+      --ouro-suave: color-mix(in srgb, var(--ouro) 9%, var(--superficie));
+      --ouro-escuro: color-mix(in srgb, var(--ouro) 55%, black);
+      --neg-fundo: color-mix(in srgb, var(--laranja) 10%, white);
+      --sombra: color-mix(in srgb, var(--tinta) 16%, transparent);
+      --fonte: "Archivo", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--fundo); color: var(--tinta);
+      font: 400 15px/1.45 var(--fonte); font-variant-numeric: tabular-nums;
+      border-top: 4px solid var(--ouro);
+    }
+    button, input, select { font: inherit; color: inherit; }
+    :focus-visible { outline: 2px solid var(--ouro-escuro); outline-offset: 2px; }
+    .pagina { max-width: 1600px; margin: 0 auto; padding: 24px 28px 48px; }
+
+    /* Topo */
+    .topo {
+      display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: end; justify-content: space-between;
+      padding-bottom: 18px; border-bottom: 1px solid var(--linha);
+    }
+    .topo h1 { margin: 0; font-size: 30px; line-height: 1.1; font-weight: 700; font-stretch: 80%; letter-spacing: -0.01em; }
+    .topo .sub { margin: 4px 0 0; color: var(--tinta-2); }
+    .carimbo { margin: 0; font-size: 13px; color: var(--tinta-2); }
+
+    /* Filtros */
+    .filtros { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: end; padding: 18px 0; }
+    .campo { display: flex; flex-direction: column; gap: 4px; }
+    .rotulo { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
+
+    .segmento { display: inline-flex; border: 1px solid var(--tinta); border-radius: 6px; overflow: hidden; height: 38px; }
+    .segmento label { display: flex; align-items: center; padding: 0 14px; cursor: pointer; background: var(--superficie); white-space: nowrap; }
+    .segmento label + label { border-left: 1px solid var(--tinta); }
+    .segmento input { position: absolute; opacity: 0; pointer-events: none; }
+    .segmento label:has(input:checked) { background: var(--marca); color: var(--ouro); font-weight: 600; }
+    .segmento label:has(input:focus-visible) { outline: 2px solid var(--ouro-escuro); outline-offset: -3px; }
+
+    input[type=date] {
+      height: 38px; padding: 0 8px; border: 1px solid var(--linha); border-radius: 6px; background: var(--superficie);
+    }
+    input[type=date][aria-invalid=true] { border-color: var(--neg); background: var(--neg-fundo); }
+
+    .drop { position: relative; }
+    .drop > summary {
+      list-style: none; cursor: pointer; height: 38px; display: flex; align-items: center; gap: 8px;
+      padding: 0 32px 0 12px; border: 1px solid var(--linha); border-radius: 6px; background: var(--superficie);
+      white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; position: relative; min-width: 140px;
+    }
+    .drop > summary::-webkit-details-marker { display: none; }
+    .drop > summary::after {
+      content: ""; position: absolute; right: 12px; top: 50%; width: 7px; height: 7px; margin-top: -5px;
+      border-right: 2px solid var(--tinta-2); border-bottom: 2px solid var(--tinta-2); transform: rotate(45deg);
+    }
+    .drop.ativo > summary { border-color: var(--tinta); background: var(--ouro-claro); font-weight: 600; }
+    .painel {
+      position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; width: 320px;
+      background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px;
+      box-shadow: 0 8px 24px var(--sombra); padding: 10px;
+    }
+    .busca { width: 100%; height: 34px; padding: 0 8px; border: 1px solid var(--linha); border-radius: 6px; margin-bottom: 6px; }
+    .painel-acoes { display: flex; gap: 6px; margin-bottom: 6px; }
+    .painel-acoes button, .btn-sec {
+      height: 30px; padding: 0 10px; border: 1px solid var(--linha); border-radius: 6px; background: var(--superficie); cursor: pointer;
+    }
+    .painel-acoes button:hover, .btn-sec:hover { background: var(--hover); }
+    .btn-sec { height: 38px; }
+    .lista { max-height: 300px; overflow: auto; }
+    .lista label { display: flex; gap: 8px; align-items: flex-start; padding: 4px 4px; border-radius: 4px; cursor: pointer; }
+    .lista label:hover { background: var(--hover); }
+    .lista label[hidden] { display: none; }
+    .lista small { color: var(--tinta-2); }
+    .lista input { margin-top: 3px; accent-color: var(--marca); }
+
+    .per-ano { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+    .per-ano label { flex: 1; font-weight: 600; }
+    .per-toggle {
+      width: 24px; height: 24px; flex: none; border: 1px solid var(--linha); border-radius: 4px; background: var(--superficie);
+      cursor: pointer; position: relative;
+    }
+    .per-toggle::before {
+      content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px;
+      border-right: 2px solid var(--tinta); border-bottom: 2px solid var(--tinta); transform: rotate(-45deg);
+      transition: transform .15s;
+    }
+    .per-toggle[aria-expanded=true]::before { transform: rotate(45deg); margin-top: -5px; }
+    .per-meses { padding-left: 28px; display: grid; grid-template-columns: 1fr 1fr; }
+
+    /* KPIs */
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .kpi { background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; }
+    .kpi:first-child { border-top: 3px solid var(--ouro); }
+    .kpi h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
+    .kpi p { margin: 6px 0 0; font-size: 24px; font-weight: 700; font-stretch: 85%; line-height: 1.1; }
+    .kpi p.neg { color: var(--neg); }
+
+    /* Configuração da tabela dinâmica */
+    .config {
+      display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between;
+      margin: 20px 0 10px;
+    }
+    .niveis { display: flex; flex-direction: column; gap: 6px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      display: inline-flex; align-items: center; height: 34px; border: 1px solid var(--linha); border-radius: 17px;
+      background: var(--superficie); overflow: hidden;
+    }
+    .chip.on { border-color: var(--tinta); background: var(--ouro-claro); }
+    .chip label { display: flex; align-items: center; gap: 6px; padding: 0 6px; cursor: pointer; white-space: nowrap; }
+    .chip input { accent-color: var(--marca); margin: 0; }
+    .chip .ordem { font-size: 11px; font-weight: 700; min-width: 16px; height: 16px; border-radius: 8px; background: var(--marca); color: var(--ouro); display: inline-grid; place-items: center; padding: 0 4px; }
+    .chip .mover { width: 26px; height: 100%; border: 0; background: transparent; cursor: pointer; color: var(--tinta-2); }
+    .chip .mover:hover:not(:disabled) { background: var(--hover); color: var(--tinta); }
+    .chip .mover:disabled { opacity: .3; cursor: default; }
+    .acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn-pri {
+      height: 38px; padding: 0 14px; border: 1px solid var(--marca); border-radius: 6px; background: var(--marca); color: var(--ouro);
+      font-weight: 600; cursor: pointer;
+    }
+
+    /* Tabela */
+    .tabela-wrap {
+      background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px;
+      overflow: auto; max-height: calc(100vh - 140px);
+    }
+    table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13.5px; }
+    thead th {
+      position: sticky; top: 0; z-index: 3; background: var(--superficie); text-align: right;
+      padding: 0; border-bottom: 2px solid var(--tinta); white-space: nowrap; font-weight: 600;
+    }
+    thead th:first-child { text-align: left; left: 0; z-index: 4; }
+    .ord {
+      width: 100%; border: 0; background: transparent; padding: 10px 12px; cursor: pointer; font-weight: 600;
+      text-align: inherit; display: flex; gap: 6px; align-items: center; justify-content: flex-end;
+    }
+    thead th:first-child .ord { justify-content: flex-start; }
+    .ord:hover { background: var(--hover); }
+    .ord .seta { font-size: 10px; color: var(--tinta-2); min-width: 10px; }
+    th[aria-sort] .ord .seta { color: var(--tinta); }
+
+    tbody th, tfoot th {
+      position: sticky; left: 0; z-index: 1; text-align: left; font-weight: 400; background: var(--superficie);
+      padding: 6px 12px 6px calc(12px + var(--nivel, 0) * 20px); min-width: 320px; max-width: 520px;
+      border-right: 1px solid var(--linha-fina);
+    }
+    td { text-align: right; padding: 6px 12px; white-space: nowrap; min-width: 130px; }
+    tbody tr > * { border-bottom: 1px solid var(--linha-fina); }
+    tbody tr:hover > * { background: var(--hover); }
+    tbody tr.n0 > * { background: var(--ouro-suave); font-weight: 700; }
+    tbody tr.n0:hover > * { background: var(--ouro-claro); }
+    tbody tr.n1 > * { font-weight: 600; }
+    .rot { display: flex; align-items: center; gap: 6px; }
+    .rot .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .toggle, .sem-toggle { width: 20px; height: 20px; flex: none; }
+    .toggle { border: 1px solid var(--linha); border-radius: 4px; background: var(--superficie); cursor: pointer; position: relative; padding: 0; }
+    .toggle::before {
+      content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px;
+      border-right: 2px solid var(--tinta); border-bottom: 2px solid var(--tinta); transform: rotate(-45deg); transition: transform .15s;
+    }
+    .toggle[aria-expanded=true]::before { transform: rotate(45deg); margin-top: -5px; }
+    .neg { color: var(--neg); }
+    .vazio-cel { color: var(--tinta-2); }
+    tfoot th, tfoot td {
+      position: sticky; bottom: 0; background: var(--marca); color: var(--superficie); font-weight: 700;
+      border-top: 2px solid var(--ouro); padding-top: 10px; padding-bottom: 10px;
+    }
+    tfoot th { z-index: 2; }
+    tfoot td.neg { color: color-mix(in srgb, var(--laranja) 70%, white); }
+    .vazio { margin: 0; padding: 32px 16px; text-align: center; color: var(--tinta-2); }
+    .nota { margin: 10px 0 0; font-size: 13px; color: var(--tinta-2); }
+    .aviso {
+      margin: 12px 0 0; padding: 10px 14px; border-left: 4px solid var(--laranja); background: var(--neg-fundo); border-radius: 4px; font-size: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .pagina { padding: 16px 16px 40px; }
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      tbody th, tfoot th { min-width: 220px; }
+      .segmento label { padding: 0 10px; }
+    }
+  </style>
+</head>
+<body>
+<main class="pagina">
+  <header class="topo">
+    <div>
+      <h1>Vendas</h1>
+      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto e margem</p>
+    </div>
+    <p class="carimbo" id="carimbo">Carregando…</p>
+  </header>
+
+  <p class="aviso" id="aviso" hidden></p>
+
+  <section class="filtros" aria-label="Filtros">
+    <div class="campo">
+      <span class="rotulo" id="rot-tipo">Tipo venda</span>
+      <div class="segmento" id="tipo" role="radiogroup" aria-labelledby="rot-tipo"></div>
+    </div>
+
+    <div class="campo">
+      <span class="rotulo">Período</span>
+      <details class="drop" id="f-periodo">
+        <summary>Todos</summary>
+        <div class="painel">
+          <div class="painel-acoes"><button type="button" id="periodo-limpar">Limpar</button></div>
+          <div class="lista" id="lista-periodo"></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="campo">
+      <label class="rotulo" for="data-de">Data de</label>
+      <input type="date" id="data-de">
+    </div>
+    <div class="campo">
+      <label class="rotulo" for="data-ate">Data até</label>
+      <input type="date" id="data-ate">
+    </div>
+
+    <div class="campo">
+      <span class="rotulo">UF</span>
+      <details class="drop" id="f-uf">
+        <summary>Todas</summary>
+        <div class="painel">
+          <input type="search" class="busca" id="busca-uf" placeholder="Buscar UF" aria-label="Buscar UF">
+          <div class="painel-acoes">
+            <button type="button" id="uf-marcar">Marcar visíveis</button>
+            <button type="button" id="uf-limpar">Limpar</button>
+          </div>
+          <div class="lista" id="lista-uf"></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="campo">
+      <span class="rotulo">Filial</span>
+      <details class="drop" id="f-filial">
+        <summary>Todas</summary>
+        <div class="painel">
+          <input type="search" class="busca" id="busca-filial" placeholder="Buscar filial" aria-label="Buscar filial">
+          <div class="painel-acoes">
+            <button type="button" id="filial-marcar">Marcar visíveis</button>
+            <button type="button" id="filial-limpar">Limpar</button>
+          </div>
+          <div class="lista" id="lista-filial"></div>
+        </div>
+      </details>
+    </div>
+
+    <button type="button" class="btn-sec" id="btn-limpar">Limpar filtros</button>
+  </section>
+
+  <section class="kpis" id="kpis" aria-label="Totais do filtro"></section>
+
+  <section class="config">
+    <div class="niveis">
+      <span class="rotulo">Linhas da tabela (marque e ordene)</span>
+      <div class="chips" id="niveis"></div>
+    </div>
+    <div class="acoes">
+      <button type="button" class="btn-sec" id="btn-expandir">Expandir tudo</button>
+      <button type="button" class="btn-sec" id="btn-recolher">Recolher tudo</button>
+      <button type="button" class="btn-pri" id="btn-csv">Exportar CSV</button>
+    </div>
+  </section>
+
+  <div class="tabela-wrap">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+      <tfoot id="tfoot"></tfoot>
+    </table>
+    <p class="vazio" id="vazio" hidden></p>
+  </div>
+  <p class="nota">
+    Lucro bruto = Venda líquida − Custo. Margem = Lucro bruto ÷ Venda líquida; nos subtotais e no total,
+    é calculada sobre os valores somados (não é a média das margens). Período e Data de/até são aplicados juntos.
+  </p>
+</main>
+
+<script th:inline="javascript">
+(() => {
+  'use strict';
+
+  /* =====================================================================
+     CONFIGURAÇÃO — único trecho que normalmente precisa de ajuste
+     ---------------------------------------------------------------------
+     fonte 'thymeleaf': a aplicação injeta o resultado da consulta VENDAS
+                        na variável abaixo (${VENDAS}). Se a aplicação
+                        expuser com outro nome, troque apenas ali.
+     fonte 'api'      : o painel busca o JSON em urlApi via fetch.
+     tiposVenda       : colunas de valor usadas em cada opção do filtro
+                        "Tipo venda".
+     ===================================================================== */
+  const CONFIG = {
+    fonte: 'thymeleaf',
+    urlApi: '/api/consultas/vendas',
+    tiposVenda: {
+      VF_V: { rotulo: 'Venda Futura e Venda', venda: 'V_VF', custo: 'CUSTO_VVF' },
+      V_R:  { rotulo: 'Venda e Remessa',      venda: 'V_RF', custo: 'CUSTO_VRF' }
+    },
+    tipoPadrao: 'VF_V',
+    campoData: 'DATA',
+    dimensoes: [
+      { campo: 'UF',      rotulo: 'UF' },
+      { campo: 'FILIAL',  rotulo: 'Filial' },
+      { campo: 'RTV',     rotulo: 'RTV' },
+      { campo: 'GRUPO',   rotulo: 'Grupo' },
+      { campo: 'MES_ANO', rotulo: 'Mês/Ano' }
+    ],
+    niveisPadrao: ['UF', 'FILIAL', 'RTV', 'GRUPO', 'MES_ANO']   // ordem e níveis ativos ao abrir
+  };
+  /*<![CDATA[*/
+  const DADOS_THYMELEAF = /*[[${VENDAS}]]*/ null;
+  /*]]>*/
+
+  // ---------------------------------------------------------------------
+  const SEP = '␟';
+  const VAZIO_ROT = '(sem valor)';
+  const MESES_ABR = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const METRICAS = [
+    { k: 'v', rotulo: 'Venda Líquida', csv: 'VENDA_LIQUIDA' },
+    { k: 'c', rotulo: 'Custo',         csv: 'CUSTO' },
+    { k: 'l', rotulo: 'Lucro Bruto',   csv: 'LUCRO_BRUTO' },
+    { k: 'm', rotulo: 'Margem %',      csv: 'MARGEM_PERC' }
+  ];
+
+  const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+  const fmtCsv = new Intl.NumberFormat('pt-BR', { useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtInt = new Intl.NumberFormat('pt-BR');
+  const limpa = v => (Math.abs(v) < 0.005 ? 0 : v);
+  const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const txt = v => (v === null || v === undefined || String(v).trim() === '') ? VAZIO_ROT : String(v).trim();
+  const cmpTexto = (a, b) => String(a).localeCompare(String(b), 'pt-BR', { numeric: true });
+  const dimDef = campo => CONFIG.dimensoes.find(d => d.campo === campo);
+  const $ = id => document.getElementById(id);
+
+  function num(v) {
+    if (v === null || v === undefined || v === '') return 0;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+    let s = String(v).trim();
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** Aceita array de objetos, {rows|data|dados|items: [...]} ou {columns: [nomes], rows: [arrays de valores]}. */
+  function extrairRegistros(bruto) {
+    if (typeof bruto === 'string') { try { bruto = JSON.parse(bruto); } catch { return []; } }
+    if (!bruto) return [];
+    if (Array.isArray(bruto)) return bruto;
+    const cols = bruto.columns || bruto.colunas;
+    const rows = bruto.rows || bruto.data || bruto.dados || bruto.items || bruto.linhas || [];
+    if (Array.isArray(cols) && rows.length && Array.isArray(rows.at(0))) {
+      const nomes = cols.map(c => (typeof c === 'string' ? c : (c.name || c.nome || c.label)));
+      return rows.map(r => Object.fromEntries(nomes.map((n, i) => ([n, r.at(i)]))));
+    }
+    return rows;
+  }
+
+  /** DATA pode vir como 'AAAA-MM-DD…', 'DD/MM/AAAA', timestamp (ms), AAAAMMDD, [a, m, d] ou LocalDate serializado. */
+  function lerData(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const ok = (a, m, d) => (a > 1900 && a < 2200 && m >= 1 && m <= 12 && d >= 1 && d <= 31) ? { a, m, d } : null;
+    const deDate = dt => (Number.isNaN(dt.getTime()) ? null : ok(dt.getFullYear(), dt.getMonth() + 1, dt.getDate()));
+    if (Array.isArray(v)) return v.length >= 3 ? ok(Number(v.at(0)), Number(v.at(1)), Number(v.at(2))) : null;
+    if (typeof v === 'object') {
+      if ('year' in v) return ok(Number(v.year), Number(v.monthValue ?? v.month), Number(v.dayOfMonth ?? v.day));
+      if (typeof v.time === 'number') return deDate(new Date(v.time));
+      return null;
+    }
+    if (typeof v === 'number') {
+      if (v > 1e11) return deDate(new Date(v));
+      if (v > 19000000 && v < 22000000) return ok(Math.floor(v / 10000), Math.floor(v / 100) % 100, v % 100);
+      return null;
+    }
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return ok(+m.at(1), +m.at(2), +m.at(3));
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return ok(+m.at(3), +m.at(2), +m.at(1));
+    if (/^\d{12,}$/.test(s)) return deDate(new Date(Number(s)));
+    return deDate(new Date(s));
+  }
+  const diaIso = n => `${Math.floor(n / 10000)}-${String(Math.floor(n / 100) % 100).padStart(2, '0')}-${String(n % 100).padStart(2, '0')}`;
+  const diaBr = n => `${String(n % 100).padStart(2, '0')}/${String(Math.floor(n / 100) % 100).padStart(2, '0')}/${Math.floor(n / 10000)}`;
+  const isoParaDia = s => (s ? Number(s.replace(/-/g, '')) : null);
+  const anoDe = p => Math.floor(p / 100);
+  const nomeMes = p => MESES_NOME.at((p % 100) - 1);
+
+  // ---------- preparação dos dados ----------
+  let LINHAS = [];
+  let ordemMes = new Map();        // rótulo MES_ANO -> AAAAMM (ordem cronológica)
+  let PERIODOS = [];               // AAAAMM distintos
+  let ufsPorFilial = new Map();
+
+  function preparar(registros) {
+    const presentes = new Set();
+    const linhas = [];
+    for (const r0 of registros) {
+      if (!r0 || typeof r0 !== 'object') continue;
+      const r = {};
+      for (const k of Object.keys(r0)) { r[k.toUpperCase()] = r0[k]; presentes.add(k.toUpperCase()); }
+      const dt = lerData(r[CONFIG.campoData.toUpperCase()]);
+      const dims = {};
+      for (const d of CONFIG.dimensoes) dims[d.campo] = txt(r[d.campo.toUpperCase()]);
+      if (dims.MES_ANO === VAZIO_ROT && dt) dims.MES_ANO = `${MESES_ABR.at(dt.m - 1)}/${dt.a}`;
+      const vals = {};
+      for (const [k, t] of Object.entries(CONFIG.tiposVenda)) {
+        vals[k] = { v: num(r[t.venda.toUpperCase()]), c: num(r[t.custo.toUpperCase()]) };
+      }
+      linhas.push({
+        dims, vals,
+        p: dt ? dt.a * 100 + dt.m : null,
+        dia: dt ? dt.a * 10000 + dt.m * 100 + dt.d : null
+      });
+    }
+
+    ordemMes = new Map();
+    const pers = new Set();
+    ufsPorFilial = new Map();
+    for (const l of linhas) {
+      if (l.p !== null) {
+        pers.add(l.p);
+        const atual = ordemMes.get(l.dims.MES_ANO);
+        if (atual === undefined || l.p < atual) ordemMes.set(l.dims.MES_ANO, l.p);
+      }
+      if (!ufsPorFilial.has(l.dims.FILIAL)) ufsPorFilial.set(l.dims.FILIAL, new Set());
+      ufsPorFilial.get(l.dims.FILIAL).add(l.dims.UF);
+    }
+    PERIODOS = Array.from(pers).sort((a, b) => a - b);
+
+    // aviso de colunas ausentes (ex.: nomes de "Venda e Remessa" ainda não confirmados)
+    if (linhas.length) {
+      const faltando = [];
+      for (const t of Object.values(CONFIG.tiposVenda)) {
+        const f = [t.venda, t.custo].filter(c => !presentes.has(c.toUpperCase()));
+        if (f.length) faltando.push(`${t.rotulo}: ${f.join(', ')}`);
+      }
+      if (!presentes.has(CONFIG.campoData.toUpperCase())) faltando.push(`filtro de data: ${CONFIG.campoData}`);
+      if (faltando.length) {
+        el.aviso.hidden = false;
+        el.aviso.textContent = 'A consulta VENDAS não retornou estas colunas (os valores aparecem zerados): ' +
+          faltando.join(' · ') + '. Ajuste o bloco CONFIG do painel.';
+      }
+    }
+    return linhas;
+  }
+
+  // ---------- estado ----------
+  const novoEstado = () => ({
+    tipo: CONFIG.tipoPadrao,
+    periodos: new Set(),           // vazio = todos
+    de: null, ate: null,           // AAAAMMDD
+    ufs: new Set(), filiais: new Set()
+  });
+  let estado = novoEstado();
+  const pivo = {
+    ordemDims: [
+      ...CONFIG.niveisPadrao,
+      ...CONFIG.dimensoes.map(d => d.campo).filter(c => !CONFIG.niveisPadrao.includes(c))
+    ],
+    ativos: new Set(CONFIG.niveisPadrao),
+    abertos: new Set(),
+    ordem: { col: 'rotulo', dir: 1 }
+  };
+  const niveis = () => pivo.ordemDims.filter(d => pivo.ativos.has(d));
+
+  const el = {
+    carimbo: $('carimbo'), aviso: $('aviso'), tipo: $('tipo'), kpis: $('kpis'), niveis: $('niveis'),
+    thead: $('thead'), tbody: $('tbody'), tfoot: $('tfoot'), vazio: $('vazio'),
+    fPeriodo: $('f-periodo'), listaPeriodo: $('lista-periodo'), de: $('data-de'), ate: $('data-ate')
+  };
+
+  function filtrar() {
+    const { periodos, de, ate, ufs, filiais } = estado;
+    return LINHAS.filter(l =>
+      (!periodos.size || (l.p !== null && periodos.has(l.p))) &&
+      (de === null || (l.dia !== null && l.dia >= de)) &&
+      (ate === null || (l.dia !== null && l.dia <= ate)) &&
+      (!ufs.size || ufs.has(l.dims.UF)) &&
+      (!filiais.size || filiais.has(l.dims.FILIAL)));
+  }
+
+  // ---------- tabela dinâmica ----------
+  function montarArvore(linhas, niv) {
+    const raiz = { v: 0, c: 0, filhos: new Map(), nivel: -1, caminho: '' };
+    for (const l of linhas) {
+      const { v, c } = l.vals[estado.tipo];
+      raiz.v += v; raiz.c += c;
+      let no = raiz;
+      niv.forEach((dim, i) => {
+        const val = l.dims[dim];
+        let f = no.filhos.get(val);
+        if (!f) {
+          f = { rotulo: val, dim, nivel: i, caminho: no.caminho + SEP + dim + '=' + val, v: 0, c: 0, filhos: new Map() };
+          no.filhos.set(val, f);
+        }
+        f.v += v; f.c += c;
+        no = f;
+      });
+    }
+    return raiz;
+  }
+
+  function met(no) {
+    const l = no.v - no.c;
+    return { v: no.v, c: no.c, l, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
+  }
+
+  function cmpRotulo(a, b) {
+    if (a.dim === 'MES_ANO') {
+      const pa = ordemMes.get(a.rotulo) ?? Infinity, pb = ordemMes.get(b.rotulo) ?? Infinity;
+      if (pa !== pb) return pa < pb ? -1 : 1;
+    }
+    if (a.rotulo === VAZIO_ROT) return 1;
+    if (b.rotulo === VAZIO_ROT) return -1;
+    return cmpTexto(a.rotulo, b.rotulo);
+  }
+
+  function filhosOrdenados(no) {
+    const arr = Array.from(no.filhos.values());
+    const { col, dir } = pivo.ordem;
+    if (col === 'rotulo') return arr.sort((a, b) => cmpRotulo(a, b) * dir);
+    const val = x => { const m = met(x)[col]; return m === null ? -Infinity : m; };
+    return arr.sort((a, b) => (val(a) - val(b)) * dir || cmpRotulo(a, b));
+  }
+
+  function celulas(no) {
+    const m = met(no);
+    return METRICAS.map(x => {
+      const v = m[x.k];
+      if (v === null) return '<td class="vazio-cel">–</td>';
+      const n = limpa(v);
+      const t = x.k === 'm' ? fmtPct.format(n) + '%' : fmt2.format(n);
+      return `<td class="${n < 0 ? 'neg' : ''}">${t}</td>`;
+    }).join('');
+  }
+
+  function linhaHtml(no, out) {
+    const folha = no.filhos.size === 0;
+    const aberto = !folha && pivo.abertos.has(no.caminho);
+    const nome = dimDef(no.dim).rotulo;
+    const toggle = folha
+      ? '<span class="sem-toggle" aria-hidden="true"></span>'
+      : `<button type="button" class="toggle" data-c="${esc(no.caminho)}" aria-expanded="${aberto}" aria-label="${aberto ? 'Recolher' : 'Expandir'} ${esc(nome)} ${esc(no.rotulo)}"></button>`;
+    out.push(`<tr class="n${Math.min(no.nivel, 4)}"><th scope="row" style="--nivel:${no.nivel}" title="${esc(nome)}: ${esc(no.rotulo)}">` +
+      `<span class="rot">${toggle}<span class="txt">${esc(no.rotulo)}</span></span></th>${celulas(no)}</tr>`);
+    if (aberto) for (const f of filhosOrdenados(no)) linhaHtml(f, out);
+  }
+
+  let ultimaArvore = null;
+
+  function render() {
+    const niv = niveis();
+    const linhas = filtrar();
+    const raiz = montarArvore(linhas, niv);
+    ultimaArvore = raiz;
+    const tipo = CONFIG.tiposVenda[estado.tipo];
+
+    // KPIs
+    const t = met(raiz);
+    const kpi = (titulo, valor, neg) => `<div class="kpi"><h2>${titulo}</h2><p class="${neg ? 'neg' : ''}">${valor}</p></div>`;
+    el.kpis.innerHTML =
+      kpi(`Venda Líquida · ${esc(tipo.rotulo)}`, fmtMoeda.format(limpa(t.v)), t.v < 0) +
+      kpi('Custo', fmtMoeda.format(limpa(t.c)), false) +
+      kpi('Lucro Bruto', fmtMoeda.format(limpa(t.l)), t.l < 0) +
+      kpi('Margem', t.m === null ? '–' : fmtPct.format(limpa(t.m)) + '%', t.m !== null && t.m < 0);
+
+    // cabeçalho com ordenação
+    const seta = col => (pivo.ordem.col === col ? (pivo.ordem.dir === 1 ? '▲' : '▼') : '');
+    const sortAttr = col => (pivo.ordem.col === col ? ` aria-sort="${pivo.ordem.dir === 1 ? 'ascending' : 'descending'}"` : '');
+    const tituloNiv = niv.length ? niv.map(d => dimDef(d).rotulo).join(' › ') : 'Total';
+    el.thead.innerHTML = '<tr>' +
+      `<th scope="col"${sortAttr('rotulo')}><button type="button" class="ord" data-ord="rotulo">${esc(tituloNiv)}<span class="seta">${seta('rotulo')}</span></button></th>` +
+      METRICAS.map(x => `<th scope="col"${sortAttr(x.k)}><button type="button" class="ord" data-ord="${x.k}">${x.rotulo}<span class="seta">${seta(x.k)}</span></button></th>`).join('') +
+      '</tr>';
+
+    // corpo
+    const out = [];
+    if (niv.length) for (const f of filhosOrdenados(raiz)) linhaHtml(f, out);
+    el.tbody.innerHTML = out.join('');
+    el.tfoot.innerHTML = linhas.length ? `<tr><th scope="row">Total geral</th>${celulas(raiz)}</tr>` : '';
+
+    const dataInvalida = estado.de !== null && estado.ate !== null && estado.de > estado.ate;
+    el.de.setAttribute('aria-invalid', String(dataInvalida));
+    el.ate.setAttribute('aria-invalid', String(dataInvalida));
+    el.vazio.hidden = linhas.length > 0;
+    if (!linhas.length) {
+      el.vazio.textContent = !LINHAS.length ? 'A consulta VENDAS não retornou registros.'
+        : (dataInvalida ? 'A data inicial é maior que a data final.'
+          : 'Nenhum registro corresponde aos filtros. Revise período, datas, UF ou filial.');
+    }
+  }
+
+  // ---------- tipo venda ----------
+  function montarTipo() {
+    el.tipo.innerHTML = Object.entries(CONFIG.tiposVenda).map(([k, t]) =>
+      `<label><input type="radio" name="tipo-venda" value="${esc(k)}"${k === estado.tipo ? ' checked' : ''}><span>${esc(t.rotulo)}</span></label>`
+    ).join('');
+  }
+  el.tipo.addEventListener('change', e => { estado.tipo = e.target.value; render(); });
+
+  // ---------- período: ano › meses ----------
+  function montarPeriodos() {
+    const anos = new Map();
+    for (const p of PERIODOS) {
+      const a = anoDe(p);
+      if (!anos.has(a)) anos.set(a, []);
+      anos.get(a).push(p);
+    }
+    el.listaPeriodo.innerHTML = Array.from(anos.entries()).sort((a, b) => b.at(0) - a.at(0)).map(([ano, meses]) =>
+      `<div class="per-grupo">` +
+        `<div class="per-ano">` +
+          `<button type="button" class="per-toggle" aria-expanded="false" aria-controls="per-${ano}" aria-label="Mostrar meses de ${ano}"></button>` +
+          `<label><input type="checkbox" data-ano="${ano}">${ano}</label>` +
+        `</div>` +
+        `<div class="per-meses" id="per-${ano}" hidden>` +
+          meses.map(p => `<label><input type="checkbox" data-p="${p}">${nomeMes(p)}</label>`).join('') +
+        `</div>` +
+      `</div>`
+    ).join('') || '<p class="vazio">Sem datas na consulta.</p>';
+  }
+
+  function sincronizarPeriodos() {
+    el.listaPeriodo.querySelectorAll('input[data-p]').forEach(c => { c.checked = estado.periodos.has(Number(c.dataset.p)); });
+    el.listaPeriodo.querySelectorAll('input[data-ano]').forEach(c => {
+      const ano = Number(c.dataset.ano);
+      const meses = PERIODOS.filter(p => anoDe(p) === ano);
+      const n = meses.filter(p => estado.periodos.has(p)).length;
+      c.checked = n > 0 && n === meses.length;
+      c.indeterminate = n > 0 && n < meses.length;
+    });
+    const sel = PERIODOS.filter(p => estado.periodos.has(p));
+    let resumo = 'Todos';
+    if (sel.length === 1) resumo = `${MESES_ABR.at((sel.at(0) % 100) - 1)}/${anoDe(sel.at(0))}`;
+    else if (sel.length > 1) {
+      const anos = Array.from(new Set(sel.map(anoDe)));
+      const completos = anos.every(a => PERIODOS.filter(p => anoDe(p) === a).every(p => estado.periodos.has(p)));
+      resumo = completos ? anos.sort().join(', ') : `${sel.length} meses`;
+    }
+    el.fPeriodo.querySelector('summary').textContent = resumo;
+    el.fPeriodo.classList.toggle('ativo', sel.length > 0);
+  }
+
+  el.listaPeriodo.addEventListener('change', e => {
+    const c = e.target;
+    if (c.dataset.ano) {
+      const ano = Number(c.dataset.ano);
+      for (const p of PERIODOS) if (anoDe(p) === ano) (c.checked ? estado.periodos.add(p) : estado.periodos.delete(p));
+    } else if (c.dataset.p) {
+      const p = Number(c.dataset.p);
+      c.checked ? estado.periodos.add(p) : estado.periodos.delete(p);
+    }
+    if (estado.periodos.size === PERIODOS.length) estado.periodos.clear();   // tudo marcado = Todos
+    sincronizarPeriodos();
+    render();
+  });
+  el.listaPeriodo.addEventListener('click', e => {
+    const b = e.target.closest('.per-toggle');
+    if (!b) return;
+    const aberto = b.getAttribute('aria-expanded') !== 'true';
+    b.setAttribute('aria-expanded', String(aberto));
+    $(b.getAttribute('aria-controls')).hidden = !aberto;
+  });
+  $('periodo-limpar').addEventListener('click', () => { estado.periodos.clear(); sincronizarPeriodos(); render(); });
+
+  // ---------- data de / até ----------
+  function configurarDatas() {
+    const dias = LINHAS.map(l => l.dia).filter(d => d !== null);
+    if (!dias.length) return;
+    const min = Math.min(...dias), max = Math.max(...dias);
+    for (const i of [el.de, el.ate]) { i.min = diaIso(min); i.max = diaIso(max); }
+    el.carimbo.textContent = `${fmtInt.format(LINHAS.length)} registros · dados de ${diaBr(min)} a ${diaBr(max)}`;
+  }
+  el.de.addEventListener('change', () => { estado.de = isoParaDia(el.de.value); render(); });
+  el.ate.addEventListener('change', () => { estado.ate = isoParaDia(el.ate.value); render(); });
+
+  // ---------- UF e filial (seleção múltipla) ----------
+  const filtrosLocal = {};
+
+  function configurarMulti(nome, titulo, chave) {
+    const f = { det: $(`f-${nome}`), lista: $(`lista-${nome}`), busca: $(`busca-${nome}`), sel: () => estado[chave] };
+    f.resumo = () => {
+      const n = f.sel().size;
+      f.det.querySelector('summary').textContent = !n ? 'Todas' : (n === 1 ? Array.from(f.sel()).at(0) : `${n} selecionadas`);
+      f.det.classList.toggle('ativo', n > 0);
+      f.det.querySelector('summary').title = `${titulo}: ${!n ? 'Todas' : Array.from(f.sel()).join(', ')}`;
+    };
+    f.visibilidade = () => {
+      const b = norm(f.busca.value).trim();
+      f.lista.querySelectorAll('label').forEach(l => {
+        let ok = !b || l.dataset.t.includes(b);
+        if (ok && nome === 'filial' && estado.ufs.size) ok = l.dataset.ufs.split(SEP).some(u => estado.ufs.has(u));
+        l.hidden = !ok;
+      });
+    };
+    f.sincronizar = () => {
+      f.lista.querySelectorAll('input').forEach(c => { c.checked = f.sel().has(c.value); });
+      f.resumo();
+      f.visibilidade();
+    };
+    f.lista.addEventListener('change', e => {
+      const c = e.target;
+      c.checked ? f.sel().add(c.value) : f.sel().delete(c.value);
+      aoMudarLocal(nome);
+    });
+    f.busca.addEventListener('input', f.visibilidade);
+    $(`${nome}-marcar`).addEventListener('click', () => {
+      f.lista.querySelectorAll('label:not([hidden]) input').forEach(c => { f.sel().add(c.value); });
+      aoMudarLocal(nome);
+    });
+    $(`${nome}-limpar`).addEventListener('click', () => { f.sel().clear(); aoMudarLocal(nome); });
+    filtrosLocal[nome] = f;
+  }
+
+  /** UF restringe as filiais: filiais fora das UFs marcadas saem da seleção e da lista. */
+  function aoMudarLocal(nome) {
+    if (nome === 'uf' && estado.ufs.size) {
+      for (const fi of Array.from(estado.filiais)) {
+        const us = ufsPorFilial.get(fi);
+        if (!us || !Array.from(us).some(u => estado.ufs.has(u))) estado.filiais.delete(fi);
+      }
+    }
+    filtrosLocal.uf.sincronizar();
+    filtrosLocal.filial.sincronizar();
+    render();
+  }
+
+  function montarLocais() {
+    const ufs = new Set(LINHAS.map(l => l.dims.UF));
+    filtrosLocal.uf.lista.innerHTML = Array.from(ufs).sort(cmpTexto).map(u =>
+      `<label data-t="${esc(norm(u))}"><input type="checkbox" value="${esc(u)}"><span>${esc(u)}</span></label>`).join('');
+    filtrosLocal.filial.lista.innerHTML = Array.from(ufsPorFilial.entries()).sort((a, b) => cmpTexto(a.at(0), b.at(0))).map(([fi, us]) => {
+      const lu = Array.from(us).sort(cmpTexto);
+      return `<label data-t="${esc(norm(fi + ' ' + lu.join(' ')))}" data-ufs="${esc(lu.join(SEP))}">` +
+        `<input type="checkbox" value="${esc(fi)}"><span>${esc(fi)}<br><small>${esc(lu.join(', '))}</small></span></label>`;
+    }).join('');
+    filtrosLocal.uf.sincronizar();
+    filtrosLocal.filial.sincronizar();
+  }
+
+  // ---------- níveis (linhas) da tabela dinâmica ----------
+  function montarNiveis() {
+    let ordem = 0;
+    const total = pivo.ordemDims.length;
+    el.niveis.innerHTML = pivo.ordemDims.map((d, i) => {
+      const def = dimDef(d);
+      const on = pivo.ativos.has(d);
+      if (on) ordem++;
+      return `<div class="chip${on ? ' on' : ''}">` +
+        `<button type="button" class="mover" data-d="${d}" data-mover="-1"${i === 0 ? ' disabled' : ''} aria-label="Mover ${esc(def.rotulo)} para antes">←</button>` +
+        `<label><input type="checkbox" data-d="${d}"${on ? ' checked' : ''}>` +
+          (on ? `<span class="ordem" aria-hidden="true">${ordem}</span>` : '') + `${esc(def.rotulo)}</label>` +
+        `<button type="button" class="mover" data-d="${d}" data-mover="1"${i === total - 1 ? ' disabled' : ''} aria-label="Mover ${esc(def.rotulo)} para depois">→</button>` +
+      `</div>`;
+    }).join('');
+  }
+  el.niveis.addEventListener('change', e => {
+    const d = e.target.dataset.d;
+    if (!d) return;
+    e.target.checked ? pivo.ativos.add(d) : pivo.ativos.delete(d);
+    pivo.abertos.clear();
+    montarNiveis();
+    render();
+  });
+  el.niveis.addEventListener('click', e => {
+    const b = e.target.closest('.mover');
+    if (!b || b.disabled) return;
+    const i = pivo.ordemDims.indexOf(b.dataset.d);
+    const j = i + Number(b.dataset.mover);
+    if (j < 0 || j >= pivo.ordemDims.length) return;
+    const tmp = pivo.ordemDims.at(i);
+    pivo.ordemDims.splice(i, 1, pivo.ordemDims.at(j));
+    pivo.ordemDims.splice(j, 1, tmp);
+    pivo.abertos.clear();
+    montarNiveis();
+    render();
+    const alvo = el.niveis.querySelector(`.mover[data-d="${b.dataset.d}"][data-mover="${b.dataset.mover}"]`);
+    if (alvo && !alvo.disabled) alvo.focus();
+  });
+
+  // ---------- interação com a tabela ----------
+  el.tbody.addEventListener('click', e => {
+    const b = e.target.closest('button.toggle');
+    if (!b) return;
+    const c = b.dataset.c;
+    pivo.abertos.has(c) ? pivo.abertos.delete(c) : pivo.abertos.add(c);
+    render();
+    const alvo = el.tbody.querySelector(`button.toggle[data-c="${CSS.escape(c)}"]`);
+    if (alvo) alvo.focus();
+  });
+  el.thead.addEventListener('click', e => {
+    const b = e.target.closest('.ord');
+    if (!b) return;
+    const col = b.dataset.ord;
+    if (pivo.ordem.col === col) pivo.ordem.dir *= -1;
+    else pivo.ordem = { col, dir: col === 'rotulo' ? 1 : -1 };
+    render();
+    const alvo = el.thead.querySelector(`.ord[data-ord="${col}"]`);
+    if (alvo) alvo.focus();
+  });
+
+  function percorrer(no, fn) {
+    for (const f of filhosOrdenados(no)) { fn(f); percorrer(f, fn); }
+  }
+  $('btn-expandir').addEventListener('click', () => {
+    if (!ultimaArvore) return;
+    percorrer(ultimaArvore, n => { if (n.filhos.size) pivo.abertos.add(n.caminho); });
+    render();
+  });
+  $('btn-recolher').addEventListener('click', () => { pivo.abertos.clear(); render(); });
+
+  $('btn-limpar').addEventListener('click', () => {
+    estado = novoEstado();
+    el.de.value = ''; el.ate.value = '';
+    montarTipo();
+    sincronizarPeriodos();
+    filtrosLocal.uf.busca.value = ''; filtrosLocal.filial.busca.value = '';
+    filtrosLocal.uf.sincronizar(); filtrosLocal.filial.sincronizar();
+    render();
+  });
+
+  // ---------- exportação ----------
+  $('btn-csv').addEventListener('click', () => {
+    if (!ultimaArvore) return;
+    const niv = niveis();
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const numCsv = (k, m) => (m[k] === null ? '' : fmtCsv.format(limpa(m[k])));
+    const cabecalho = ['TIPO_VENDA', 'NIVEL', ...niv, ...METRICAS.map(x => x.csv)];
+    const linhas = Array.of(cabecalho.map(q).join(';'));
+    const tipo = CONFIG.tiposVenda[estado.tipo].rotulo;
+    const caminho = [];
+    const visitar = no => {
+      for (const f of filhosOrdenados(no)) {
+        caminho.splice(f.nivel, caminho.length, f.rotulo);
+        const m = met(f);
+        const cols = niv.map((_, i) => (i <= f.nivel ? caminho.at(i) : ''));
+        linhas.push([q(tipo), f.nivel + 1, ...cols.map(q), ...METRICAS.map(x => numCsv(x.k, m))].join(';'));
+        visitar(f);
+      }
+    };
+    visitar(ultimaArvore);
+    const mt = met(ultimaArvore);
+    linhas.push([q(tipo), 0, q('TOTAL GERAL'), ...niv.slice(1).map(() => q('')), ...METRICAS.map(x => numCsv(x.k, mt))].join(';'));
+    const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `vendas-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  // fecha os menus suspensos ao clicar fora ou com Esc
+  document.addEventListener('click', e => {
+    document.querySelectorAll('details.drop[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('details.drop[open]').forEach(d => { d.open = false; d.querySelector('summary').focus(); });
+  });
+
+  // ---------- inicialização ----------
+  async function carregar() {
+    let bruto = DADOS_THYMELEAF;
+    if (CONFIG.fonte === 'api') {
+      const resp = await fetch(CONFIG.urlApi, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      bruto = await resp.json();
+    }
+    return extrairRegistros(bruto);
+  }
+
+  configurarMulti('uf', 'UF', 'ufs');
+  configurarMulti('filial', 'Filial', 'filiais');
+  montarTipo();
+  montarNiveis();
+
+  carregar().then(registros => {
+    LINHAS = preparar(registros);
+    el.carimbo.textContent = `${fmtInt.format(LINHAS.length)} registros`;
+    configurarDatas();
+    montarPeriodos();
+    sincronizarPeriodos();
+    montarLocais();
+    render();
+  }).catch(err => {
+    el.carimbo.textContent = '';
+    el.aviso.hidden = false;
+    el.aviso.textContent = `Não foi possível carregar a consulta VENDAS (${err.message}).`;
+    LINHAS = [];
+    render();
+  });
+})();
+</script>
+</body>
+</html>
