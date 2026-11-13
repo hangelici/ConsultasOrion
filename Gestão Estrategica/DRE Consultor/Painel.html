@@ -115,6 +115,7 @@
     }
     .per-toggle[aria-expanded=true]::before { transform: rotate(45deg); margin-top: -5px; }
     .per-meses { padding-left: 28px; display: grid; grid-template-columns: 1fr 1fr; }
+    .per-meses[hidden] { display: none; }
 
     /* KPIs */
     .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
@@ -277,6 +278,21 @@
             <button type="button" id="filial-limpar">Limpar</button>
           </div>
           <div class="lista" id="lista-filial"></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="campo">
+      <span class="rotulo">RTV</span>
+      <details class="drop" id="f-rtv">
+        <summary>Todos</summary>
+        <div class="painel">
+          <input type="search" class="busca" id="busca-rtv" placeholder="Buscar RTV" aria-label="Buscar RTV">
+          <div class="painel-acoes">
+            <button type="button" id="rtv-marcar">Marcar visíveis</button>
+            <button type="button" id="rtv-limpar">Limpar</button>
+          </div>
+          <div class="lista" id="lista-rtv"></div>
         </div>
       </details>
     </div>
@@ -445,6 +461,7 @@
   let ordemMes = new Map();        // rótulo MES_ANO -> AAAAMM (ordem cronológica)
   let PERIODOS = [];               // AAAAMM distintos
   let ufsPorFilial = new Map();
+  let locaisPorRtv = new Map();    // RTV -> Set de [UF, FILIAL]
 
   /** Registro com chaves em maiúsculas (os nomes de coluna variam conforme o driver). */
   function maiusculo(r0, presentes) {
@@ -455,7 +472,6 @@
   const idTxt = v => { const s = String(v ?? '').trim(); const n = Number(s); return s !== '' && Number.isFinite(n) ? String(n) : s; };
   /** Chave de ligação VENDAS x comissões: ESTAB + REPRESENT + AAAAMM + GRUPO. */
   const chaveLiga = (estab, rep, p, grupo) => [idTxt(estab), idTxt(rep), p ?? '', norm(String(grupo ?? '').trim())].join(SEP);
-  const linhaVazia = () => Object.fromEntries(Object.keys(CONFIG.tiposVenda).map(k => [k, { v: 0, c: 0 }]));
 
   function preparar(registros, comissoes) {
     const presentes = new Set();
@@ -485,22 +501,12 @@
       avisos.push('A consulta VENDAS precisa das colunas ESTAB, REPRESENT e GRUPO para ligar as comissões');
     }
     const porChave = new Map();
-    const localPorEstab = new Map();   // ESTAB -> { FILIAL, UF }
-    const rtvPorRep = new Map();       // REPRESENT -> RTV
-    const mesPorP = new Map();         // AAAAMM -> rótulo MES_ANO usado pela VENDAS
-    for (const l of linhas) {
-      if (l.p !== null && !mesPorP.has(l.p)) mesPorP.set(l.p, l.dims.MES_ANO);
-      if (!porChave.has(l.chave)) porChave.set(l.chave, l);
-      if (!localPorEstab.has(idTxt(l.estab))) localPorEstab.set(idTxt(l.estab), { FILIAL: l.dims.FILIAL, UF: l.dims.UF });
-      if (!rtvPorRep.has(idTxt(l.rep))) rtvPorRep.set(idTxt(l.rep), l.dims.RTV);
-    }
-    const pers0 = linhas.map(l => l.p).filter(p => p !== null);
-    const pMin = pers0.length ? Math.min(...pers0) : null, pMax = pers0.length ? Math.max(...pers0) : null;
+    for (const l of linhas) if (!porChave.has(l.chave)) porChave.set(l.chave, l);
 
+    // só entram comissões com venda correspondente; as demais são ignoradas
     for (const [k, def] of Object.entries(CONFIG.comissoes)) {
       const regs = comissoes[k] || [];
       const pres = new Set();
-      let semVenda = 0, foraValor = 0, foraQtd = 0;
       for (const r0 of regs) {
         if (!r0 || typeof r0 !== 'object') continue;
         const r = maiusculo(r0, pres);
@@ -508,40 +514,19 @@
         if (!valor) continue;
         const dt = lerData(r[def.data]);
         const p = dt ? dt.a * 100 + dt.m : null;
-        const chave = chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO);
-        let l = porChave.get(chave);
-        if (!l) {
-          // sem venda correspondente: entra como linha própria se o mês estiver no período da VENDAS
-          if (p === null || pMin === null || p < pMin || p > pMax) { foraValor += valor; foraQtd++; continue; }
-          const local = localPorEstab.get(idTxt(r.ESTAB)) || {};
-          const dims = {
-            UF: local.UF ?? VAZIO_ROT,
-            FILIAL: local.FILIAL ?? VAZIO_ROT,
-            RTV: txt(r.RTV) !== VAZIO_ROT ? txt(r.RTV) : (rtvPorRep.get(idTxt(r.REPRESENT)) ?? VAZIO_ROT),
-            GRUPO: txt(r.GRUPO),
-            MES_ANO: mesPorP.get(p) ?? `${MESES_ABR.at(dt.m - 1)}/${dt.a}`
-          };
-          l = { dims, vals: linhaVazia(), cp: 0, cf: 0, p, dia: p * 100 + 1, estab: r.ESTAB, rep: r.REPRESENT, chave };
-          linhas.push(l);
-          porChave.set(chave, l);
-          semVenda++;
-        }
-        l[k] += valor;
+        const l = porChave.get(chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO));
+        if (l) l[k] += valor;
       }
       if (regs.length) {
         const falta = [def.valor, def.data, 'ESTAB', 'REPRESENT', 'GRUPO'].filter(c => !pres.has(c));
         if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
       }
-      if (foraQtd) {
-        avisos.push(`${def.fonte}: ${fmtInt.format(foraQtd)} registro(s) fora do período da VENDAS ` +
-          `(${fmtMoeda.format(foraValor)}) não foram somados`);
-      }
-      if (semVenda) console.info(`${def.fonte}: ${semVenda} combinação(ões) sem venda no mês/grupo incluídas como linhas próprias.`);
     }
 
     ordemMes = new Map();
     const pers = new Set();
     ufsPorFilial = new Map();
+    locaisPorRtv = new Map();
     for (const l of linhas) {
       if (l.p !== null) {
         pers.add(l.p);
@@ -550,6 +535,8 @@
       }
       if (!ufsPorFilial.has(l.dims.FILIAL)) ufsPorFilial.set(l.dims.FILIAL, new Set());
       ufsPorFilial.get(l.dims.FILIAL).add(l.dims.UF);
+      if (!locaisPorRtv.has(l.dims.RTV)) locaisPorRtv.set(l.dims.RTV, new Map());
+      locaisPorRtv.get(l.dims.RTV).set(l.dims.UF + SEP + l.dims.FILIAL, [l.dims.UF, l.dims.FILIAL]);
     }
     PERIODOS = Array.from(pers).sort((a, b) => a - b);
 
@@ -578,7 +565,7 @@
     tipo: CONFIG.tipoPadrao,
     periodos: new Set(),           // vazio = todos
     de: null, ate: null,           // AAAAMMDD
-    ufs: new Set(), filiais: new Set()
+    ufs: new Set(), filiais: new Set(), rtvs: new Set()
   });
   let estado = novoEstado();
   const pivo = {
@@ -599,13 +586,14 @@
   };
 
   function filtrar() {
-    const { periodos, de, ate, ufs, filiais } = estado;
+    const { periodos, de, ate, ufs, filiais, rtvs } = estado;
     return LINHAS.filter(l =>
       (!periodos.size || (l.p !== null && periodos.has(l.p))) &&
       (de === null || (l.dia !== null && l.dia >= de)) &&
       (ate === null || (l.dia !== null && l.dia <= ate)) &&
       (!ufs.size || ufs.has(l.dims.UF)) &&
-      (!filiais.size || filiais.has(l.dims.FILIAL)));
+      (!filiais.size || filiais.has(l.dims.FILIAL)) &&
+      (!rtvs.size || rtvs.has(l.dims.RTV)));
   }
 
   // ---------- tabela dinâmica ----------
@@ -718,7 +706,7 @@
     if (!linhas.length) {
       el.vazio.textContent = !LINHAS.length ? 'A consulta VENDAS não retornou registros.'
         : (dataInvalida ? 'A data inicial é maior que a data final.'
-          : 'Nenhum registro corresponde aos filtros. Revise período, datas, UF ou filial.');
+          : 'Nenhum registro corresponde aos filtros. Revise período, datas, UF, filial ou RTV.');
     }
   }
 
@@ -808,19 +796,25 @@
   // ---------- UF e filial (seleção múltipla) ----------
   const filtrosLocal = {};
 
-  function configurarMulti(nome, titulo, chave) {
+  /** RTV disponível para a UF/filial marcadas (vazio = todas). */
+  const rtvNoLocal = rtv => Array.from(locaisPorRtv.get(rtv)?.values() || []).some(([u, fi]) =>
+    (!estado.ufs.size || estado.ufs.has(u)) && (!estado.filiais.size || estado.filiais.has(fi)));
+
+  function configurarMulti(nome, titulo, chave, fem = true) {
     const f = { det: $(`f-${nome}`), lista: $(`lista-${nome}`), busca: $(`busca-${nome}`), sel: () => estado[chave] };
+    const todos = fem ? 'Todas' : 'Todos', sels = fem ? 'selecionadas' : 'selecionados';
     f.resumo = () => {
       const n = f.sel().size;
-      f.det.querySelector('summary').textContent = !n ? 'Todas' : (n === 1 ? Array.from(f.sel()).at(0) : `${n} selecionadas`);
+      f.det.querySelector('summary').textContent = !n ? todos : (n === 1 ? Array.from(f.sel()).at(0) : `${n} ${sels}`);
       f.det.classList.toggle('ativo', n > 0);
-      f.det.querySelector('summary').title = `${titulo}: ${!n ? 'Todas' : Array.from(f.sel()).join(', ')}`;
+      f.det.querySelector('summary').title = `${titulo}: ${!n ? todos : Array.from(f.sel()).join(', ')}`;
     };
     f.visibilidade = () => {
       const b = norm(f.busca.value).trim();
       f.lista.querySelectorAll('label').forEach(l => {
         let ok = !b || l.dataset.t.includes(b);
         if (ok && nome === 'filial' && estado.ufs.size) ok = l.dataset.ufs.split(SEP).some(u => estado.ufs.has(u));
+        if (ok && nome === 'rtv') ok = rtvNoLocal(l.querySelector('input').value);
         l.hidden = !ok;
       });
     };
@@ -843,7 +837,7 @@
     filtrosLocal[nome] = f;
   }
 
-  /** UF restringe as filiais: filiais fora das UFs marcadas saem da seleção e da lista. */
+  /** UF restringe as filiais, e UF/filial restringem os RTVs: itens fora do recorte saem da seleção e da lista. */
   function aoMudarLocal(nome) {
     if (nome === 'uf' && estado.ufs.size) {
       for (const fi of Array.from(estado.filiais)) {
@@ -851,8 +845,10 @@
         if (!us || !Array.from(us).some(u => estado.ufs.has(u))) estado.filiais.delete(fi);
       }
     }
+    if (nome !== 'rtv') for (const r of Array.from(estado.rtvs)) if (!rtvNoLocal(r)) estado.rtvs.delete(r);
     filtrosLocal.uf.sincronizar();
     filtrosLocal.filial.sincronizar();
+    filtrosLocal.rtv.sincronizar();
     render();
   }
 
@@ -865,8 +861,11 @@
       return `<label data-t="${esc(norm(fi + ' ' + lu.join(' ')))}" data-ufs="${esc(lu.join(SEP))}">` +
         `<input type="checkbox" value="${esc(fi)}"><span>${esc(fi)}<br><small>${esc(lu.join(', '))}</small></span></label>`;
     }).join('');
+    filtrosLocal.rtv.lista.innerHTML = Array.from(locaisPorRtv.keys()).sort(cmpTexto).map(r =>
+      `<label data-t="${esc(norm(r))}"><input type="checkbox" value="${esc(r)}"><span>${esc(r)}</span></label>`).join('');
     filtrosLocal.uf.sincronizar();
     filtrosLocal.filial.sincronizar();
+    filtrosLocal.rtv.sincronizar();
   }
 
   // ---------- níveis (linhas) da tabela dinâmica ----------
@@ -945,8 +944,7 @@
     el.de.value = ''; el.ate.value = '';
     montarTipo();
     sincronizarPeriodos();
-    filtrosLocal.uf.busca.value = ''; filtrosLocal.filial.busca.value = '';
-    filtrosLocal.uf.sincronizar(); filtrosLocal.filial.sincronizar();
+    for (const f of Object.values(filtrosLocal)) { f.busca.value = ''; f.sincronizar(); }
     render();
   });
 
@@ -1014,6 +1012,7 @@
 
   configurarMulti('uf', 'UF', 'ufs');
   configurarMulti('filial', 'Filial', 'filiais');
+  configurarMulti('rtv', 'RTV', 'rtvs', false);
   montarTipo();
   montarNiveis();
 
