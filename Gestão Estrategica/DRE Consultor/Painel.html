@@ -117,7 +117,7 @@
     .per-meses { padding-left: 28px; display: grid; grid-template-columns: 1fr 1fr; }
 
     /* KPIs */
-    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
     .kpi { background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; }
     .kpi:first-child { border-top: 3px solid var(--ouro); }
     .kpi h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
@@ -202,6 +202,9 @@
       margin: 12px 0 0; padding: 10px 14px; border-left: 4px solid var(--laranja); background: var(--neg-fundo); border-radius: 4px; font-size: 14px;
     }
 
+    @media (max-width: 1280px) {
+      .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
     @media (max-width: 900px) {
       .pagina { padding: 16px 16px 40px; }
       .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -215,7 +218,7 @@
   <header class="topo">
     <div>
       <h1>Vendas</h1>
-      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto e margem</p>
+      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões e margem</p>
     </div>
     <p class="carimbo" id="carimbo">Carregando…</p>
   </header>
@@ -306,6 +309,8 @@
   <p class="nota">
     Lucro bruto = Venda líquida − Custo. Margem = Lucro bruto ÷ Venda líquida; nos subtotais e no total,
     é calculada sobre os valores somados (não é a média das margens). Período e Data de/até são aplicados juntos.
+    Comissão paga (COMISPAGA) e comissão futura (COMISFUT) são ligadas à venda por estabelecimento, representante,
+    mês e grupo, e não variam com o Tipo venda.
   </p>
 </main>
 
@@ -322,10 +327,16 @@
      fonte 'api'      : o painel busca o JSON em urlApi via fetch.
      tiposVenda       : colunas de valor usadas em cada opção do filtro
                         "Tipo venda".
+     comissoes        : consultas COMISPAGA e COMISFUT, ligadas à VENDAS
+                        por ESTAB + REPRESENT + mês da data + GRUPO.
      ===================================================================== */
   const CONFIG = {
     fonte: 'thymeleaf',
     urlApi: '/api/consultas/vendas',
+    comissoes: {
+      cp: { fonte: 'COMISPAGA', urlApi: '/api/consultas/comispaga', valor: 'COMISS_PAGA', data: 'DATA' },
+      cf: { fonte: 'COMISFUT',  urlApi: '/api/consultas/comisfut',  valor: 'PROVISAOLIQ', data: 'DTEMISSAO' }
+    },
     tiposVenda: {
       VF_V: { rotulo: 'Venda Futura e Venda', venda: 'V_VF', custo: 'CUSTO_VVF' },
       V_R:  { rotulo: 'Venda e Remessa',      venda: 'V_RF', custo: 'CUSTO_VRF' }
@@ -343,7 +354,10 @@
   };
   /*<![CDATA[*/
   const DADOS_THYMELEAF = /*[[${VENDAS}]]*/ null;
+  const DADOS_COMISPAGA = /*[[${COMISPAGA}]]*/ null;
+  const DADOS_COMISFUT  = /*[[${COMISFUT}]]*/ null;
   /*]]>*/
+  const DADOS_COMISSAO = { cp: DADOS_COMISPAGA, cf: DADOS_COMISFUT };
 
   // ---------------------------------------------------------------------
   const SEP = '␟';
@@ -354,6 +368,8 @@
     { k: 'v', rotulo: 'Venda Líquida', csv: 'VENDA_LIQUIDA' },
     { k: 'c', rotulo: 'Custo',         csv: 'CUSTO' },
     { k: 'l', rotulo: 'Lucro Bruto',   csv: 'LUCRO_BRUTO' },
+    { k: 'cp', rotulo: 'Comissão Paga',   csv: 'COMISSAO_PAGA' },
+    { k: 'cf', rotulo: 'Comissão Futura', csv: 'COMISSAO_FUTURA' },
     { k: 'm', rotulo: 'Margem %',      csv: 'MARGEM_PERC' }
   ];
 
@@ -430,13 +446,24 @@
   let PERIODOS = [];               // AAAAMM distintos
   let ufsPorFilial = new Map();
 
-  function preparar(registros) {
+  /** Registro com chaves em maiúsculas (os nomes de coluna variam conforme o driver). */
+  function maiusculo(r0, presentes) {
+    const r = {};
+    for (const k of Object.keys(r0)) { r[k.toUpperCase()] = r0[k]; if (presentes) presentes.add(k.toUpperCase()); }
+    return r;
+  }
+  const idTxt = v => { const s = String(v ?? '').trim(); const n = Number(s); return s !== '' && Number.isFinite(n) ? String(n) : s; };
+  /** Chave de ligação VENDAS x comissões: ESTAB + REPRESENT + AAAAMM + GRUPO. */
+  const chaveLiga = (estab, rep, p, grupo) => [idTxt(estab), idTxt(rep), p ?? '', norm(String(grupo ?? '').trim())].join(SEP);
+  const linhaVazia = () => Object.fromEntries(Object.keys(CONFIG.tiposVenda).map(k => [k, { v: 0, c: 0 }]));
+
+  function preparar(registros, comissoes) {
     const presentes = new Set();
     const linhas = [];
+    const avisos = [];
     for (const r0 of registros) {
       if (!r0 || typeof r0 !== 'object') continue;
-      const r = {};
-      for (const k of Object.keys(r0)) { r[k.toUpperCase()] = r0[k]; presentes.add(k.toUpperCase()); }
+      const r = maiusculo(r0, presentes);
       const dt = lerData(r[CONFIG.campoData.toUpperCase()]);
       const dims = {};
       for (const d of CONFIG.dimensoes) dims[d.campo] = txt(r[d.campo.toUpperCase()]);
@@ -445,11 +472,71 @@
       for (const [k, t] of Object.entries(CONFIG.tiposVenda)) {
         vals[k] = { v: num(r[t.venda.toUpperCase()]), c: num(r[t.custo.toUpperCase()]) };
       }
+      const p = dt ? dt.a * 100 + dt.m : null;
       linhas.push({
-        dims, vals,
-        p: dt ? dt.a * 100 + dt.m : null,
-        dia: dt ? dt.a * 10000 + dt.m * 100 + dt.d : null
+        dims, vals, cp: 0, cf: 0, p,
+        dia: dt ? dt.a * 10000 + dt.m * 100 + dt.d : null,
+        estab: r.ESTAB, rep: r.REPRESENT, chave: chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO)
       });
+    }
+
+    // ---- comissões: soma na linha de VENDAS com a mesma ESTAB/REPRESENT/mês/GRUPO ----
+    if (linhas.length && (!presentes.has('ESTAB') || !presentes.has('REPRESENT') || !presentes.has('GRUPO'))) {
+      avisos.push('A consulta VENDAS precisa das colunas ESTAB, REPRESENT e GRUPO para ligar as comissões');
+    }
+    const porChave = new Map();
+    const localPorEstab = new Map();   // ESTAB -> { FILIAL, UF }
+    const rtvPorRep = new Map();       // REPRESENT -> RTV
+    const mesPorP = new Map();         // AAAAMM -> rótulo MES_ANO usado pela VENDAS
+    for (const l of linhas) {
+      if (l.p !== null && !mesPorP.has(l.p)) mesPorP.set(l.p, l.dims.MES_ANO);
+      if (!porChave.has(l.chave)) porChave.set(l.chave, l);
+      if (!localPorEstab.has(idTxt(l.estab))) localPorEstab.set(idTxt(l.estab), { FILIAL: l.dims.FILIAL, UF: l.dims.UF });
+      if (!rtvPorRep.has(idTxt(l.rep))) rtvPorRep.set(idTxt(l.rep), l.dims.RTV);
+    }
+    const pers0 = linhas.map(l => l.p).filter(p => p !== null);
+    const pMin = pers0.length ? Math.min(...pers0) : null, pMax = pers0.length ? Math.max(...pers0) : null;
+
+    for (const [k, def] of Object.entries(CONFIG.comissoes)) {
+      const regs = comissoes[k] || [];
+      const pres = new Set();
+      let semVenda = 0, foraValor = 0, foraQtd = 0;
+      for (const r0 of regs) {
+        if (!r0 || typeof r0 !== 'object') continue;
+        const r = maiusculo(r0, pres);
+        const valor = num(r[def.valor]);
+        if (!valor) continue;
+        const dt = lerData(r[def.data]);
+        const p = dt ? dt.a * 100 + dt.m : null;
+        const chave = chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO);
+        let l = porChave.get(chave);
+        if (!l) {
+          // sem venda correspondente: entra como linha própria se o mês estiver no período da VENDAS
+          if (p === null || pMin === null || p < pMin || p > pMax) { foraValor += valor; foraQtd++; continue; }
+          const local = localPorEstab.get(idTxt(r.ESTAB)) || {};
+          const dims = {
+            UF: local.UF ?? VAZIO_ROT,
+            FILIAL: local.FILIAL ?? VAZIO_ROT,
+            RTV: txt(r.RTV) !== VAZIO_ROT ? txt(r.RTV) : (rtvPorRep.get(idTxt(r.REPRESENT)) ?? VAZIO_ROT),
+            GRUPO: txt(r.GRUPO),
+            MES_ANO: mesPorP.get(p) ?? `${MESES_ABR.at(dt.m - 1)}/${dt.a}`
+          };
+          l = { dims, vals: linhaVazia(), cp: 0, cf: 0, p, dia: p * 100 + 1, estab: r.ESTAB, rep: r.REPRESENT, chave };
+          linhas.push(l);
+          porChave.set(chave, l);
+          semVenda++;
+        }
+        l[k] += valor;
+      }
+      if (regs.length) {
+        const falta = [def.valor, def.data, 'ESTAB', 'REPRESENT', 'GRUPO'].filter(c => !pres.has(c));
+        if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
+      }
+      if (foraQtd) {
+        avisos.push(`${def.fonte}: ${fmtInt.format(foraQtd)} registro(s) fora do período da VENDAS ` +
+          `(${fmtMoeda.format(foraValor)}) não foram somados`);
+      }
+      if (semVenda) console.info(`${def.fonte}: ${semVenda} combinação(ões) sem venda no mês/grupo incluídas como linhas próprias.`);
     }
 
     ordemMes = new Map();
@@ -475,10 +562,13 @@
       }
       if (!presentes.has(CONFIG.campoData.toUpperCase())) faltando.push(`filtro de data: ${CONFIG.campoData}`);
       if (faltando.length) {
-        el.aviso.hidden = false;
-        el.aviso.textContent = 'A consulta VENDAS não retornou estas colunas (os valores aparecem zerados): ' +
-          faltando.join(' · ') + '. Ajuste o bloco CONFIG do painel.';
+        avisos.unshift('A consulta VENDAS não retornou estas colunas (os valores aparecem zerados): ' +
+          faltando.join(' · ') + '. Ajuste o bloco CONFIG do painel');
       }
+    }
+    if (avisos.length) {
+      el.aviso.hidden = false;
+      el.aviso.textContent = avisos.join('. ') + '.';
     }
     return linhas;
   }
@@ -520,19 +610,20 @@
 
   // ---------- tabela dinâmica ----------
   function montarArvore(linhas, niv) {
-    const raiz = { v: 0, c: 0, filhos: new Map(), nivel: -1, caminho: '' };
+    const raiz = { v: 0, c: 0, cp: 0, cf: 0, filhos: new Map(), nivel: -1, caminho: '' };
     for (const l of linhas) {
       const { v, c } = l.vals[estado.tipo];
-      raiz.v += v; raiz.c += c;
+      const { cp, cf } = l;
+      raiz.v += v; raiz.c += c; raiz.cp += cp; raiz.cf += cf;
       let no = raiz;
       niv.forEach((dim, i) => {
         const val = l.dims[dim];
         let f = no.filhos.get(val);
         if (!f) {
-          f = { rotulo: val, dim, nivel: i, caminho: no.caminho + SEP + dim + '=' + val, v: 0, c: 0, filhos: new Map() };
+          f = { rotulo: val, dim, nivel: i, caminho: no.caminho + SEP + dim + '=' + val, v: 0, c: 0, cp: 0, cf: 0, filhos: new Map() };
           no.filhos.set(val, f);
         }
-        f.v += v; f.c += c;
+        f.v += v; f.c += c; f.cp += cp; f.cf += cf;
         no = f;
       });
     }
@@ -541,7 +632,7 @@
 
   function met(no) {
     const l = no.v - no.c;
-    return { v: no.v, c: no.c, l, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
+    return { v: no.v, c: no.c, l, cp: no.cp, cf: no.cf, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
   }
 
   function cmpRotulo(a, b) {
@@ -601,6 +692,8 @@
       kpi(`Venda Líquida · ${esc(tipo.rotulo)}`, fmtMoeda.format(limpa(t.v)), t.v < 0) +
       kpi('Custo', fmtMoeda.format(limpa(t.c)), false) +
       kpi('Lucro Bruto', fmtMoeda.format(limpa(t.l)), t.l < 0) +
+      kpi('Comissão Paga', fmtMoeda.format(limpa(t.cp)), t.cp < 0) +
+      kpi('Comissão Futura', fmtMoeda.format(limpa(t.cf)), t.cf < 0) +
       kpi('Margem', t.m === null ? '–' : fmtPct.format(limpa(t.m)) + '%', t.m !== null && t.m < 0);
 
     // cabeçalho com ordenação
@@ -897,14 +990,26 @@
   });
 
   // ---------- inicialização ----------
+  async function buscar(url, nome) {
+    const resp = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`${nome}: HTTP ${resp.status}`);
+    return resp.json();
+  }
+
   async function carregar() {
     let bruto = DADOS_THYMELEAF;
+    const brutoCom = { ...DADOS_COMISSAO };
     if (CONFIG.fonte === 'api') {
-      const resp = await fetch(CONFIG.urlApi, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      bruto = await resp.json();
+      const chaves = Object.keys(CONFIG.comissoes);
+      const res = await Promise.all([
+        buscar(CONFIG.urlApi, 'VENDAS'),
+        ...chaves.map(k => buscar(CONFIG.comissoes[k].urlApi, CONFIG.comissoes[k].fonte))
+      ]);
+      bruto = res.at(0);
+      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 1); });
     }
-    return extrairRegistros(bruto);
+    const comissoes = Object.fromEntries(Object.keys(CONFIG.comissoes).map(k => [k, extrairRegistros(brutoCom[k])]));
+    return { registros: extrairRegistros(bruto), comissoes };
   }
 
   configurarMulti('uf', 'UF', 'ufs');
@@ -912,8 +1017,8 @@
   montarTipo();
   montarNiveis();
 
-  carregar().then(registros => {
-    LINHAS = preparar(registros);
+  carregar().then(({ registros, comissoes }) => {
+    LINHAS = preparar(registros, comissoes);
     el.carimbo.textContent = `${fmtInt.format(LINHAS.length)} registros`;
     configurarDatas();
     montarPeriodos();
@@ -923,7 +1028,7 @@
   }).catch(err => {
     el.carimbo.textContent = '';
     el.aviso.hidden = false;
-    el.aviso.textContent = `Não foi possível carregar a consulta VENDAS (${err.message}).`;
+    el.aviso.textContent = `Não foi possível carregar as consultas do painel (${err.message}).`;
     LINHAS = [];
     render();
   });
