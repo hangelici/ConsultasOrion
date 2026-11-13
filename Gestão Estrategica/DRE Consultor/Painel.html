@@ -118,7 +118,7 @@
     .per-meses[hidden] { display: none; }
 
     /* KPIs */
-    .kpis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
     .kpi { background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; }
     .kpi:first-child { border-top: 3px solid var(--ouro); }
     .kpi h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
@@ -207,9 +207,6 @@
       margin: 12px 0 0; padding: 10px 14px; border-left: 4px solid var(--laranja); background: var(--neg-fundo); border-radius: 4px; font-size: 14px;
     }
 
-    @media (max-width: 1500px) {
-      .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    }
     @media (max-width: 900px) {
       .pagina { padding: 16px 16px 40px; }
       .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -223,7 +220,7 @@
   <header class="topo">
     <div>
       <h1>Vendas</h1>
-      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões, custo de veículo, custo administrativo e margem</p>
+      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões, custos do RTV, margens e retenção de lucro</p>
     </div>
     <p class="carimbo" id="carimbo">Carregando…</p>
   </header>
@@ -333,7 +330,11 @@
     mês e grupo, e não variam com o Tipo venda. Custo veículo (VEIC) é ligado à venda por representante e mês;
     como não é aberto por grupo, fica em branco nas linhas de Grupo e abaixo delas. Custo ADM (ADM) já vem dividido
     pela quantidade de funcionários e é ligado à venda por estabelecimento e mês: conta uma vez por RTV/estabelecimento/mês,
-    e as linhas de Grupo repetem o valor (não somam entre si).
+    e as linhas de Grupo repetem o valor (não somam entre si). Custo Bruto RTV (CRTV) é ligado por representante e mês.
+    Custo RTV = Custo Bruto RTV + Comissão Paga + Comissão Futura + Custo Veículo + Custo ADM.
+    Margem RTV = (Venda líquida − Custo RTV − Custo) ÷ Venda líquida. Retenção Lucro = Custo RTV ÷ Lucro bruto;
+    s/ Custo ADM = (Custo RTV − Custo ADM) ÷ Lucro bruto. Nas linhas de Grupo essas colunas ficam em branco,
+    pois custo bruto e veículo não são abertos por grupo.
   </p>
 </main>
 
@@ -356,6 +357,8 @@
                         por REPRESENT + mês da data (sem GRUPO/ESTAB/UF).
      adm              : consulta ADM (custo administrativo por funcionário),
                         ligada à VENDAS por ESTABC (= ESTAB) + mês da data.
+     crtv             : consulta CRTV (custo bruto mensal do RTV), ligada à
+                        VENDAS por REPRESENT + mês da data (sem GRUPO/ESTAB/UF).
      ===================================================================== */
   const CONFIG = {
     fonte: 'thymeleaf',
@@ -366,6 +369,7 @@
     },
     veic: { fonte: 'VEIC', urlApi: '/api/consultas/veic', valor: 'CUSTO_DISTANCIA', data: 'DATA' },
     adm:  { fonte: 'ADM',  urlApi: '/api/consultas/adm',  valor: 'VLR', data: 'DATA', estab: 'ESTABC' },
+    crtv: { fonte: 'CRTV', urlApi: '/api/consultas/crtv', valor: 'VLR_BRTMENSAL', data: 'DATA' },
     tiposVenda: {
       VF_V: { rotulo: 'Venda Futura e Venda', venda: 'V_VF', custo: 'CUSTO_VVF' },
       V_R:  { rotulo: 'Venda e Remessa',      venda: 'V_RF', custo: 'CUSTO_VRF' }
@@ -387,6 +391,7 @@
   const DADOS_COMISFUT  = /*[[${COMISFUT}]]*/ null;
   const DADOS_VEIC      = /*[[${VEIC}]]*/ null;
   const DADOS_ADM       = /*[[${ADM}]]*/ null;
+  const DADOS_CRTV      = /*[[${CRTV}]]*/ null;
   /*]]>*/
   const DADOS_COMISSAO = { cp: DADOS_COMISPAGA, cf: DADOS_COMISFUT };
 
@@ -396,14 +401,19 @@
   const MESES_ABR = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const METRICAS = [
-    { k: 'v', rotulo: 'Venda Líquida', csv: 'VENDA_LIQUIDA' },
-    { k: 'c', rotulo: 'Custo',         csv: 'CUSTO' },
-    { k: 'l', rotulo: 'Lucro Bruto',   csv: 'LUCRO_BRUTO' },
-    { k: 'cp', rotulo: 'Comissão Paga',   csv: 'COMISSAO_PAGA' },
-    { k: 'cf', rotulo: 'Comissão Futura', csv: 'COMISSAO_FUTURA' },
-    { k: 'cv', rotulo: 'Custo Veículo',   csv: 'CUSTO_VEICULO' },
-    { k: 'ca', rotulo: 'Custo ADM',       csv: 'CUSTO_ADM' },
-    { k: 'm', rotulo: 'Margem %',      csv: 'MARGEM_PERC' }
+    { k: 'v',   rotulo: 'Venda Líquida',   csv: 'VENDA_LIQUIDA' },
+    { k: 'c',   rotulo: 'Custo',           csv: 'CUSTO' },
+    { k: 'l',   rotulo: 'Lucro Bruto',     csv: 'LUCRO_BRUTO' },
+    { k: 'm',   rotulo: 'Margem %',        csv: 'MARGEM_PERC', pct: true },
+    { k: 'cb',  rotulo: 'Custo Bruto RTV', csv: 'CUSTO_BRUTO_RTV' },
+    { k: 'cp',  rotulo: 'Comissão Paga',   csv: 'COMISSAO_PAGA' },
+    { k: 'cf',  rotulo: 'Comissão Futura', csv: 'COMISSAO_FUTURA' },
+    { k: 'cv',  rotulo: 'Custo Veículo',   csv: 'CUSTO_VEICULO' },
+    { k: 'ca',  rotulo: 'Custo ADM',       csv: 'CUSTO_ADM' },
+    { k: 'cr',  rotulo: 'Custo RTV',       csv: 'CUSTO_RTV' },
+    { k: 'mr',  rotulo: 'Margem RTV',      csv: 'MARGEM_RTV_PERC', pct: true },
+    { k: 'rl',  rotulo: 'Retenção Lucro',  csv: 'RETENCAO_LUCRO_PERC', pct: true },
+    { k: 'rla', rotulo: 'Retenção Lucro s/ Custo ADM', csv: 'RETENCAO_LUCRO_SEM_ADM_PERC', pct: true }
   ];
 
   const fmtReal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -481,6 +491,7 @@
   let locaisPorRtv = new Map();    // RTV -> Set de [UF, FILIAL]
   let VEIC_POR_CHAVE = new Map();  // REPRESENT + AAAAMM -> custo do veículo no mês
   let ADM_POR_CHAVE = new Map();   // ESTAB + AAAAMM -> custo administrativo por funcionário no mês
+  let CRTV_POR_CHAVE = new Map();  // REPRESENT + AAAAMM -> custo bruto mensal do RTV
 
   /** Registro com chaves em maiúsculas (os nomes de coluna variam conforme o driver). */
   function maiusculo(r0, presentes) {
@@ -496,7 +507,7 @@
   /** Chave de ligação VENDAS x ADM: ESTAB (ESTABC na ADM) + AAAAMM. */
   const chaveAdm = (estab, p) => [idTxt(estab), p ?? ''].join(SEP);
 
-  function preparar(registros, comissoes, veic, adm) {
+  function preparar(registros, comissoes, veic, adm, crtv) {
     const presentes = new Set();
     const linhas = [];
     const avisos = [];
@@ -548,25 +559,27 @@
       }
     }
 
-    // ---- custo do veículo: um valor por REPRESENT/mês; só conta onde houver venda (ver montarArvore) ----
-    VEIC_POR_CHAVE = new Map();
-    {
-      const def = CONFIG.veic;
+    // ---- custo do veículo e custo bruto do RTV: um valor por REPRESENT/mês; só contam onde houver venda (ver montarArvore) ----
+    const porRtvMes = (regs, def) => {
+      const mapa = new Map();
       const pres = new Set();
-      for (const r0 of veic || []) {
+      for (const r0 of regs || []) {
         if (!r0 || typeof r0 !== 'object') continue;
         const r = maiusculo(r0, pres);
         const valor = num(r[def.valor]);
         if (!valor) continue;
         const dt = lerData(r[def.data]);
         const k = chaveVeic(r.REPRESENT, dt ? dt.a * 100 + dt.m : null);
-        VEIC_POR_CHAVE.set(k, (VEIC_POR_CHAVE.get(k) || 0) + valor);
+        mapa.set(k, (mapa.get(k) || 0) + valor);
       }
-      if ((veic || []).length) {
+      if ((regs || []).length) {
         const falta = [def.valor, def.data, 'REPRESENT'].filter(c => !pres.has(c));
         if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
       }
-    }
+      return mapa;
+    };
+    VEIC_POR_CHAVE = porRtvMes(veic, CONFIG.veic);
+    CRTV_POR_CHAVE = porRtvMes(crtv, CONFIG.crtv);
 
     // ---- custo ADM: valor por funcionário, por ESTABC/mês ----
     ADM_POR_CHAVE = new Map();
@@ -694,6 +707,7 @@
     const admDe = k => ADM_POR_CHAVE.get(k.slice(k.indexOf(SEP) + 1)) || 0;
     const somarDistintos = no => {
       no.cv = no.kv ? Array.from(no.kv).reduce((s, k) => s + (VEIC_POR_CHAVE.get(k) || 0), 0) : null;
+      no.cb = no.kv ? Array.from(no.kv).reduce((s, k) => s + (CRTV_POR_CHAVE.get(k) || 0), 0) : null;
       no.ca = Array.from(no.ka).reduce((s, k) => s + admDe(k), 0);
       no.kv = null; no.ka = null;
       for (const f of no.filhos.values()) somarDistintos(f);
@@ -702,9 +716,23 @@
     return raiz;
   }
 
+  /**
+   * Custo RTV = Custo Bruto RTV + Comissão Paga + Comissão Futura + Custo Veículo + Custo ADM.
+   * Margem RTV = (Venda Líquida − Custo RTV − Custo) ÷ Venda Líquida (Custo segue o Tipo venda).
+   * Retenção Lucro = Custo RTV ÷ Lucro Bruto; s/ Custo ADM = (Custo RTV − Custo ADM) ÷ Lucro Bruto.
+   * Do nível GRUPO para baixo, Custo Bruto RTV e Custo Veículo não existem, então essas colunas ficam vazias.
+   */
   function met(no) {
     const l = no.v - no.c;
-    return { v: no.v, c: no.c, l, cp: no.cp, cf: no.cf, cv: no.cv, ca: no.ca, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
+    const pctDe = (a, b) => (a === null || Math.abs(b) < 0.005 ? null : a / b * 100);
+    const cr = no.cb === null || no.cv === null ? null : no.cb + no.cp + no.cf + no.cv + no.ca;
+    return {
+      v: no.v, c: no.c, l, m: pctDe(l, no.v),
+      cb: no.cb, cp: no.cp, cf: no.cf, cv: no.cv, ca: no.ca, cr,
+      mr: cr === null ? null : pctDe(no.v - cr - no.c, no.v),
+      rl: pctDe(cr, l),
+      rla: cr === null ? null : pctDe(cr - no.ca, l)
+    };
   }
 
   function cmpRotulo(a, b) {
@@ -731,7 +759,7 @@
       const v = m[x.k];
       if (v === null) return '<td class="vazio-cel">–</td>';
       const n = limpa(v);
-      const t = x.k === 'm' ? fmtPct.format(n) + '%' : fmtReal.format(n);
+      const t = x.pct ? fmtPct.format(n) + '%' : fmtReal.format(n);
       return `<td class="${n < 0 ? 'neg' : ''}">${t}</td>`;
     }).join('');
   }
@@ -759,16 +787,13 @@
 
     // KPIs
     const t = met(raiz);
-    const kpi = (titulo, valor, neg) => `<div class="kpi"><h2>${titulo}</h2><p class="${neg ? 'neg' : ''}">${valor}</p></div>`;
-    el.kpis.innerHTML =
-      kpi(`Venda Líquida · ${esc(tipo.rotulo)}`, fmtMoeda.format(limpa(t.v)), t.v < 0) +
-      kpi('Custo', fmtMoeda.format(limpa(t.c)), false) +
-      kpi('Lucro Bruto', fmtMoeda.format(limpa(t.l)), t.l < 0) +
-      kpi('Comissão Paga', fmtMoeda.format(limpa(t.cp)), t.cp < 0) +
-      kpi('Comissão Futura', fmtMoeda.format(limpa(t.cf)), t.cf < 0) +
-      kpi('Custo Veículo', fmtMoeda.format(limpa(t.cv)), t.cv < 0) +
-      kpi('Custo ADM', fmtMoeda.format(limpa(t.ca)), t.ca < 0) +
-      kpi('Margem', t.m === null ? '–' : fmtPct.format(limpa(t.m)) + '%', t.m !== null && t.m < 0);
+    el.kpis.innerHTML = METRICAS.map(x => {
+      const v = t[x.k];
+      const titulo = x.k === 'v' ? `Venda Líquida · ${esc(tipo.rotulo)}` : esc(x.rotulo);
+      const valor = v === null ? '–' : (x.pct ? fmtPct.format(limpa(v)) + '%' : fmtMoeda.format(limpa(v)));
+      const neg = v !== null && x.k !== 'c' && v < 0;
+      return `<div class="kpi"><h2>${titulo}</h2><p class="${neg ? 'neg' : ''}">${valor}</p></div>`;
+    }).join('');
 
     // cabeçalho com ordenação
     const seta = col => (pivo.ordem.col === col ? (pivo.ordem.dir === 1 ? '▲' : '▼') : '');
@@ -1135,21 +1160,27 @@
     const brutoCom = { ...DADOS_COMISSAO };
     let brutoVeic = DADOS_VEIC;
     let brutoAdm = DADOS_ADM;
+    let brutoCrtv = DADOS_CRTV;
     if (CONFIG.fonte === 'api') {
       const chaves = Object.keys(CONFIG.comissoes);
       const res = await Promise.all([
         buscar(CONFIG.urlApi, 'VENDAS'),
         buscar(CONFIG.veic.urlApi, CONFIG.veic.fonte),
         buscar(CONFIG.adm.urlApi, CONFIG.adm.fonte),
+        buscar(CONFIG.crtv.urlApi, CONFIG.crtv.fonte),
         ...chaves.map(k => buscar(CONFIG.comissoes[k].urlApi, CONFIG.comissoes[k].fonte))
       ]);
       bruto = res.at(0);
       brutoVeic = res.at(1);
       brutoAdm = res.at(2);
-      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 3); });
+      brutoCrtv = res.at(3);
+      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 4); });
     }
     const comissoes = Object.fromEntries(Object.keys(CONFIG.comissoes).map(k => [k, extrairRegistros(brutoCom[k])]));
-    return { registros: extrairRegistros(bruto), comissoes, veic: extrairRegistros(brutoVeic), adm: extrairRegistros(brutoAdm) };
+    return {
+      registros: extrairRegistros(bruto), comissoes,
+      veic: extrairRegistros(brutoVeic), adm: extrairRegistros(brutoAdm), crtv: extrairRegistros(brutoCrtv)
+    };
   }
 
   configurarMulti('uf', 'UF', 'ufs');
@@ -1158,8 +1189,8 @@
   montarTipo();
   montarNiveis();
 
-  carregar().then(({ registros, comissoes, veic, adm }) => {
-    LINHAS = preparar(registros, comissoes, veic, adm);
+  carregar().then(({ registros, comissoes, veic, adm, crtv }) => {
+    LINHAS = preparar(registros, comissoes, veic, adm, crtv);
     el.carimbo.textContent = `${fmtInt.format(LINHAS.length)} registros`;
     configurarDatas();
     montarPeriodos();
