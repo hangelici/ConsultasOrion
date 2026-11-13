@@ -118,7 +118,7 @@
     .per-meses[hidden] { display: none; }
 
     /* KPIs */
-    .kpis { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
     .kpi { background: var(--superficie); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; }
     .kpi:first-child { border-top: 3px solid var(--ouro); }
     .kpi h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-2); }
@@ -207,8 +207,8 @@
       margin: 12px 0 0; padding: 10px 14px; border-left: 4px solid var(--laranja); background: var(--neg-fundo); border-radius: 4px; font-size: 14px;
     }
 
-    @media (max-width: 1280px) {
-      .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 1500px) {
+      .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
     @media (max-width: 900px) {
       .pagina { padding: 16px 16px 40px; }
@@ -223,7 +223,7 @@
   <header class="topo">
     <div>
       <h1>Vendas</h1>
-      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões, custo de veículo e margem</p>
+      <p class="sub">Tabela dinâmica de venda líquida, custo, lucro bruto, comissões, custo de veículo, custo administrativo e margem</p>
     </div>
     <p class="carimbo" id="carimbo">Carregando…</p>
   </header>
@@ -331,7 +331,9 @@
     é calculada sobre os valores somados (não é a média das margens). Período e Data de/até são aplicados juntos.
     Comissão paga (COMISPAGA) e comissão futura (COMISFUT) são ligadas à venda por estabelecimento, representante,
     mês e grupo, e não variam com o Tipo venda. Custo veículo (VEIC) é ligado à venda por representante e mês;
-    como não é aberto por grupo, fica em branco nas linhas de Grupo e abaixo delas.
+    como não é aberto por grupo, fica em branco nas linhas de Grupo e abaixo delas. Custo ADM (ADM) já vem dividido
+    pela quantidade de funcionários e é ligado à venda por estabelecimento e mês: conta uma vez por RTV/estabelecimento/mês,
+    e as linhas de Grupo repetem o valor (não somam entre si).
   </p>
 </main>
 
@@ -352,6 +354,8 @@
                         por ESTAB + REPRESENT + mês da data + GRUPO.
      veic             : consulta VEIC (custo do veículo), ligada à VENDAS
                         por REPRESENT + mês da data (sem GRUPO/ESTAB/UF).
+     adm              : consulta ADM (custo administrativo por funcionário),
+                        ligada à VENDAS por ESTABC (= ESTAB) + mês da data.
      ===================================================================== */
   const CONFIG = {
     fonte: 'thymeleaf',
@@ -361,6 +365,7 @@
       cf: { fonte: 'COMISFUT',  urlApi: '/api/consultas/comisfut',  valor: 'PROVISAOLIQ', data: 'DTEMISSAO' }
     },
     veic: { fonte: 'VEIC', urlApi: '/api/consultas/veic', valor: 'CUSTO_DISTANCIA', data: 'DATA' },
+    adm:  { fonte: 'ADM',  urlApi: '/api/consultas/adm',  valor: 'VLR', data: 'DATA', estab: 'ESTABC' },
     tiposVenda: {
       VF_V: { rotulo: 'Venda Futura e Venda', venda: 'V_VF', custo: 'CUSTO_VVF' },
       V_R:  { rotulo: 'Venda e Remessa',      venda: 'V_RF', custo: 'CUSTO_VRF' }
@@ -381,6 +386,7 @@
   const DADOS_COMISPAGA = /*[[${COMISPAGA}]]*/ null;
   const DADOS_COMISFUT  = /*[[${COMISFUT}]]*/ null;
   const DADOS_VEIC      = /*[[${VEIC}]]*/ null;
+  const DADOS_ADM       = /*[[${ADM}]]*/ null;
   /*]]>*/
   const DADOS_COMISSAO = { cp: DADOS_COMISPAGA, cf: DADOS_COMISFUT };
 
@@ -396,10 +402,11 @@
     { k: 'cp', rotulo: 'Comissão Paga',   csv: 'COMISSAO_PAGA' },
     { k: 'cf', rotulo: 'Comissão Futura', csv: 'COMISSAO_FUTURA' },
     { k: 'cv', rotulo: 'Custo Veículo',   csv: 'CUSTO_VEICULO' },
+    { k: 'ca', rotulo: 'Custo ADM',       csv: 'CUSTO_ADM' },
     { k: 'm', rotulo: 'Margem %',      csv: 'MARGEM_PERC' }
   ];
 
-  const fmt2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtReal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtPct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const fmtMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
   const fmtCsv = new Intl.NumberFormat('pt-BR', { useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -473,6 +480,7 @@
   let ufsPorFilial = new Map();
   let locaisPorRtv = new Map();    // RTV -> Set de [UF, FILIAL]
   let VEIC_POR_CHAVE = new Map();  // REPRESENT + AAAAMM -> custo do veículo no mês
+  let ADM_POR_CHAVE = new Map();   // ESTAB + AAAAMM -> custo administrativo por funcionário no mês
 
   /** Registro com chaves em maiúsculas (os nomes de coluna variam conforme o driver). */
   function maiusculo(r0, presentes) {
@@ -485,8 +493,10 @@
   const chaveLiga = (estab, rep, p, grupo) => [idTxt(estab), idTxt(rep), p ?? '', norm(String(grupo ?? '').trim())].join(SEP);
   /** Chave de ligação VENDAS x VEIC: REPRESENT + AAAAMM. */
   const chaveVeic = (rep, p) => [idTxt(rep), p ?? ''].join(SEP);
+  /** Chave de ligação VENDAS x ADM: ESTAB (ESTABC na ADM) + AAAAMM. */
+  const chaveAdm = (estab, p) => [idTxt(estab), p ?? ''].join(SEP);
 
-  function preparar(registros, comissoes, veic) {
+  function preparar(registros, comissoes, veic, adm) {
     const presentes = new Set();
     const linhas = [];
     const avisos = [];
@@ -506,7 +516,8 @@
         dims, vals, cp: 0, cf: 0, p,
         dia: dt ? dt.a * 10000 + dt.m * 100 + dt.d : null,
         estab: r.ESTAB, rep: r.REPRESENT, chave: chaveLiga(r.ESTAB, r.REPRESENT, p, r.GRUPO),
-        kv: chaveVeic(r.REPRESENT, p)
+        kv: chaveVeic(r.REPRESENT, p),
+        ka: chaveAdm(r.ESTAB, p), kaRtv: idTxt(r.REPRESENT) + SEP + chaveAdm(r.ESTAB, p)
       });
     }
 
@@ -553,6 +564,26 @@
       }
       if ((veic || []).length) {
         const falta = [def.valor, def.data, 'REPRESENT'].filter(c => !pres.has(c));
+        if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
+      }
+    }
+
+    // ---- custo ADM: valor por funcionário, por ESTABC/mês ----
+    ADM_POR_CHAVE = new Map();
+    {
+      const def = CONFIG.adm;
+      const pres = new Set();
+      for (const r0 of adm || []) {
+        if (!r0 || typeof r0 !== 'object') continue;
+        const r = maiusculo(r0, pres);
+        const valor = num(r[def.valor]);
+        if (!valor) continue;
+        const dt = lerData(r[def.data]);
+        const k = chaveAdm(r[def.estab], dt ? dt.a * 100 + dt.m : null);
+        ADM_POR_CHAVE.set(k, (ADM_POR_CHAVE.get(k) || 0) + valor);
+      }
+      if ((adm || []).length) {
+        const falta = [def.valor, def.data, def.estab].filter(c => !pres.has(c));
         if (falta.length) avisos.push(`${def.fonte} sem as colunas ${falta.join(', ')}`);
       }
     }
@@ -634,40 +665,46 @@
   /**
    * Custo do veículo (VEIC) não é aberto por grupo: cada nó soma o custo dos pares REPRESENT/mês
    * distintos presentes nas suas vendas. Do nível GRUPO para baixo o nó não recebe VEIC (célula vazia).
+   * Custo ADM (já por funcionário) soma uma vez cada RTV/ESTAB/mês distinto do nó, então as linhas
+   * de Grupo repetem o valor do RTV/mês em vez de somá-lo várias vezes.
    */
   function montarArvore(linhas, niv) {
-    const raiz = { v: 0, c: 0, cp: 0, cf: 0, kv: new Set(), filhos: new Map(), nivel: -1, caminho: '' };
+    const raiz = { v: 0, c: 0, cp: 0, cf: 0, kv: new Set(), ka: new Set(), filhos: new Map(), nivel: -1, caminho: '' };
     const iGrupo = niv.indexOf('GRUPO');
     for (const l of linhas) {
       const { v, c } = l.vals[estado.tipo];
       const { cp, cf } = l;
-      raiz.v += v; raiz.c += c; raiz.cp += cp; raiz.cf += cf; raiz.kv.add(l.kv);
+      raiz.v += v; raiz.c += c; raiz.cp += cp; raiz.cf += cf; raiz.kv.add(l.kv); raiz.ka.add(l.kaRtv);
       let no = raiz;
       niv.forEach((dim, i) => {
         const val = l.dims[dim];
         let f = no.filhos.get(val);
         if (!f) {
           f = { rotulo: val, dim, nivel: i, caminho: no.caminho + SEP + dim + '=' + val, v: 0, c: 0, cp: 0, cf: 0,
-            kv: (iGrupo < 0 || i < iGrupo) ? new Set() : null, filhos: new Map() };
+            kv: (iGrupo < 0 || i < iGrupo) ? new Set() : null, ka: new Set(), filhos: new Map() };
           no.filhos.set(val, f);
         }
         f.v += v; f.c += c; f.cp += cp; f.cf += cf;
         if (f.kv) f.kv.add(l.kv);
+        f.ka.add(l.kaRtv);
         no = f;
       });
     }
-    const somarVeic = no => {
+    // kaRtv = REPRESENT + SEP + chave ADM (ESTAB + AAAAMM)
+    const admDe = k => ADM_POR_CHAVE.get(k.slice(k.indexOf(SEP) + 1)) || 0;
+    const somarDistintos = no => {
       no.cv = no.kv ? Array.from(no.kv).reduce((s, k) => s + (VEIC_POR_CHAVE.get(k) || 0), 0) : null;
-      no.kv = null;
-      for (const f of no.filhos.values()) somarVeic(f);
+      no.ca = Array.from(no.ka).reduce((s, k) => s + admDe(k), 0);
+      no.kv = null; no.ka = null;
+      for (const f of no.filhos.values()) somarDistintos(f);
     };
-    somarVeic(raiz);
+    somarDistintos(raiz);
     return raiz;
   }
 
   function met(no) {
     const l = no.v - no.c;
-    return { v: no.v, c: no.c, l, cp: no.cp, cf: no.cf, cv: no.cv, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
+    return { v: no.v, c: no.c, l, cp: no.cp, cf: no.cf, cv: no.cv, ca: no.ca, m: Math.abs(no.v) < 0.005 ? null : l / no.v * 100 };
   }
 
   function cmpRotulo(a, b) {
@@ -694,7 +731,7 @@
       const v = m[x.k];
       if (v === null) return '<td class="vazio-cel">–</td>';
       const n = limpa(v);
-      const t = x.k === 'm' ? fmtPct.format(n) + '%' : fmt2.format(n);
+      const t = x.k === 'm' ? fmtPct.format(n) + '%' : fmtReal.format(n);
       return `<td class="${n < 0 ? 'neg' : ''}">${t}</td>`;
     }).join('');
   }
@@ -730,6 +767,7 @@
       kpi('Comissão Paga', fmtMoeda.format(limpa(t.cp)), t.cp < 0) +
       kpi('Comissão Futura', fmtMoeda.format(limpa(t.cf)), t.cf < 0) +
       kpi('Custo Veículo', fmtMoeda.format(limpa(t.cv)), t.cv < 0) +
+      kpi('Custo ADM', fmtMoeda.format(limpa(t.ca)), t.ca < 0) +
       kpi('Margem', t.m === null ? '–' : fmtPct.format(limpa(t.m)) + '%', t.m !== null && t.m < 0);
 
     // cabeçalho com ordenação
@@ -1096,19 +1134,22 @@
     let bruto = DADOS_THYMELEAF;
     const brutoCom = { ...DADOS_COMISSAO };
     let brutoVeic = DADOS_VEIC;
+    let brutoAdm = DADOS_ADM;
     if (CONFIG.fonte === 'api') {
       const chaves = Object.keys(CONFIG.comissoes);
       const res = await Promise.all([
         buscar(CONFIG.urlApi, 'VENDAS'),
         buscar(CONFIG.veic.urlApi, CONFIG.veic.fonte),
+        buscar(CONFIG.adm.urlApi, CONFIG.adm.fonte),
         ...chaves.map(k => buscar(CONFIG.comissoes[k].urlApi, CONFIG.comissoes[k].fonte))
       ]);
       bruto = res.at(0);
       brutoVeic = res.at(1);
-      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 2); });
+      brutoAdm = res.at(2);
+      chaves.forEach((k, i) => { brutoCom[k] = res.at(i + 3); });
     }
     const comissoes = Object.fromEntries(Object.keys(CONFIG.comissoes).map(k => [k, extrairRegistros(brutoCom[k])]));
-    return { registros: extrairRegistros(bruto), comissoes, veic: extrairRegistros(brutoVeic) };
+    return { registros: extrairRegistros(bruto), comissoes, veic: extrairRegistros(brutoVeic), adm: extrairRegistros(brutoAdm) };
   }
 
   configurarMulti('uf', 'UF', 'ufs');
@@ -1117,8 +1158,8 @@
   montarTipo();
   montarNiveis();
 
-  carregar().then(({ registros, comissoes, veic }) => {
-    LINHAS = preparar(registros, comissoes, veic);
+  carregar().then(({ registros, comissoes, veic, adm }) => {
+    LINHAS = preparar(registros, comissoes, veic, adm);
     el.carimbo.textContent = `${fmtInt.format(LINHAS.length)} registros`;
     configurarDatas();
     montarPeriodos();
