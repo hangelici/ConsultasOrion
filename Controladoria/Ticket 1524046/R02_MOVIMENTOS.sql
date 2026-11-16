@@ -37,10 +37,10 @@ case when b.somadiminui = 'S' then 'E' else 'S' end as entrada_saida,
 b.item as cod_produto,
 itemagro.descricao as desc_produto,
 itemagro.unidade,
-nfl.lote,
-nvl(nfl.quantidade,b.quantidade) as qtd,
+nvl(nfl.lote,itemprodlote.lote) as lote,
+coalesce(nfl.quantidade,itemprodlote.quantidade,b.quantidade) as qtd,
 nfitem.custocmv as custo_unitario,
-nvl(nfl.quantidade*nfitem.valorunitario,nfitem.valortotal) as valor,
+coalesce(nfl.quantidade*nfitem.valorunitario,itemprodlote.quantidade*nfitem.valorunitario,nfitem.valortotal) as valor,
 b.natureza as tipo_doc_origem,
 b.doc as num_doc_origem,
 null as id_movimento_estornado, --revisar
@@ -58,3 +58,8 @@ left join nfitemloteagro nfl on
     nfl.estab = nfitem.estab
     and nfl.seqnota = nfitem.seqnota
     and nfl.seqnotaitem = nfitem.seqnotaitem
+left join itemprodlote on
+        itemprodlote.estab = b.estab
+        and cast(itemprodlote.sequencia as varchar2(50)) = b.doc
+        and itemprodlote.seqpa = b.seq
+        and itemprodlote.item = b.item

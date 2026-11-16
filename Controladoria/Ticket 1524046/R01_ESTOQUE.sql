@@ -21,7 +21,8 @@ with saldo_anterior as (
         and nfl.seqnotaitem = nfitem.seqnotaitem
     left join itemprodlote on
         itemprodlote.estab = m.estab
-        and itemprodlote.sequencia = m.seq
+        and cast(itemprodlote.sequencia as varchar2(50)) = m.doc
+        and itemprodlote.seqpa = m.seq
         and itemprodlote.item = m.item
         where m.codigosaldo = 2 and u_tempresa.insumos = 'S'
     and m.datamovim < :DTINI
@@ -68,7 +69,8 @@ base as (
         and nfl.seqnotaitem = nfitem.seqnotaitem
     left join itemprodlote on
         itemprodlote.estab = m.estab
-        and itemprodlote.sequencia = m.seq
+        and cast(itemprodlote.sequencia as varchar2(50)) = m.doc
+        and itemprodlote.seqpa = m.seq
         and itemprodlote.item = m.item
         where m.codigosaldo = 2 and u_tempresa.insumos = 'S'
     and m.datamovim between :DTINI and :DTFIM
