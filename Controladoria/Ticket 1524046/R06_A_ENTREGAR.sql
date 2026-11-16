@@ -156,7 +156,11 @@ nvl(fat.qtd_faturada, 0) - nvl(mov.qtd_desfeita, 0) -
         when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
         else nvl(fat.qtd_faturada, 0)
     end as qtd_saldo_entregar,
-null as qtd_saldo_calculado, 
+base.quantidade - base.cancelado -
+case 
+    when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
+    else nvl(fat.qtd_faturada, 0)
+end  as qtd_saldo_calculado, 
 nvl(fat.qtd_faturada, 0) - nvl(mov.qtd_desfeita, 0) - 
     case 
         when fat.tipo = 'VF' then nvl(mov.qtd_remessa, 0)
