@@ -114,7 +114,7 @@ nfl.lote as lote,
 lt.validade as data_validade, 
 nfl.quantidade as qtd_lote,
 case when movimenta_estoque = 'S' then bn.custocmv else null end custo_unitario,
-null as id_item_movimento --revisar
+bn.seqnota as id_item_movimento --revisar
 from base_nota bn
 left join nfitemloteagro nfl on
     nfl.estab = bn.estab
