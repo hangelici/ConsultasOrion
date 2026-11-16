@@ -1,193 +1,133 @@
-with saldo_anterior as (
-    select /*+ USE_NL(NFITEM) USE_NL(NFL) */
-    filial.estab,
-    filial.reduzido,
-    m.local,
-    m.item,
-    coalesce(nfl.lote,itemprodlote.lote,'s/lote') as lote,
-    coalesce(nfl.tipo,itemprodlote.tipo,'s/lote') as tipo,
-    coalesce(nfl.seqlote,itemprodlote.seqlote,0) as seqlote,
-    sum(case when m.somadiminui = 'S'  then coalesce(nfl.quantidade,itemprodlote.quantidade,m.quantidade) else -coalesce(nfl.quantidade,itemprodlote.quantidade,m.quantidade) end) as quantidade
-    from movitemagro m
-    inner join filial on filial.estab = m.estab
-    inner join u_tempresa on u_tempresa.estab = filial.estab
-    left join nfitem on
-        nfitem.estab = m.estab
-        and nfitem.seqnota = m.seq
-        and nfitem.seqnotaitem = to_number(substr(m.ordem_cronologica, instr(m.ordem_cronologica, '-', -1) + 1))
-    left join nfitemloteagro nfl on
-        nfl.estab = nfitem.estab
-        and nfl.seqnota = nfitem.seqnota
-        and nfl.seqnotaitem = nfitem.seqnotaitem
-    left join itemprodlote on
-        itemprodlote.estab = m.estab
-        and cast(itemprodlote.sequencia as varchar2(50)) = m.doc
-        and itemprodlote.seqpa = m.seq
-        and itemprodlote.item = m.item
-        where m.codigosaldo = 2 and u_tempresa.insumos = 'S'
-    and m.datamovim < :DTINI
-    --and m.estab = 73
-    and (m.item = :ITEM OR 0 = :ITEM)
-
-    group by
-    filial.estab,
-    filial.reduzido,
-    m.local,
-    m.item,
-    nfl.lote,itemprodlote.lote,
-    nfl.tipo,itemprodlote.tipo,
-    nfl.seqlote,itemprodlote.seqlote
+--- R01_ESTOQUE
+WITH
+MOV AS (
+    SELECT /*+ LEADING(U F M) USE_HASH(M) USE_HASH(IPL) USE_HASH(NFL) */
+        F.ESTAB,
+        F.REDUZIDO,
+        M.LOCAL,
+        M.ITEM,
+        M.DATAMOVIM,
+        COALESCE(NFL.LOTE,    IPL.LOTE,    's/lote') AS LOTE,
+        COALESCE(NFL.TIPO,    IPL.TIPO,    's/lote') AS TIPO,
+        COALESCE(NFL.SEQLOTE, IPL.SEQLOTE, 0)        AS SEQLOTE,
+        CASE WHEN M.SOMADIMINUI = 'S' THEN 1 ELSE -1 END
+            * COALESCE(NFL.QUANTIDADE, IPL.QUANTIDADE, M.QUANTIDADE) AS QUANTIDADE
+    FROM U_TEMPRESA U
+    INNER JOIN FILIAL F
+            ON F.ESTAB = U.ESTAB
+    INNER JOIN MOVITEMAGRO M
+            ON M.ESTAB = F.ESTAB
+    LEFT JOIN NFITEMLOTEAGRO NFL
+           ON NFL.ESTAB       = M.ESTAB
+          AND NFL.SEQNOTA     = M.SEQ
+          AND NFL.SEQNOTAITEM = TO_NUMBER(SUBSTR(M.ORDEM_CRONOLOGICA, INSTR(M.ORDEM_CRONOLOGICA, '-', -1) + 1))
+    LEFT JOIN ITEMPRODLOTE IPL
+           ON IPL.ESTAB = M.ESTAB
+          AND CAST(IPL.SEQUENCIA AS VARCHAR2(50)) = M.DOC
+          AND IPL.SEQPA = M.SEQ
+          AND IPL.ITEM  = M.ITEM
+    WHERE U.INSUMOS = 'S'
+      AND M.CODIGOSALDO = 2
+      AND (M.DATAMOVIM <  TO_DATE(:DTINI, 'DD/MM/YYYY')
+        OR M.DATAMOVIM <= TO_DATE(:DTFIM, 'DD/MM/YYYY'))
+      AND (M.ITEM = :ITEM OR 0 = :ITEM)
 ),
-base as (
-    select /*+ USE_NL(NFITEM) USE_NL(NFL) */
-    filial.estab,
-    filial.reduzido,
-    m.local,
-    m.doc,
-    m.seq,
-    m.item,
-    m.somadiminui,
-    m.ordem_cronologica,
-    to_number(substr(m.ordem_cronologica, instr(m.ordem_cronologica, '-', -1) + 1)) as ordem_item,
-    m.datamovim,
-    m.horamovim,
-    m.natureza,
-    coalesce(nfl.lote,itemprodlote.lote,'s/lote') as lote,
-    coalesce(nfl.tipo,itemprodlote.tipo,'s/lote') as tipo,
-    coalesce(nfl.seqlote,itemprodlote.seqlote,0) as seqlote,
-    case when m.somadiminui = 'S'  then coalesce(nfl.quantidade,itemprodlote.quantidade,m.quantidade) else -coalesce(nfl.quantidade,itemprodlote.quantidade,m.quantidade) end as quantidade
-    from movitemagro m
-    inner join filial on filial.estab = m.estab
-    inner join u_tempresa on u_tempresa.estab = filial.estab
-    left join nfitem on
-        nfitem.estab = m.estab
-        and nfitem.seqnota = m.seq
-        and nfitem.seqnotaitem = to_number(substr(m.ordem_cronologica, instr(m.ordem_cronologica, '-', -1) + 1))
-    left join nfitemloteagro nfl on
-        nfl.estab = nfitem.estab
-        and nfl.seqnota = nfitem.seqnota
-        and nfl.seqnotaitem = nfitem.seqnotaitem
-    left join itemprodlote on
-        itemprodlote.estab = m.estab
-        and cast(itemprodlote.sequencia as varchar2(50)) = m.doc
-        and itemprodlote.seqpa = m.seq
-        and itemprodlote.item = m.item
-        where m.codigosaldo = 2 and u_tempresa.insumos = 'S'
-    and m.datamovim between :DTINI and :DTFIM
-    --and m.estab = 73
-    and (m.item = :ITEM OR 0 = :ITEM)
+DADOS AS (
+    SELECT
+        ESTAB,
+        REDUZIDO,
+        LOCAL,
+        ITEM,
+        LOTE,
+        TIPO,
+        SEQLOTE,
+        SUM(CASE WHEN DATAMOVIM BETWEEN TO_DATE(:DTINI, 'DD/MM/YYYY')
+                                    AND TO_DATE(:DTFIM, 'DD/MM/YYYY')
+                 THEN QUANTIDADE ELSE 0 END) AS QUANTIDADE,
+        SUM(CASE WHEN DATAMOVIM < TO_DATE(:DTINI, 'DD/MM/YYYY')
+                 THEN QUANTIDADE ELSE 0 END) AS SALDOANT
+    FROM MOV
+    GROUP BY ESTAB, REDUZIDO, LOCAL, ITEM, LOTE, TIPO, SEQLOTE
+),
+POSICAO AS (
+    SELECT
+        DADOS.ESTAB              AS COD_LOJA,
+        DADOS.REDUZIDO           AS NOME_LOJA,
+        DADOS.LOCAL,
+        LOCALEST.DESCRICAO       AS NOME_LOCAL,
+        'PROPRIA'                AS TITULARIDADE,
+        'NA_LOJA'                AS LOCALIZACAO_FISICA,
+        DADOS.ITEM               AS COD_PRODUTO,
+        ITEMAGRO.DESCRICAO       AS DESC_PRODUTO,
+        U_GESTOQUE.DESCRICAO     AS GRUPO_PRODUTO,
+        ITEMAGRO.LOTECTRL        AS CONTROLA_LOTE,
+        ITEMAGRO.UNIDADE,
+        DADOS.LOTE,
+        LA.DATAFABRICACAO        AS DATA_FABRICACAO,
+        LA.VALIDADE              AS DATA_VALIDADE,
+        TRUNC(LA.VALIDADE - TO_DATE(:DTFIM, 'DD/MM/YYYY')) AS DIAS_PARA_VENCER,
+        SUM(DADOS.QUANTIDADE)                  AS QTD,
+        SUM(DADOS.SALDOANT)                    AS SALDOANT,
+        SUM(DADOS.QUANTIDADE + DADOS.SALDOANT) AS QTD_SALDO
+    FROM DADOS
+    INNER JOIN ITEMAGRO
+            ON ITEMAGRO.ITEM = DADOS.ITEM
+    INNER JOIN ITEMGRUPO
+            ON ITEMGRUPO.GRUPO = ITEMAGRO.GRUPO
+    LEFT JOIN ITEMGRUPO_U
+           ON ITEMGRUPO_U.GRUPO = ITEMGRUPO.GRUPO
+    LEFT JOIN U_GESTOQUE
+           ON U_GESTOQUE.U_GESTOQUE_ID = ITEMGRUPO_U.U_GESTOQUE_ID
+    LEFT JOIN LOCALEST
+           ON LOCALEST.ESTAB = DADOS.ESTAB
+          AND LOCALEST.LOCAL = DADOS.LOCAL
+    LEFT JOIN LOTEAGRO LA
+           ON LA.ESTAB   = DADOS.ESTAB
+          AND LA.ITEM    = DADOS.ITEM
+          AND LA.LOTE    = DADOS.LOTE
+          AND LA.SEQLOTE = DADOS.SEQLOTE
+          AND LA.TIPO    = DADOS.TIPO
+    GROUP BY
+        DADOS.ESTAB,
+        DADOS.REDUZIDO,
+        DADOS.LOCAL,
+        LOCALEST.DESCRICAO,
+        DADOS.ITEM,
+        ITEMAGRO.DESCRICAO,
+        U_GESTOQUE.DESCRICAO,
+        ITEMAGRO.LOTECTRL,
+        ITEMAGRO.UNIDADE,
+        DADOS.LOTE,
+        LA.DATAFABRICACAO,
+        LA.VALIDADE
 )
-select
-cod_loja,
-nome_loja,
-local,
-nome_local,
-titularidade,
-localizacao_fisica,
-cod_produto,
-desc_produto,
-grupo_produto,
-controla_lote,
-unidade,
-lote,
-data_fabricacao,
-data_validade,
-dias_para_vencer,
-qtd,
-saldoant,
-qtd_saldo,
-0 as qtd_reservada, --- revisar
-0 as qtd_bloqueada, --- revisar
-pcusto(cod_loja, cod_produto, 3, :DTFIM, null, null) as custo_unitario,
-pcusto(cod_loja, cod_produto, 3, :DTFIM, null, null) * qtd_saldo as valor_saldo, 
-null as data_ultima_saida, --- revisar
-:DTFIM as data_hora_posicao
-from(
-
-select
-dados.estab as cod_loja,
-dados.reduzido as nome_loja,
-dados.local,
-localest.descricao as nome_local,
-'PROPRIA' as titularidade,
-'NA_LOJA' as localizacao_fisica,
-dados.item as cod_produto,
-itemagro.descricao as desc_produto,
-u_gestoque.descricao as grupo_produto,
-itemagro.lotectrl as controla_lote,
-itemagro.unidade,
-dados.lote,
-la.datafabricacao as data_fabricacao,
-la.validade as data_validade,
-trunc(la.validade - cast(:DTFIM as date)) as dias_para_vencer,
-sum(dados.quantidade) as qtd,
-sum(dados.saldoant) as saldoant,
-sum(dados.quantidade + nvl(dados.saldoant,0)) as qtd_saldo,
-:DTFIM as data_hora_posicao
-from (
-    
-select
-base.estab,
-base.reduzido,
-base.local,
-base.item,
-base.lote,
-base.tipo,
-base.seqlote,
-sum(base.quantidade) as quantidade,
-0 as saldoant
-from base
-
-group by
-base.estab,
-base.reduzido,
-base.local,
-base.item,
-base.lote,
-base.tipo,
-base.seqlote
-
-union all
-
-select
-sa.estab,
-sa.reduzido,
-sa.local,
-sa.item,
-sa.lote,
-sa.tipo,
-sa.seqlote,
-0 as quantidade,
-sa.quantidade as saldoant
-from saldo_anterior sa
-
-)dados
-inner join itemagro on itemagro.item = dados.item
-inner join itemgrupo on itemgrupo.grupo = itemagro.grupo
-left join itemgrupo_u on itemgrupo_u.grupo = itemgrupo.grupo
-left join u_gestoque on u_gestoque.u_gestoque_id = itemgrupo_u.u_gestoque_id
-left join localest on
-    localest.estab = dados.estab
-    and localest.local = dados.local
-left join loteagro la on
-    la.estab = dados.estab
-    and la.item = dados.item
-    and la.lote = dados.lote
-    and la.seqlote = dados.seqlote
-    and la.tipo = dados.tipo
-
-group by
-dados.estab ,
-dados.reduzido ,
-dados.local,
-dados.item,
-itemagro.descricao,
-u_gestoque.descricao,
-itemagro.unidade,
-dados.lote,
-la.datafabricacao,
-la.validade,
-localest.descricao,
-itemagro.lotectrl
-
-)dados1
+SELECT
+    COD_LOJA,
+    NOME_LOJA,
+    LOCAL,
+    NOME_LOCAL,
+    TITULARIDADE,
+    LOCALIZACAO_FISICA,
+    COD_PRODUTO,
+    DESC_PRODUTO,
+    GRUPO_PRODUTO,
+    CONTROLA_LOTE,
+    UNIDADE,
+    LOTE,
+    DATA_FABRICACAO,
+    DATA_VALIDADE,
+    DIAS_PARA_VENCER,
+    QTD,
+    SALDOANT,
+    QTD_SALDO,
+    0 AS QTD_RESERVADA,  --- revisar
+    0 AS QTD_BLOQUEADA,  --- revisar
+    CUSTO_UNITARIO,
+    CUSTO_UNITARIO * QTD_SALDO AS VALOR_SALDO,
+    NULL AS DATA_ULTIMA_SAIDA, --- revisar
+    :DTFIM AS DATA_HORA_POSICAO
+FROM (
+    SELECT P.*,
+           (SELECT PCUSTO(P.COD_LOJA, P.COD_PRODUTO, 3, :DTFIM, NULL, NULL) FROM DUAL) AS CUSTO_UNITARIO
+    FROM POSICAO P
+)
