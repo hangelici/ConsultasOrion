@@ -4,6 +4,7 @@ with basecanc as (
     select
     nfc.estab,
     nfc.nota,
+    nfc.seqnota,
     nfc.chaveacesso,
     nfc.dtcancelamento as data_hora_evento,
     nfc.useridcanc as usuario_evento,
@@ -144,7 +145,7 @@ bd.valortotal as valor,
 nfl.lote,
 lote_ori.loteori as lote_doc_original,
 nfl.quantidade as qtd_lote,
-null as id_item_movimento,
+bd.seqnota as id_item_movimento,
 bd.dtemissao as data_hora_evento
 from basedev bd
 left join nfcab_u on
@@ -191,7 +192,7 @@ bc.valortotal as valor,
 null as lote,
 null as lote_doc_original,
 null as qtd_lote,
-null as id_item_movimento,
+bc.seqnota as id_item_movimento,
 bc.data_hora_evento
 from basecanc bc 
 
@@ -219,7 +220,7 @@ peditem.valor as valor,
 ped.lote,
 null as lote_doc_original,
 ped.quantidade as qtd_lote,
-null as id_item_movimento,
+pedcab.numero as id_item_movimento,
 hp.datahora_hist as data_hora_evento
 from pedcab
 inner join u_tempresa on u_tempresa.estab = pedcab.estab and u_tempresa.insumos = 'S'
