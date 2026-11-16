@@ -12,6 +12,7 @@ with base_nota as (
     nfcab.numerocm,
     nfcab.seqendereco,
     nfcab.pessentrega,
+    nfcab.seqendentrega,
     nfitem.seqnotaitem,
     nfitem.item,
     nfcab.status,
@@ -64,7 +65,7 @@ nfcab_u.USER_ORIGEM as usuario_lancamento,
 bn.numerocm as cod_fornecedor,
 contamov.nome as nome_fornecedor,
 nvl(endereco.cnpjf,contamov.cnpjf) as cnpj_fornecedor,
-bn.PESSENTREGA, ---CNPJ_DESTINATARIO revisar
+coalesce(end_ent.cnpjf, endereco.cnpjf, contamov.cnpjf) as cnpj_destinatario,
 bn.cfop,
 bn.seqnotaitem as item_nf,
 case when bn.seqnotaitem = 1 then 'S' else 'N' end as linha_principal_item,
@@ -79,7 +80,7 @@ bn.valortotal as valor_total_item,
 nfl.lote as lote, 
 lt.validade as data_validade, 
 nfl.quantidade as qtd_lote,
-bn.seqnota as id_item_movimento, --revisar
+bn.seqnota as id_item_movimento, 
 pedidos.num_pedido,
 bn.item as item_pedido, 
 pedidos.qtd_recebida_pedido, 
@@ -108,3 +109,6 @@ left join pedidos on
     pedidos.estabnota = bn.estab
     and pedidos.seqnota = bn.seqnota
     and pedidos.seqnotaitem = bn.seqnotaitem
+left join endereco end_ent on
+    end_ent.numerocm = bn.pessentrega
+    and end_ent.seqendereco = bn.pessentrega
