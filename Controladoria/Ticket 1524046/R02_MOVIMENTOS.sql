@@ -19,14 +19,35 @@ with base as (
     inner join u_tempresa on u_tempresa.estab = filial.estab
     where m.codigosaldo = 2 and u_tempresa.insumos = 'S'
     and m.datamovim between :DTINI and :DTFIM
+),
+apartir as (
+    select
+    nf.estab,
+    nf.seqnota,
+    nf.seqnotaitem,
+    max(nfcab.nota) as notaori,
+    max(case when base.somadiminui = nfcfg.entradasaida then nf.seqnotaorigem else null end) as seqori,
+    max(nat.descricao) as natop
+    from nfitemapartirde nf
+    inner join base on
+        base.estab = nf.estab
+        and base.seq = nf.seqnota
+        and base.ordem_item = nf.seqnotaitem
+    inner join nfcab on
+        nfcab.estab = nf.estaborigem
+        and nfcab.seqnota = nf.seqnotaorigem
+    inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
+    inner join natoperacao nat on
+        nat.entradasaida = nfcfg.entradasaida
+        and nat.naturezadaoperacao = nfcfg.naturezadaoperacao
+    group by nf.estab, nf.seqnota, nf.seqnotaitem
 )
 select /*+ USE_NL(NFITEM) USE_NL(NFL) */
 b.estab as cod_estab,
 b.reduzido as nome_loja,
 b.local as cod_local,
 b.doc as id_movimento,
-b.seq, -- retirar depois
-b.ordem_item as id_item_movimento, -- revisar
+b.seq as id_item_movimento, -- revisar
 b.datamovim||' '||b.horamovim as data_hora_movimento,
 b.datamovim||' '||b.horamovim as data_hora_digitacao,
 'N' as retroativo,
@@ -41,13 +62,13 @@ nvl(nfl.lote,itemprodlote.lote) as lote,
 coalesce(nfl.quantidade,itemprodlote.quantidade,b.quantidade) as qtd,
 nfitem.custocmv as custo_unitario,
 coalesce(nfl.quantidade*nfitem.valorunitario,itemprodlote.quantidade*nfitem.valorunitario,nfitem.valortotal) as valor,
-b.natureza as tipo_doc_origem,
-b.doc as num_doc_origem,
-null as id_movimento_estornado, --revisar
-null as motivo,
-null as observacao,
-null as usuario,
-null as aprovador
+ap.natop as tipo_doc_origem,
+ap.notaori as num_doc_origem,
+ap.seqori as id_movimento_estornado--, --revisar
+--null as motivo,
+--null as observacao,
+--null as usuario,
+--null as aprovador
 from base b
 inner join itemagro on itemagro.item = b.item
 left join nfitem on
@@ -63,3 +84,7 @@ left join itemprodlote on
         and cast(itemprodlote.sequencia as varchar2(50)) = b.doc
         and itemprodlote.seqpa = b.seq
         and itemprodlote.item = b.item
+left join apartir ap on
+    ap.estab = b.estab
+    and ap.seqnota = b.seq
+    and ap.seqnotaitem = b.ordem_item
