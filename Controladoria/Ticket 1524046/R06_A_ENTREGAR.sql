@@ -25,6 +25,7 @@ with base as (
     and pedcab.status <> 'C'
     and pedcab.estab in (4,13)
     and pedcab.dtemissao between :DTINI and :DTFIM
+    and (0 in (:ESTAB) or pedcab.estab in (:ESTAB))
 ),
 notas_ped as (
     -- notas que baixaram os pedidos, com o tipo da venda

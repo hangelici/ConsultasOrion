@@ -27,6 +27,7 @@ with basecanc as (
     inner join u_tempresa on u_tempresa.estab = nfc.estab
 
     where u_tempresa.insumos = 'S'  and hn.dtemissao between :DTINI and :DTFIM
+    and (0 in (:ESTAB) or nfc.estab in (:ESTAB))
 ),
 basedev as (
     -- notas de devolução de compra e venda
@@ -57,6 +58,7 @@ basedev as (
         nfitem.estab = nfcab.estab
         and nfitem.seqnota = nfcab.seqnota
     where nfcab.dtemissao between :DTINI and :DTFIM
+    and (0 in (:ESTAB) or nfcab.estab in (:ESTAB))
 ),
 apartir as (
     select /*+ LEADING(BASEDEV NFI NF) USE_NL(NFI) */ --  notas de remessa que são origem da devolução
@@ -239,8 +241,9 @@ left join peditemlote ped on
     and ped.numero = peditem.numero
     and ped.seqpedite = peditem.seqpedite
 
-where pedcab.status = 'C'
+where pedcab.status = 'C' and pedcab.serie in ('PV','PVM','PF')
   and pedcab.dtemissao between :DTINI and :DTFIM
+  and (0 in (:ESTAB) or pedcab.estab in (:ESTAB))
 
 )dados
 inner join filial on filial.estab = dados.estab

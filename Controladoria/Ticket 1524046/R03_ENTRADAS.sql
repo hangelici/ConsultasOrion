@@ -31,6 +31,7 @@ with base_nota as (
         nfitem.estab = nfcab.estab
         and nfitem.seqnota = nfcab.seqnota
     where nfcab.dtemissao between :DTINI and :DTFIM
+    and (0 in (:ESTAB) or nfcab.estab in (:ESTAB))
 ),
 pedidos as (
     select

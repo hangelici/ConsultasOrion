@@ -19,6 +19,7 @@ with base as (
     inner join u_tempresa on u_tempresa.estab = filial.estab
     where m.codigosaldo = 2 and u_tempresa.insumos = 'S'
     and m.datamovim between :DTINI and :DTFIM
+    and (0 in (:ESTAB) or m.estab in (:ESTAB))
 ),
 apartir as (
     select
