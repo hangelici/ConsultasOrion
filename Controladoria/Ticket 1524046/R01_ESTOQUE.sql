@@ -117,11 +117,11 @@ SELECT
     DATA_FABRICACAO,
     DATA_VALIDADE,
     DIAS_PARA_VENCER,
-    QTD,
-    SALDOANT,
+    --QTD,
+   -- SALDOANT,
     QTD_SALDO,
-    0 AS QTD_RESERVADA,  --- revisar
-    0 AS QTD_BLOQUEADA,  --- revisar
+    --0 AS QTD_RESERVADA,  --- revisar
+    --0 AS QTD_BLOQUEADA,  --- revisar
     CUSTO_UNITARIO,
     CUSTO_UNITARIO * QTD_SALDO AS VALOR_SALDO,
     NULL AS DATA_ULTIMA_SAIDA, --- revisar
