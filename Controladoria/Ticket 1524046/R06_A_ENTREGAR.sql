@@ -128,7 +128,7 @@ contamov.numerocm as cod_cliente,
 contamov.nome as nome_cliente,
 nvl(endereco.cnpjf,contamov.cnpjf) as cpf_cnpjf_cliente,
 base.numero as num_pedido,
-base.seqpedite as item_pedido,
+itemagro.item as item_pedido,
 base.dtemissao as data_venda,
 case 
     when base.status = 'B' then 'FATURADO' 
