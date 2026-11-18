@@ -95,7 +95,7 @@ apartir_soma as (
     from apartir
     group by apartir.estab, apartir.seqnota, apartir.seqnotaitem
 )
-select /*+ GATHER_PLAN_STATISTICS */
+select
 dados.estab as cod_loja,
 filial.reduzido as nome_loja,
 dados.tipo_evento,
