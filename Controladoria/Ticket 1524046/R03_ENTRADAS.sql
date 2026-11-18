@@ -37,6 +37,7 @@ pedidos as (
     ped.estabnota,
     ped.seqnota,
     ped.seqnotaitem,
+    sum(peditem.quantidade) as qtd_ped,
     sum(ped.quantidade) as qtd_recebida_pedido,
     min(ped.numero) as num_pedido,
     min(peditem.valorunitario) as preco_pedido
@@ -83,7 +84,7 @@ nfl.quantidade as qtd_lote,
 bn.seqnota as id_item_movimento, 
 pedidos.num_pedido,
 bn.item as item_pedido, 
-pedidos.qtd_recebida_pedido, 
+pedidos.qtd_ped, 
 pedidos.preco_pedido, 
 pedidos.qtd_recebida_pedido
 from base_nota bn
