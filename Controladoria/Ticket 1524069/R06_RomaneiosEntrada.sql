@@ -44,6 +44,7 @@ left join romadesc on
     and romadesc.entradasaida = roma.entradasaida
 where roma.ENTRADASAIDA = 'E'
 and roma.dtemissao between :DTINI and :DTFIM
+and (0 in (:ESTAB) or roma.estab in (:ESTAB))
 
 group by
 roma.estab,

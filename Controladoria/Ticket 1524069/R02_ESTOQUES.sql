@@ -15,7 +15,7 @@ with dados as (
     inner join u_tempresa on u_tempresa.estab = m.estab and u_tempresa.graos = 'S'
     where
     m.datamovim < cast(:DTFIM as date) 
-    and m.codigosaldo = 2
+    and m.codigosaldo = 2 and (0 in (:ESTAB) or m.estab in (:ESTAB))
     group by m.estab, m.item, m.local
 )
 select

@@ -36,3 +36,4 @@ inner join romacfg on romacfg.romaneioconfig = roma.romaneioconfig
 inner join contamov on contamov.numerocm = roma.numerocm
 where roma.ENTRADASAIDA = 'S'
 and roma.dtemissao between :DTINI and :DTFIM
+and (0 in (:ESTAB) or roma.estab in (:ESTAB))

@@ -29,6 +29,7 @@ inner join romacfg on romacfg.romaneioconfig = roma.romaneioconfig
 where roma.estornado = 'N'
 and roma.dtemissao between :DTINI and :DTFIM
 and romadesc.romadesc in (2,32,1,31,6,36)
+and (0 in (:ESTAB) or roma.estab in (:ESTAB))
 and (
     romadesc.percentual <> 0
     or
