@@ -13,3 +13,5 @@ and u.graos = 'S'
 left join localest_u on 
     localest_u.estab = localest.estab
     and localest_u.local = localest.local
+-- Filtro de estabelecimento: informar 0 para todos ou um ou mais códigos (ex.: 1, 5, 12)
+where (localest.estab in (:ESTAB) or 0 in (:ESTAB))
