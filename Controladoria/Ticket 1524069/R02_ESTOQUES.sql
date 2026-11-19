@@ -5,16 +5,16 @@ with dados as (
     m.estab,
     m.item,
     m.local,
-    sum(case when m.datamovim <  to_date(:DTINI, 'DD/MM/YYYY')
+    sum(case when m.datamovim <  cast(:DTINI as date)
              then case when m.somadiminui = 'S' then m.quantidade else -m.quantidade end
              else 0 end) saldoant,
-    sum(case when m.datamovim >= to_date(:DTINI, 'DD/MM/YYYY')
+    sum(case when m.datamovim >= cast(:DTINI as date)
              then case when m.somadiminui = 'S' then m.quantidade else -m.quantidade end
              else 0 end) saldo_atual
     from movitemagro m
     inner join u_tempresa on u_tempresa.estab = m.estab and u_tempresa.graos = 'S'
     where
-    m.datamovim < to_date(:DTFIM, 'DD/MM/YYYY') 
+    m.datamovim < cast(:DTFIM as date) 
     and m.codigosaldo = 2
     group by m.estab, m.item, m.local
 )
