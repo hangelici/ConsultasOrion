@@ -14,7 +14,7 @@ roma.tara,
 roma.pesoliquido as peso_liquido_kg,
 case when roma.estornado = 'S' then 'Estornado' else 'Ok' end status_ticket
 from u_tempobalanca tb
-left join roma on
+inner join roma on
     roma.estab = tb.estab
     and roma.ticket = cast(tb.ticket as varchar2(40))
     and roma.romaneioconfig =tb.romaneioconfig

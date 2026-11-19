@@ -12,7 +12,7 @@ contamov.nome as titularidade,
 roma.pesototal - nvl(roma.tara,0) as peso_expedido_kg,
 roma.pesototal as peso_total_romaneio_kg,
 'S' as linha_principal_romaneio,
-null as id_movimento_estoque,
+roma.romaneio as id_movimento_estoque,
 case when roma.estornado = 'N' then 'OK' else 'ESTORNADO' end status_romaneio,
 roma.userid as id_usuario,
 1 as id_item_romaneio
