@@ -18,7 +18,7 @@ with dados as (
     and m.codigosaldo = 2 and (0 in (:ESTAB) or m.estab in (:ESTAB))
     group by m.estab, m.item, m.local
 )
-select
+select  /*+ GATHER_PLAN_STATISTICS */
 dados.estab as cod_unidade,
 dados.item,
 itemagro.descricao as desc_produto,
@@ -41,3 +41,13 @@ dados.item,
 itemagro.descricao,
 localest.descricao,
 itemagro.unidade;
+
+alter session set statistics_level = all;	
+SELECT *
+FROM TABLE(
+    DBMS_XPLAN.DISPLAY_CURSOR(
+        null,
+        NULL,
+        'ALLSTATS LAST +PREDICATE +PEEKED_BINDS'
+    )
+);	
