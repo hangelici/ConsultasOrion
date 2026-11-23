@@ -1,58 +1,48 @@
-select /*+ GATHER_PLAN_STATISTICS
-           LEADING(nfitem nfcab r nfcab2 nfi nsi nsi2 nfiimposto nfiimposto2)
-           USE_NL(nfcab r nfcab2 nfi nsi nsi2 nfiimposto nfiimposto2)
-           INDEX(nfitem IDX_FK_CFOP_NFITEM)
-           INDEX(r IX_U_NOTASSIEG_REF_CHAVE)
-           INDEX(nfcab2 IDX_CHAVEACESSO)
-           INDEX(nfi IDX_NFITEM_SEQNOTA_ESTAB)
-           INDEX(nsi IX_U_NOTASSIEG_CHAVE)
-           INDEX(nsi2 IX_U_NOTASSIEG_CHAVE)
-        */
-nfcab.dtemissao,
-r.chave,
-nfitem.cfop,
-nsi.vicms,
-nfiimposto.valorimposto as icms_vs,
-r.REFERENCIA,
-nfi.cfop as cfop_ref,
-nsi2.vicms as vicms_ref,
-nfiimposto2.valorimposto as icms_ref_vs,
-case
-  when nsi.vicms = nfiimposto.valorimposto and
-  nsi2.vicms = nfiimposto2.valorimposto then 'OK'
-  else 'Erro'
+select
+ni.estab,
+filial.reduzido as filial,
+ni.chave,
+un.nota,
+ni.dtemissao,
+ni.cfop,
+ni.icmscdcst as cst,
+nvl(ni.icmsvalor,0) as icms_retorno_fiscalio,
+nfret.valorimposto as icms_retorno_vs,
+nr.referencia as chave_origem,
+nvl(ni2.icmsvalor,0) as icms_origem_fiscalio,
+nfret2.valorimposto as icms_origem_vs,
+case 
+    when nvl(ni.icmsvalor,0) <> nfret.valorimposto then 'ERRO' 
+    when nvl(ni2.icmsvalor,0) < nfret2.valorimposto then 'ERRO'
+    when nvl(ni.icmsvalor,0) <> nvl(ni2.icmsvalor,0)  then 'ERRO'
+    when nfret.valorimposto <> nfret2.valorimposto then 'ERRO'
+    else 'OK'
 end status
-from u_notassieg_ref r
-inner join nfcab on nfcab.chaveacessonfe = r.chave
-inner join nfitem on
-  nfitem.estab = nfcab.estab 
-  and nfitem.seqnota = nfcab.seqnota
-inner join u_notassieg nsi on nsi.chaveacessonfe = r.chave
-inner join nfitemimposto nfiimposto on
-  nfiimposto.estab = nfitem.estab 
-  and nfiimposto.seqnota = nfitem.seqnota 
-  and nfiimposto.seqnotaitem = nfitem.seqnotaitem
-  and nfiimposto.imposto = 1
------ ### referencia ### -----
-inner join nfcab nfcab2 on nfcab2.chaveacessonfe = r.referencia
-inner join nfitem nfi on
-  nfi.estab = nfcab2.estab 
-  and nfi.seqnota = nfcab2.seqnota
-inner join u_notassieg nsi2 on nsi2.chaveacessonfe = r.referencia
-inner join nfitemimposto nfiimposto2 on
-  nfiimposto2.estab = nfi.estab 
-  and nfiimposto2.seqnota = nfi.seqnota 
-  and nfiimposto2.seqnotaitem = nfi.seqnotaitem
-  and nfiimposto2.imposto = 1
-
-where nfitem.cfop in ('2202','1202') and nfi.cfop in ('5202','6202','6102')
-;
-alter session set statistics_level = all;
-SELECT *
-FROM TABLE(
-    DBMS_XPLAN.DISPLAY_CURSOR(
-        null,
-        NULL,
-        'ALLSTATS LAST +PREDICATE +PEEKED_BINDS'
-    )
-);
+from u_notassieg_itens ni
+inner join filial on filial.estab =ni.estab
+inner join u_notassieg_ref nr on nr.chave = ni.chave
+inner join u_notassieg un on
+    un.estab = ni.estab
+    and un.chaveacessonfe = ni.chave
+inner join nfcab on
+    nfcab.estab = un.estab
+    and nfcab.chaveacessonfe = un.chaveacessonfe
+left join nfitemimposto nfret on
+    nfret.estab = nfcab.estab
+    and nfret.seqnota = nfcab.seqnota
+    and nfret.seqnotaitem = ni.seqnotaitem
+    and nfret.imposto = 1
+--- ######### NOTAS DE ORIGEM
+inner join u_notassieg_itens ni2 on 
+    ni2.chave = nr.referencia
+    and ni2.cfop in ('5202','6202','6102','6106')
+inner join nfcab nf on
+    nf.estab = ni2.estab
+    and nf.chaveacessonfe = ni2.chave
+left join nfitemimposto nfret2 on
+    nfret2.estab = nf.estab
+    and nfret2.seqnota = nf.seqnota
+    and nfret2.seqnotaitem = ni2.seqnotaitem
+    and nfret2.imposto = 1
+where nfcab.dtemissao between :DTINI and :DTFIM
+and ni.cfop in ('2202','1202')
