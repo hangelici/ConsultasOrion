@@ -35,7 +35,7 @@ left join nfitemimposto nfret on
 --- ######### NOTAS DE ORIGEM
 inner join u_notassieg_itens ni2 on 
     ni2.chave = nr.referencia
-    and ni2.cfop in ('5202','6202','6102','6106')
+    and substr(ni2.cfop,1,1) in ('5','6')
 inner join nfcab nf on
     nf.estab = ni2.estab
     and nf.chaveacessonfe = ni2.chave
@@ -45,4 +45,4 @@ left join nfitemimposto nfret2 on
     and nfret2.seqnotaitem = ni2.seqnotaitem
     and nfret2.imposto = 1
 where nfcab.dtemissao between :DTINI and :DTFIM
-and ni.cfop in ('2202','1202')
+and substr(ni.cfop,1,1) in ('1','2')
