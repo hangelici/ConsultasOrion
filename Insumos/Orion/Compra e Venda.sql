@@ -125,8 +125,8 @@ filtrado as (
     where
         -- saldo restante de compra parcialmente baixada nao gera linha propria
         (p.c_pos is null or p.v_pos is not null or p.c_qtd_baixada = 0)
-        and (   (p.c_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.c_dt < to_date(:DTFIM,'DD/MM/YYYY') + 1)
-             or (p.v_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.v_dt < to_date(:DTFIM,'DD/MM/YYYY') + 1))
+        and (   (p.c_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.c_dt < to_date(:DTFIM,'DD/MM/YYYY'))
+             or (p.v_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.v_dt < to_date(:DTFIM,'DD/MM/YYYY')))
 )
 
 select
