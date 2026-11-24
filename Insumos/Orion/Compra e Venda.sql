@@ -13,8 +13,8 @@
 
    Parametros:
      :ESTAB -> filial(is); 0 = todas
-     :DTINI -> data inicial, 'DD/MM/YYYY' (filtra so a exibicao)
-     :DTFIM -> data final, 'DD/MM/YYYY' (exibicao + corte do calculo)
+     :DTINI -> data inicial (filtra so a exibicao)
+     :DTFIM -> data final (exibicao + corte do calculo)
    ===================================================================== */
 with
 
@@ -53,7 +53,7 @@ base as (
         and nfcab.estab not in (2)
         and (nfcab.estab in (:ESTAB) or 0 in (:ESTAB))
         -- sem corte de data inicial: o FIFO precisa do historico completo
-        and nfcab.dtemissao < to_date(:DTFIM,'DD/MM/YYYY')
+        and nfcab.dtemissao < :DTFIM
         -- TE: exclui transferencia vinda do proprio grupo (estabc)
         and (
             cfg.tipoop <> 'TE'
@@ -125,8 +125,8 @@ filtrado as (
     where
         -- saldo restante de compra parcialmente baixada nao gera linha propria
         (p.c_pos is null or p.v_pos is not null or p.c_qtd_baixada = 0)
-        and (   (p.c_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.c_dt < to_date(:DTFIM,'DD/MM/YYYY'))
-             or (p.v_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.v_dt < to_date(:DTFIM,'DD/MM/YYYY')))
+        and (   (p.c_dt >= :DTINI and p.c_dt < :DTFIM)
+             or (p.v_dt >= :DTINI and p.v_dt < :DTFIM))
 )
 
 select
