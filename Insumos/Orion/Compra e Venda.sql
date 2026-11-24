@@ -20,6 +20,10 @@
      TIPO_LINHA = 'BAIXA'           -> venda que baixou (parte de) a compra
      TIPO_LINHA = 'SEM VENDA'       -> compra ainda sem nenhuma baixa
      TIPO_LINHA = 'VENDA SEM SALDO' -> parte da venda sem compra para lastrear
+
+   Parametros:
+     :DTINI -> data inicial do periodo (filtra so a exibicao)
+     :DTFIM -> data final do periodo (exibicao + corte do calculo; saldos = posicao em :DTFIM)
    ===================================================================== */
 with base as (
     select
@@ -66,7 +70,10 @@ with base as (
         or tipo.tipoop in ('IS','SE','BP')                                   -- IS (implantacao de saldo), SE (sobra de estoque) e BP (baixa por perda): sem validacao de estabc
         or (tipo.tipoop = 'TE' and nvl(uc.estabc,0) <> nfcab.estab)          -- TE: somente vinda de outro grupo
     )
-    -- and nfcab.dtemissao >= date '2024-01-01'   -- corte de data (opcional)
+    -- Data INICIAL nao pode ser filtrada aqui: o FIFO precisa do historico completo (IS, compras antigas).
+    -- Data FINAL pode: ignora movimentos posteriores e os saldos passam a ser "posicao na data final".
+    and nfcab.dtemissao <= :DTFIM                                           -- data final do periodo
+    -- O filtro de periodo (BETWEEN) e aplicado na exibicao, no final do script.
 ),
 
 /* Fila de compras: IS primeiro, depois ordem cronologica dentro de filial + item */
@@ -143,8 +150,9 @@ alocacao as (
         and v.item = c.item
         and (v.acum_fim - v.quantidade) < c.acum_fim
         and v.acum_fim > (c.acum_fim - c.quantidade)
-)
+),
 
+resultado as (
 /* ---------- 1) Compras (com ou sem baixa) ---------- */
 select
     case when a.v_seqnota is null then 'SEM VENDA' else 'BAIXA' end as tipo_linha,
@@ -207,5 +215,19 @@ select
 from vendas v
 left join tot_compras tc on tc.estab = v.estab and tc.item = v.item
 where v.acum_fim > nvl(tc.qtd_total,0)
+)
 
-order by 2, 3, 7, 5, 6, 19, 17, 18
+/* ---------- Exibicao: filtro de periodo aplicado APOS o calculo FIFO ----------
+   Mostra a linha se a compra OU a venda estiver no periodo. Assim uma venda
+   recente continua mostrando a compra antiga (ou IS) que a lastreou, e os
+   saldos (compra_saldo, saldo_compra_apos_venda) consideram todo o historico. */
+select *
+from resultado r
+where
+    (   r.compra_dtemissao between :DTINI and :DTFIM
+     or r.venda_dtemissao  between :DTINI and :DTFIM)
+    -- and r.compra_saldo > 0          -- (opcional) somente compras com saldo em aberto
+order by
+    r.estab, r.item,
+    r.compra_dtemissao, r.compra_seqnota, r.compra_seqnotaitem,
+    r.venda_dtemissao, r.venda_seqnota, r.venda_seqnotaitem
