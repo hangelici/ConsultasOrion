@@ -1,33 +1,32 @@
 /* =====================================================================
    SALDO DAS NOTAS DE COMPRA x BAIXA PELAS NOTAS DE VENDA (FIFO)
    ---------------------------------------------------------------------
-   Compras (credito) : tipoop C, CF, TE (TE somente vinda de outro grupo)
-                       e IS (implantacao de saldo - compras anteriores a
-                       troca de ERP; entra na fila antes das demais)
-                       e SE (sobra de estoque; ordem cronologica normal)
-   Vendas  (debito)  : tipoop V, VF e BP (baixa por perda - registros antigos)
-   Regra             : as vendas baixam as compras mais antigas primeiro
-                       (FIFO), por FILIAL (nfcab.estab) + ITEM.
-   CF/VF (futuras) e C/V (diretas) sao operacoes independentes,
-   sem contagem dupla.
+   Credito : C, CF, TE (somente de outro grupo), IS (implantacao de saldo,
+             baixada primeiro) e SE (sobra de estoque)
+   Debito  : V, VF e BP (baixa por perda)
+   Regra   : FIFO por filial + item (mais antigas baixadas primeiro)
 
-   Tecnica: "faixas acumuladas". Cada nota recebe uma faixa
-   [acum_ini, acum_fim) na fila de compras e na fila de vendas do mesmo
-   grupo/item. A quantidade que uma venda baixa de uma compra e a
-   sobreposicao entre as duas faixas.
-
-   Saida (uma linha por par compra x venda):
-     TIPO_LINHA = 'BAIXA'           -> venda que baixou (parte de) a compra
-     TIPO_LINHA = 'SEM VENDA'       -> compra ainda sem nenhuma baixa
-     TIPO_LINHA = 'VENDA SEM SALDO' -> parte da venda sem compra para lastrear
+   Saida:
+     BAIXA           -> venda que baixou (parte de) a compra
+     SEM VENDA       -> compra sem nenhuma baixa
+     VENDA SEM SALDO -> parte da venda sem compra para lastrear
 
    Parametros:
      :ESTAB -> filial(is); 0 = todas
-     :DTINI -> data inicial do periodo (filtra so a exibicao)
-     :DTFIM -> data final do periodo (exibicao + corte do calculo; saldos = posicao em :DTFIM)
+     :DTINI -> data inicial, 'DD/MM/YYYY' (filtra so a exibicao)
+     :DTFIM -> data final, 'DD/MM/YYYY' (exibicao + corte do calculo)
    ===================================================================== */
-with base as (
-    select
+with
+
+cfg as (
+    select nfcfg_u.notaconf, tipo.tipoop
+    from nfcfg_u
+    inner join u_tipoop tipo on tipo.u_tipoop_id = nfcfg_u.u_tipoop_id
+    where tipo.tipoop in ('C','CF','TE','IS','SE','V','VF','BP')
+),
+
+base as (
+    select /*+ USE_HASH(nfitem) FULL(nfitem) */
         nfcab.estab,
         nfcab.seqnota,
         nfitem.seqnotaitem,
@@ -36,200 +35,139 @@ with base as (
         nfcab.notaconf,
         nfcab.nota,
         nfcab.numerocm,
-        contamov.cnpjf,
-        tipo.tipoop,
+        cfg.tipoop,
         nfitem.item,
         nfitem.quantidade,
-        case when tipo.tipoop in ('V','VF','BP') then 'V' else 'C' end as natureza,   -- V, VF, BP = debito | C, CF, TE, IS, SE = credito
-        case when tipo.tipoop = 'IS' then 0 else 1 end as prioridade_fifo        -- IS (saldo de abertura) e baixado primeiro
+        case when cfg.tipoop in ('V','VF','BP') then 'V' else 'C' end as natureza,
+        case when cfg.tipoop = 'IS' then 0 else 1 end as prioridade_fifo
     from nfcab
-    inner join filial on filial.estab = nfcab.estab
-    inner join u_tempresa on u_tempresa.estab = filial.estab
-    inner join nfcfg on nfcfg.notaconf = nfcab.notaconf
-    inner join nfcfg_u on nfcfg_u.notaconf = nfcfg.notaconf
-    inner join u_tipoop tipo on tipo.u_tipoop_id = nfcfg_u.u_tipoop_id
+    inner join u_tempresa on u_tempresa.estab = nfcab.estab
+    inner join cfg on cfg.notaconf = nfcab.notaconf
     inner join nfitem on
         nfitem.estab = nfcab.estab
         and nfitem.seqnota = nfcab.seqnota
-
-    /* ### TRANSFERENCIA
-    1. Pegar CNPJ da origem
-    2. Verificar se e uma filial
-    3. Busca a Filial Consolidada
-    */
-    left join contamov on contamov.numerocm = nfcab.numerocm ----- 1 (left: notas sem numerocm, ex. IS, entram na contagem)
-    left join filial fc on fc.cnpj = contamov.cnpjf ----- 2
-    left join u_tempresa uc on uc.estab = fc.estab ----- 3
-
     where
-    nvl(nfcab.status,'X') <> 'C'          -- status nulo (comum em IS) nao pode excluir a nota
-    and u_tempresa.insumos = 'S'
-    and nfitem.quantidade > 0
-    and nfcab.estab not in  (2)
-    and (nfcab.estab in (:ESTAB) or 0 in (:ESTAB))                         -- filial (0 = todas); seguro filtrar aqui, o FIFO e por filial
-    and (
-           tipo.tipoop in ('V','VF','C','CF')
-        or tipo.tipoop in ('IS','SE','BP')                                   -- IS (implantacao de saldo), SE (sobra de estoque) e BP (baixa por perda): sem validacao de estabc
-        or (tipo.tipoop = 'TE' and nvl(uc.estabc,0) <> nfcab.estab)          -- TE: somente vinda de outro grupo
-    )
-    -- Data INICIAL nao pode ser filtrada aqui: o FIFO precisa do historico completo (IS, compras antigas).
-    -- Data FINAL pode: ignora movimentos posteriores e os saldos passam a ser "posicao na data final".
-    and nfcab.dtemissao <= :DTFIM                                           -- data final do periodo
-    -- O filtro de periodo (BETWEEN) e aplicado na exibicao, no final do script.
+        nvl(nfcab.status,'X') <> 'C'
+        and u_tempresa.insumos = 'S'
+        and nfitem.quantidade > 0
+        and nfcab.estab not in (2)
+        and (nfcab.estab in (:ESTAB) or 0 in (:ESTAB))
+        -- sem corte de data inicial: o FIFO precisa do historico completo
+        and nfcab.dtemissao < to_date(:DTFIM,'DD/MM/YYYY')
+        -- TE: exclui transferencia vinda do proprio grupo (estabc)
+        and (
+            cfg.tipoop <> 'TE'
+            or not exists (
+                select 1
+                from contamov cm
+                inner join filial fc on fc.cnpj = cm.cnpjf
+                inner join u_tempresa uc on uc.estab = fc.estab
+                where cm.numerocm = nfcab.numerocm
+                  and uc.estabc = nfcab.estab
+            )
+        )
 ),
 
-/* Fila de compras: IS primeiro, depois ordem cronologica dentro de filial + item */
-compras as (
+-- posicao acumulada de cada nota na sua fila; unica por estab + item + natureza
+fila as (
     select
         b.*,
         sum(b.quantidade) over (
-            partition by b.estab, b.item
-            order by b.prioridade_fifo, b.dtemissao, b.hora, b.estab, b.seqnota, b.seqnotaitem
+            partition by b.estab, b.item, b.natureza
+            order by b.prioridade_fifo, b.dtemissao, b.hora, b.seqnota, b.seqnotaitem
             rows unbounded preceding
-        ) as acum_fim
+        ) as pos
     from base b
-    where b.natureza = 'C'
 ),
 
-/* Fila de vendas: mesma ordenacao */
-vendas as (
+-- linha do tempo: cada trecho (pos anterior, pos] pertence a proxima compra e a proxima venda
+seg as (
     select
-        b.*,
-        sum(b.quantidade) over (
-            partition by b.estab, b.item
-            order by b.dtemissao, b.hora, b.estab, b.seqnota, b.seqnotaitem
-            rows unbounded preceding
-        ) as acum_fim
-    from base b
-    where b.natureza = 'V'
+        estab, item, pos,
+        pos - nvl(lead(pos) over (partition by estab, item
+                                  order by pos desc, natureza desc, seqnota desc, seqnotaitem desc), 0) as qtd_seg,
+        last_value(case when natureza = 'C' then pos end ignore nulls)
+            over (partition by estab, item
+                  order by pos desc, natureza desc, seqnota desc, seqnotaitem desc
+                  rows between unbounded preceding and current row) as c_pos,
+        last_value(case when natureza = 'V' then pos end ignore nulls)
+            over (partition by estab, item
+                  order by pos desc, natureza desc, seqnota desc, seqnotaitem desc
+                  rows between unbounded preceding and current row) as v_pos,
+        max(case when natureza = 'V' then pos end)
+            over (partition by estab, item) as tot_v
+    from fila
 ),
 
-tot_compras as (
-    select estab, item, sum(quantidade) as qtd_total
-    from base where natureza = 'C'
-    group by estab, item
-),
-
-tot_vendas as (
-    select estab, item, sum(quantidade) as qtd_total
-    from base where natureza = 'V'
-    group by estab, item
-),
-
-/* Saldo final de cada item de compra */
-compras_saldo as (
+pares as (
     select
-        c.*,
-        c.acum_fim - c.quantidade as acum_ini,
-        greatest(0, least(c.acum_fim, nvl(tv.qtd_total,0)) - (c.acum_fim - c.quantidade)) as qtd_baixada_total,
-        c.quantidade
-          - greatest(0, least(c.acum_fim, nvl(tv.qtd_total,0)) - (c.acum_fim - c.quantidade)) as saldo_compra
-    from compras c
-    left join tot_vendas tv on tv.estab = c.estab and tv.item = c.item
+        s.estab, s.item, s.pos, s.qtd_seg, s.c_pos, s.v_pos,
+        c.seqnota     as c_seqnota,  c.seqnotaitem as c_seqnotaitem, c.dtemissao as c_dt,
+        c.notaconf    as c_notaconf, c.nota        as c_nota,        c.numerocm  as c_numerocm,
+        c.tipoop      as c_tipoop,   c.quantidade  as c_qtd,
+        v.seqnota     as v_seqnota,  v.seqnotaitem as v_seqnotaitem, v.dtemissao as v_dt,
+        v.notaconf    as v_notaconf, v.nota        as v_nota,        v.numerocm  as v_numerocm,
+        v.tipoop      as v_tipoop,   v.quantidade  as v_qtd,
+        case when s.c_pos is not null
+             then greatest(0, least(s.c_pos, nvl(s.tot_v,0)) - (s.c_pos - c.quantidade))
+        end as c_qtd_baixada
+    from seg s
+    left join fila c on
+        c.estab = s.estab and c.item = s.item and c.natureza = 'C' and c.pos = s.c_pos
+    left join fila v on
+        v.estab = s.estab and v.item = s.item and v.natureza = 'V' and v.pos = s.v_pos
+    where s.qtd_seg > 0
 ),
 
-/* Cruzamento FIFO: sobreposicao das faixas acumuladas */
-alocacao as (
-    select
-        c.estab, c.item,
-        c.estab as c_estab, c.seqnota as c_seqnota, c.seqnotaitem as c_seqnotaitem,
-        v.estab        as v_estab,
-        v.seqnota      as v_seqnota,
-        v.seqnotaitem  as v_seqnotaitem,
-        v.dtemissao    as v_dtemissao,
-        v.notaconf     as v_notaconf,
-        v.nota         as v_nota,
-        v.numerocm     as v_numerocm,
-        v.cnpjf        as v_cnpjf,
-        v.tipoop       as v_tipoop,
-        v.quantidade   as v_quantidade,
-        least(c.acum_fim, v.acum_fim) - greatest(c.acum_fim - c.quantidade, v.acum_fim - v.quantidade) as qtd_baixada,
-        c.acum_fim - least(c.acum_fim, v.acum_fim) as saldo_compra_apos_venda,
-        case when v.dtemissao < c.dtemissao then 'S' else 'N' end as venda_anterior_compra
-    from compras c
-    inner join vendas v on
-        v.estab = c.estab
-        and v.item = c.item
-        and (v.acum_fim - v.quantidade) < c.acum_fim
-        and v.acum_fim > (c.acum_fim - c.quantidade)
-),
-
-resultado as (
-/* ---------- 1) Compras (com ou sem baixa) ---------- */
-select
-    case when a.v_seqnota is null then 'SEM VENDA' else 'BAIXA' end as tipo_linha,
-    cs.estab,
-    cs.item,
-    -- Compra
-    cs.estab          as compra_estab,
-    cs.seqnota        as compra_seqnota,
-    cs.seqnotaitem    as compra_seqnotaitem,
-    cs.dtemissao      as compra_dtemissao,
-    cs.notaconf       as compra_notaconf,
-    cs.nota           as compra_nota,
-    cs.numerocm       as compra_numerocm,
-    cs.cnpjf          as compra_cnpjf,
-    cs.tipoop         as compra_tipoop,
-    cs.quantidade     as compra_quantidade,
-    cs.qtd_baixada_total as compra_qtd_baixada,
-    cs.saldo_compra   as compra_saldo,
-    -- Venda que baixou
-    a.v_estab         as venda_estab,
-    a.v_seqnota       as venda_seqnota,
-    a.v_seqnotaitem   as venda_seqnotaitem,
-    a.v_dtemissao     as venda_dtemissao,
-    a.v_notaconf      as venda_notaconf,
-    a.v_nota          as venda_nota,
-    a.v_numerocm      as venda_numerocm,
-    a.v_cnpjf         as venda_cnpjf,
-    a.v_tipoop        as venda_tipoop,
-    a.v_quantidade    as venda_quantidade,
-    a.qtd_baixada,
-    a.saldo_compra_apos_venda,
-    a.venda_anterior_compra
-from compras_saldo cs
-left join alocacao a on
-    a.c_estab = cs.estab
-    and a.c_seqnota = cs.seqnota
-    and a.c_seqnotaitem = cs.seqnotaitem
-
-union all
-
-/* ---------- 2) Vendas sem lastro de compra (excedente) ---------- */
-select
-    'VENDA SEM SALDO' as tipo_linha,
-    v.estab,
-    v.item,
-    null, null, null, null, null, null, null, null, null, null, null, null,
-    v.estab,
-    v.seqnota,
-    v.seqnotaitem,
-    v.dtemissao,
-    v.notaconf,
-    v.nota,
-    v.numerocm,
-    v.cnpjf,
-    v.tipoop,
-    v.quantidade,
-    v.acum_fim - greatest(v.acum_fim - v.quantidade, nvl(tc.qtd_total,0)) as qtd_baixada,  -- qtd sem lastro
-    null,
-    null
-from vendas v
-left join tot_compras tc on tc.estab = v.estab and tc.item = v.item
-where v.acum_fim > nvl(tc.qtd_total,0)
+filtrado as (
+    select p.*
+    from pares p
+    where
+        -- saldo restante de compra parcialmente baixada nao gera linha propria
+        (p.c_pos is null or p.v_pos is not null or p.c_qtd_baixada = 0)
+        and (   (p.c_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.c_dt < to_date(:DTFIM,'DD/MM/YYYY') + 1)
+             or (p.v_dt >= to_date(:DTINI,'DD/MM/YYYY') and p.v_dt < to_date(:DTFIM,'DD/MM/YYYY') + 1))
 )
 
-/* ---------- Exibicao: filtro de periodo aplicado APOS o calculo FIFO ----------
-   Mostra a linha se a compra OU a venda estiver no periodo. Assim uma venda
-   recente continua mostrando a compra antiga (ou IS) que a lastreou, e os
-   saldos (compra_saldo, saldo_compra_apos_venda) consideram todo o historico. */
-select *
-from resultado r
-where
-    (   r.compra_dtemissao between :DTINI and :DTFIM
-     or r.venda_dtemissao  between :DTINI and :DTFIM)
-    -- and r.compra_saldo > 0          -- (opcional) somente compras com saldo em aberto
+select
+    case
+        when f.c_pos is null then 'VENDA SEM SALDO'
+        when f.v_pos is null then 'SEM VENDA'
+        else 'BAIXA'
+    end as tipo_linha,
+    f.estab,
+    f.item,
+    case when f.c_pos is not null then f.estab end as compra_estab,
+    f.c_seqnota       as compra_seqnota,
+    f.c_seqnotaitem   as compra_seqnotaitem,
+    f.c_dt            as compra_dtemissao,
+    f.c_notaconf      as compra_notaconf,
+    f.c_nota          as compra_nota,
+    f.c_numerocm      as compra_numerocm,
+    cmc.cnpjf         as compra_cnpjf,
+    f.c_tipoop        as compra_tipoop,
+    f.c_qtd           as compra_quantidade,
+    f.c_qtd_baixada   as compra_qtd_baixada,
+    f.c_qtd - f.c_qtd_baixada as compra_saldo,
+    case when f.v_pos is not null then f.estab end as venda_estab,
+    f.v_seqnota       as venda_seqnota,
+    f.v_seqnotaitem   as venda_seqnotaitem,
+    f.v_dt            as venda_dtemissao,
+    f.v_notaconf      as venda_notaconf,
+    f.v_nota          as venda_nota,
+    f.v_numerocm      as venda_numerocm,
+    cmv.cnpjf         as venda_cnpjf,
+    f.v_tipoop        as venda_tipoop,
+    f.v_qtd           as venda_quantidade,
+    case when f.v_pos is not null then f.qtd_seg end as qtd_baixada,
+    case when f.c_pos is not null and f.v_pos is not null
+         then f.c_pos - f.pos end as saldo_compra_apos_venda,
+    case when f.c_pos is not null and f.v_pos is not null
+         then case when f.v_dt < f.c_dt then 'S' else 'N' end end as venda_anterior_compra
+from filtrado f
+left join contamov cmc on cmc.numerocm = f.c_numerocm
+left join contamov cmv on cmv.numerocm = f.v_numerocm
 order by
-    r.estab, r.item,
-    r.compra_dtemissao, r.compra_seqnota, r.compra_seqnotaitem,
-    r.venda_dtemissao, r.venda_seqnota, r.venda_seqnotaitem
+    f.estab, f.item,
+    f.c_dt, f.c_seqnota, f.c_seqnotaitem,
+    f.v_dt, f.v_seqnota, f.v_seqnotaitem
