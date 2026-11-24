@@ -22,6 +22,7 @@
      TIPO_LINHA = 'VENDA SEM SALDO' -> parte da venda sem compra para lastrear
 
    Parametros:
+     :ESTAB -> filial(is); 0 = todas
      :DTINI -> data inicial do periodo (filtra so a exibicao)
      :DTFIM -> data final do periodo (exibicao + corte do calculo; saldos = posicao em :DTFIM)
    ===================================================================== */
@@ -65,6 +66,7 @@ with base as (
     and u_tempresa.insumos = 'S'
     and nfitem.quantidade > 0
     and nfcab.estab not in  (2)
+    and (nfcab.estab in (:ESTAB) or 0 in (:ESTAB))                         -- filial (0 = todas); seguro filtrar aqui, o FIFO e por filial
     and (
            tipo.tipoop in ('V','VF','C','CF')
         or tipo.tipoop in ('IS','SE','BP')                                   -- IS (implantacao de saldo), SE (sobra de estoque) e BP (baixa por perda): sem validacao de estabc
