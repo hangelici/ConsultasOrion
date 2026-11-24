@@ -2,9 +2,10 @@
    SALDO DAS NOTAS DE COMPRA x BAIXA PELAS NOTAS DE VENDA (FIFO)
    ---------------------------------------------------------------------
    Credito : C, CF, TE (somente de outro grupo), IS (implantacao de saldo,
-             baixada primeiro) e SE (sobra de estoque)
-   Debito  : V, VF e BP (baixa por perda)
+             baixada primeiro), SE (sobra de estoque) e BE (bonificacao de entrada)
+   Debito  : V, VF, BP (baixa por perda) e BS (bonificacao de saida)
    Regra   : FIFO por filial + item (mais antigas baixadas primeiro)
+   Valor   : nfitem.valortotal, rateado pela quantidade baixada (valor unitario da nota)
 
    Saida:
      BAIXA           -> venda que baixou (parte de) a compra
@@ -19,10 +20,10 @@
 with
 
 cfg as (
-    select nfcfg_u.notaconf, tipo.tipoop
+    select nfcfg_u.notaconf, tipo.tipoop, tipo.tipoop || ' - ' || tipo.descop as tipoop_desc
     from nfcfg_u
     inner join u_tipoop tipo on tipo.u_tipoop_id = nfcfg_u.u_tipoop_id
-    where tipo.tipoop in ('C','CF','TE','IS','SE','V','VF','BP')
+    where tipo.tipoop in ('C','CF','TE','IS','SE','BE','V','VF','BP','BS')
 ),
 
 base as (
@@ -36,9 +37,11 @@ base as (
         nfcab.nota,
         nfcab.numerocm,
         cfg.tipoop,
+        cfg.tipoop_desc,
         nfitem.item,
         nfitem.quantidade,
-        case when cfg.tipoop in ('V','VF','BP') then 'V' else 'C' end as natureza,
+        nfitem.valortotal,
+        case when cfg.tipoop in ('V','VF','BP','BS') then 'V' else 'C' end as natureza,
         case when cfg.tipoop = 'IS' then 0 else 1 end as prioridade_fifo
     from nfcab
     inner join u_tempresa on u_tempresa.estab = nfcab.estab
@@ -104,10 +107,10 @@ pares as (
         s.estab, s.item, s.pos, s.qtd_seg, s.c_pos, s.v_pos,
         c.seqnota     as c_seqnota,  c.seqnotaitem as c_seqnotaitem, c.dtemissao as c_dt,
         c.notaconf    as c_notaconf, c.nota        as c_nota,        c.numerocm  as c_numerocm,
-        c.tipoop      as c_tipoop,   c.quantidade  as c_qtd,
+        c.tipoop_desc as c_tipoop,   c.quantidade  as c_qtd,         c.valortotal as c_vlr,
         v.seqnota     as v_seqnota,  v.seqnotaitem as v_seqnotaitem, v.dtemissao as v_dt,
         v.notaconf    as v_notaconf, v.nota        as v_nota,        v.numerocm  as v_numerocm,
-        v.tipoop      as v_tipoop,   v.quantidade  as v_qtd,
+        v.tipoop_desc as v_tipoop,   v.quantidade  as v_qtd,         v.valortotal as v_vlr,
         case when s.c_pos is not null
              then greatest(0, least(s.c_pos, nvl(s.tot_v,0)) - (s.c_pos - c.quantidade))
         end as c_qtd_baixada
@@ -149,6 +152,10 @@ select
     f.c_qtd           as compra_quantidade,
     f.c_qtd_baixada   as compra_qtd_baixada,
     f.c_qtd - f.c_qtd_baixada as compra_saldo,
+    f.c_vlr           as compra_valortotal,
+    f.c_vlr / f.c_qtd as compra_valor_unit,
+    round(f.c_qtd_baixada * f.c_vlr / f.c_qtd, 2)             as compra_valor_baixado,
+    round((f.c_qtd - f.c_qtd_baixada) * f.c_vlr / f.c_qtd, 2) as compra_saldo_valor,
     case when f.v_pos is not null then f.estab end as venda_estab,
     f.v_seqnota       as venda_seqnota,
     f.v_seqnotaitem   as venda_seqnotaitem,
@@ -159,9 +166,16 @@ select
     cmv.cnpjf         as venda_cnpjf,
     f.v_tipoop        as venda_tipoop,
     f.v_qtd           as venda_quantidade,
+    f.v_vlr           as venda_valortotal,
     case when f.v_pos is not null then f.qtd_seg end as qtd_baixada,
     case when f.c_pos is not null and f.v_pos is not null
+         then round(f.qtd_seg * f.c_vlr / f.c_qtd, 2) end as valor_baixado_custo,
+    case when f.v_pos is not null
+         then round(f.qtd_seg * f.v_vlr / f.v_qtd, 2) end as valor_baixado_venda,
+    case when f.c_pos is not null and f.v_pos is not null
          then f.c_pos - f.pos end as saldo_compra_apos_venda,
+    case when f.c_pos is not null and f.v_pos is not null
+         then round((f.c_pos - f.pos) * f.c_vlr / f.c_qtd, 2) end as saldo_valor_apos_venda,
     case when f.c_pos is not null and f.v_pos is not null
          then case when f.v_dt < f.c_dt then 'S' else 'N' end end as venda_anterior_compra
 from filtrado f
