@@ -465,8 +465,8 @@ window.__DADOS__ = {
               <select id="bu-ord">
                 <option value="vDiv">Valor de dívidas</option>
                 <option value="vProt">Valor de protestos</option>
-                <option value="vPefin">Pefin</option>
-                <option value="vRefin">Refin</option>
+                <option value="vPefin">Valor em registro de Operações Financeiras</option>
+                <option value="vRefin">Valor das pendências financeiras</option>
                 <option value="qtd">Quantidade de análises</option>
                 <option value="score">Menor score médio</option>
                 <option value="nome">Nome do grupo</option>
@@ -481,7 +481,7 @@ window.__DADOS__ = {
           <table>
             <thead><tr>
               <th>Grupo / cliente</th><th>Documento</th><th>Bureau</th><th>Data da análise</th><th class="num">Score</th><th class="num">Prob. pagamento</th>
-              <th class="num">Dívidas (R$)</th><th class="num">Dívidas (qtd.)</th><th class="num">Refin</th><th class="num">Pefin</th><th class="num">Dívidas vencidas</th>
+              <th class="num">Dívidas (R$)</th><th class="num">Dívidas (qtd.)</th><th class="num">Valor das pendências financeiras</th><th class="num">Valor em registro de Operações Financeiras</th><th class="num">Dívidas vencidas</th>
               <th class="num">Protestos (R$)</th><th class="num">Protestos (qtd.)</th><th class="num">Ações judiciais</th><th class="num">Cheques (qtd.)</th><th class="num">Consultas (qtd.)</th>
             </tr></thead>
             <tbody id="t-bureau"></tbody>
@@ -524,8 +524,8 @@ window.__DADOS__ = {
   const FONTES = {SPC:{nome:'SPC', cor:'var(--verde-700)'}, BOA_VISTA:{nome:'Boa Vista', cor:'var(--ouro-500)'}, QUOD:{nome:'QUOD', cor:'var(--terra)'}};
   const IND = [
     {k:'vDiv',   tipo:'R', nome:'Dívidas', d:'Valor financeiro total em dívidas'},
-    {k:'vPefin', tipo:'R', nome:'Pefin', d:'Pendências registradas (Pefin)'},
-    {k:'vRefin', tipo:'R', nome:'Refin', d:'Pendências financeiras (Refin)'},
+    {k:'vPefin', tipo:'R', nome:'Valor em registro de Operações Financeiras', d:'Pefin (operationalPefinValue)'},
+    {k:'vRefin', tipo:'R', nome:'Valor das pendências financeiras', d:'Refin (financialRefinValue)'},
     {k:'vVenc',  tipo:'R', nome:'Dívidas vencidas', d:'Valor de dívidas vencidas'},
     {k:'vProt',  tipo:'R', nome:'Protestos', d:'Valor financeiro em protestos'},
     {k:'vAcoes', tipo:'R', nome:'Ações judiciais', d:'Valor total em ações judiciais'},
@@ -1127,7 +1127,7 @@ window.__DADOS__ = {
     document.getElementById('kb-qtd').innerHTML = kpiHtml([
       {v:fN(t.cli.size), r:'Clientes consultados', d:`${plural(t.n,'análise','análises')} de bureau`},
       {v: st.fonte && t.score !== null ? fN(t.score, 0) : '—', r:'Score médio', d: st.fonte ? `${fonteNome(st.fonte)}, ${plural(t.scoreN,'análise','análises')} com score` : 'Selecione um bureau: cada um usa metodologia própria'},
-      {v:fN(t.restr.size), r:'Clientes com restrição', d:fPct(pct(t.restr.size, t.cli.size)) + ' dos consultados (dívida, Pefin, Refin, protesto ou cheque)', c: t.restr.size ? 'alerta' : ''},
+      {v:fN(t.restr.size), r:'Clientes com restrição', d:fPct(pct(t.restr.size, t.cli.size)) + ' dos consultados (dívidas, pendências financeiras, operações financeiras, protestos ou cheques)', c: t.restr.size ? 'alerta' : ''},
       {v:fRc(t.cliDiv.size ? t.vDiv / t.cliDiv.size : 0), r:'Dívida média por cliente com dívida', d:`${plural(t.cliDiv.size,'cliente','clientes')} com dívida`},
       {v: t.prob !== null ? fPct(t.prob) : '—', r:'Probabilidade média de pagamento', d: t.probN ? `${plural(t.probN,'análise informada','análises informadas')}` : 'Não informada por este bureau'},
       {v:fN(t.velhas), r:'Análises com mais de 12 meses', d:fPct(pct(t.velhas, t.n)) + ' das análises', c: t.velhas ? 'ouro' : ''},
@@ -1331,7 +1331,7 @@ window.__DADOS__ = {
   document.getElementById('esg-pend').addEventListener('change', e => { st.esgPend = e.target.checked; st.pv.esg = novoPv(); rEsg(); });
 
   const gInd = document.getElementById('g-ind');
-  gInd.innerHTML = '<option value="analises">Quantidade de análises</option>' + IND.map(i => `<option value="${i.k}" ${i.k === st.gInd ? 'selected' : ''}>${esc(i.nome)}${i.tipo === 'R' ? ' (R$)' : ''}</option>`).join('');
+  gInd.innerHTML = '<option value="analises">Quantidade de análises</option>' + IND.map(i => `<option value="${i.k}" ${i.k === st.gInd ? 'selected' : ''}>${esc(i.nome)}${i.tipo === 'R' && !i.nome.startsWith('Valor') ? ' (R$)' : ''}</option>`).join('');
   gInd.addEventListener('change', e => { st.gInd = e.target.value; rGraficos(itensBureau(false)); });
   document.getElementById('g-met').addEventListener('change', e => { st.gMet = e.target.value; rGraficos(itensBureau(false)); });
   document.getElementById('b-periodo').addEventListener('change', e => { st.periodo = Number(e.target.value); rGraficos(itensBureau(false)); });
