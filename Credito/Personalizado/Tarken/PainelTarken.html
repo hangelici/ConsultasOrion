@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel Tarken | Clientes e propriedades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style th:inline="none">
+/* ===== Paleta: ajuste aqui para o manual de marca Ouro Safra ===== */
+:root{
+  --verde-900:#15301F; --verde-700:#22522F; --verde-500:#3C7A4A; --verde-100:#E3ECE3;
+  --ouro-700:#9A6C0E; --ouro-500:#C8921C; --ouro-300:#E4BE62; --ouro-100:#F6EBCF;
+  --fundo:#F2F4F0; --superficie:#FFFFFF; --superficie-2:#F8F9F6;
+  --texto:#1A2A20; --texto-2:#56645A; --borda:#D8DFD6; --alerta:#A33A2A;
+  --fonte-titulo:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --fonte-texto:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --verde-900:#DCEADB; --verde-700:#9CCBA4; --verde-500:#6FAE7C; --verde-100:#1F3326;
+    --ouro-700:#F0CD7A; --ouro-500:#D9A93A; --ouro-300:#8E6A1E; --ouro-100:#33290F;
+    --fundo:#111813; --superficie:#18221B; --superficie-2:#1D2820;
+    --texto:#E6ECE4; --texto-2:#A4B2A6; --borda:#2E3B31; --alerta:#E88A78;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--fundo);color:var(--texto);font:15px/1.5 var(--fonte-texto)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ouro-500);outline-offset:2px}
+
+.topo{background:var(--verde-700);color:#fff}
+@media (prefers-color-scheme: dark){.topo{background:#1B3A24}}
+.topo-in{max-width:1440px;margin:0 auto;padding:18px 24px 0;display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 32px}
+.marca{font-family:var(--fonte-titulo);font-weight:600;font-size:24px;letter-spacing:.2px;padding-bottom:14px}
+.marca small{display:block;font:400 13px var(--fonte-texto);opacity:.8}
+.abas{display:flex;gap:4px}
+.aba{background:transparent;border:0;color:#fff;opacity:.75;padding:10px 16px 12px;border-radius:8px 8px 0 0;cursor:pointer;font-weight:600}
+.aba[aria-selected="true"]{background:var(--fundo);color:var(--verde-700);opacity:1}
+@media (prefers-color-scheme: dark){.aba[aria-selected="true"]{color:var(--verde-900)}}
+.aba[aria-disabled="true"]{cursor:not-allowed}
+.aba em{font-style:normal;font-weight:400;font-size:12px;opacity:.85;margin-left:6px}
+
+main{max-width:1440px;margin:0 auto;padding:20px 24px 48px}
+.aviso{background:var(--ouro-100);border:1px solid var(--ouro-300);color:var(--ouro-700);padding:10px 14px;border-radius:8px;margin-bottom:16px}
+
+.filtros{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;background:var(--superficie);border:1px solid var(--borda);border-radius:10px;padding:14px 16px;margin-bottom:20px}
+.campo{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--texto-2)}
+.campo select,.campo input[type=search]{font:inherit;color:var(--texto);background:var(--superficie-2);border:1px solid var(--borda);border-radius:6px;padding:7px 10px;min-width:220px}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding-bottom:8px}
+.check input{accent-color:var(--verde-700);width:16px;height:16px}
+.foco{display:none;align-items:center;gap:8px;background:var(--ouro-100);color:var(--ouro-700);border:1px solid var(--ouro-300);border-radius:999px;padding:5px 6px 5px 12px;font-size:14px;margin-bottom:8px}
+.foco.on{display:inline-flex}
+.foco button{border:0;background:transparent;cursor:pointer;color:inherit;font-weight:600;padding:0 6px}
+
+.campo-area{background:var(--superficie);border:1px solid var(--borda);border-radius:10px;padding:18px 20px;margin-bottom:20px}
+.campo-area h2{font:600 15px var(--fonte-texto);margin:0 0 10px;color:var(--texto-2)}
+.faixa{display:flex;height:34px;border-radius:6px;overflow:hidden;background:repeating-linear-gradient(135deg,var(--verde-100) 0 6px,var(--superficie-2) 6px 12px);border:1px solid var(--borda)}
+.faixa .prod{background:var(--verde-700);transition:width .4s ease}
+.faixa-leg{display:flex;flex-wrap:wrap;gap:6px 28px;margin-top:10px;font-size:14px;color:var(--texto-2)}
+.faixa-leg b{font-family:var(--fonte-titulo);font-weight:600;font-size:22px;color:var(--texto);margin-right:4px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:1px}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--borda);border:1px solid var(--borda);border-radius:10px;overflow:hidden;margin-bottom:20px}
+.kpi{background:var(--superficie);padding:14px 16px}
+.kpi .v{font-family:var(--fonte-titulo);font-weight:600;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .r{font-size:13px;color:var(--texto-2);margin-top:2px}
+.kpi .d{font-size:12px;color:var(--texto-2);margin-top:6px}
+.kpi.ouro .v{color:var(--ouro-700)}
+
+.bloco{background:var(--superficie);border:1px solid var(--borda);border-radius:10px;margin-bottom:20px}
+.bloco-cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding:14px 16px;border-bottom:1px solid var(--borda)}
+.bloco-cab h2{font-family:var(--fonte-titulo);font-weight:600;font-size:20px;margin:0;color:var(--verde-700)}
+@media (prefers-color-scheme: dark){.bloco-cab h2{color:var(--verde-900)}}
+.bloco-cab p{margin:2px 0 0;font-size:13px;color:var(--texto-2)}
+.acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;color:var(--texto-2)}
+.btn{border:1px solid var(--borda);background:var(--superficie-2);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--verde-500)}
+.acoes select{font:inherit;color:var(--texto);background:var(--superficie-2);border:1px solid var(--borda);border-radius:6px;padding:4px 8px}
+
+.barras{padding:12px 16px 16px;display:grid;gap:6px}
+.barra{display:grid;grid-template-columns:minmax(120px,220px) 1fr minmax(90px,auto);gap:10px;align-items:center;font-size:13px}
+.barra .t{background:var(--superficie-2);border-radius:4px;height:14px;overflow:hidden}
+.barra .t span{display:block;height:100%;background:var(--ouro-500)}
+.barra .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--texto-2)}
+.barra .nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.rolagem{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{position:sticky;top:0;background:var(--superficie-2);text-align:left;font-weight:600;font-size:13px;color:var(--texto-2);padding:9px 10px;border-bottom:1px solid var(--borda);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--borda);vertical-align:top}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.grupo td{background:var(--verde-100);font-weight:600}
+tr.grupo2 td{background:var(--superficie-2);font-weight:600}
+tr.mais td{text-align:center;background:var(--superficie)}
+.alt{border:0;background:transparent;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:0;text-align:left;font-weight:600}
+.alt::before{content:"";width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;transition:transform .15s}
+.alt[aria-expanded="true"]::before{transform:rotate(90deg)}
+.lnk{border:0;background:transparent;cursor:pointer;padding:0;color:var(--verde-700);text-decoration:underline;text-underline-offset:2px;text-align:left}
+@media (prefers-color-scheme: dark){.lnk{color:var(--verde-700)}}
+.sub{color:var(--texto-2);font-weight:400;font-size:13px}
+.vazio{padding:28px 16px;text-align:center;color:var(--texto-2)}
+.tag{display:inline-block;font-size:12px;border-radius:4px;padding:1px 6px;margin:1px 4px 1px 0;border:1px solid var(--borda);background:var(--superficie-2);white-space:nowrap}
+.tag.ok{border-color:var(--verde-500);color:var(--verde-700)}
+.tag.zero{opacity:.55}
+.tag.ouro{border-color:var(--ouro-300);background:var(--ouro-100);color:var(--ouro-700)}
+.tag.alerta{border-color:var(--alerta);color:var(--alerta)}
+.det{background:var(--superficie-2)}
+.det-grid{display:grid;grid-template-columns:minmax(280px,1.2fr) minmax(240px,1fr);gap:16px;padding:6px 4px}
+@media (max-width:820px){.det-grid{grid-template-columns:1fr}}
+.det h3{font:600 13px var(--fonte-texto);color:var(--texto-2);margin:4px 0 8px}
+.dono{display:grid;grid-template-columns:1fr 140px 52px;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--borda)}
+.dono .p{height:8px;background:var(--superficie);border:1px solid var(--borda);border-radius:4px;overflow:hidden}
+.dono .p span{display:block;height:100%;background:var(--ouro-500)}
+.reg{font-size:13px;margin-bottom:8px}
+.reg b{display:inline-block;min-width:48px}
+.reg ul{margin:4px 0 0;padding-left:18px;max-height:140px;overflow:auto;word-break:break-all}
+.pag{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:10px 16px;font-size:13px;color:var(--texto-2)}
+.pag button[disabled]{opacity:.4;cursor:default}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- =====================================================================
+     DADOS: cada consulta é injetada pelo nome (CLIENTES, CONTATOS,
+     PROPRIEDADES, PROPRIETARIOS). Se a sua plataforma entrega os dados de
+     outra forma, ajuste somente este bloco.
+     ===================================================================== -->
+<script th:inline="javascript">
+/*<![CDATA[*/
+window.__DADOS__ = {
+  CLIENTES:      /*[[${CLIENTES}]]*/ [],
+  CONTATOS:      /*[[${CONTATOS}]]*/ [],
+  PROPRIEDADES:  /*[[${PROPRIEDADES}]]*/ [],
+  PROPRIETARIOS: /*[[${PROPRIETARIOS}]]*/ []
+};
+/*]]>*/
+</script>
+
+<header class="topo">
+  <div class="topo-in">
+    <div class="marca">Ouro Safra<small>Painel de crédito Tarken</small></div>
+    <nav class="abas" role="tablist" aria-label="Análises">
+      <button class="aba" role="tab" aria-selected="true" id="aba-clientes">Clientes e propriedades</button>
+      <button class="aba" role="tab" aria-selected="false" aria-disabled="true" title="Disponível em uma próxima etapa">Perfil de risco<em>em breve</em></button>
+      <button class="aba" role="tab" aria-selected="false" aria-disabled="true" title="Disponível em uma próxima etapa">Propostas<em>em breve</em></button>
+    </nav>
+  </div>
+</header>
+
+<main id="painel-clientes" role="tabpanel" aria-labelledby="aba-clientes">
+  <div id="aviso"></div>
+
+  <section class="filtros" aria-label="Filtros">
+    <label class="campo">Filial
+      <select id="f-filial"><option value="">Todas as filiais</option></select>
+    </label>
+    <label class="campo">Buscar cliente
+      <input type="search" id="f-busca" placeholder="Nome, CPF ou CNPJ" autocomplete="off">
+    </label>
+    <label class="check"><input type="checkbox" id="f-comprop"> Somente clientes com propriedade</label>
+  </section>
+
+  <div class="foco" id="foco" role="status"></div>
+
+  <section class="campo-area" aria-label="Uso da área">
+    <h2>Uso da área dos clientes filtrados</h2>
+    <div class="faixa" aria-hidden="true"><div class="prod" id="faixa-prod" style="width:0"></div></div>
+    <div class="faixa-leg" id="faixa-leg"></div>
+  </section>
+
+  <section class="kpis" id="kpis" aria-label="Indicadores"></section>
+
+  <section class="bloco">
+    <div class="bloco-cab">
+      <div><h2>Filiais com maior área produtiva</h2><p>Dez maiores, considerando os filtros aplicados.</p></div>
+    </div>
+    <div class="barras" id="top-filiais"></div>
+  </section>
+
+  <section class="bloco">
+    <div class="bloco-cab">
+      <div><h2>Filiais e clientes</h2><p>Abra uma filial para ver os clientes. Clique no nome de um cliente para filtrar todo o painel por ele.</p></div>
+      <div class="acoes">
+        <label>Ordenar filiais por
+          <select id="ord1">
+            <option value="areaProd">Área produtiva</option>
+            <option value="areaTotal">Área total</option>
+            <option value="clientes">Quantidade de clientes</option>
+            <option value="props">Quantidade de propriedades</option>
+            <option value="filial">Nome da filial</option>
+          </select>
+        </label>
+        <button class="btn" data-act="exp1">Abrir todas</button>
+        <button class="btn" data-act="col1">Recolher todas</button>
+      </div>
+    </div>
+    <div class="rolagem">
+      <table>
+        <thead><tr>
+          <th>Filial / cliente</th><th>Documento</th><th>E-mail</th><th>Telefone</th><th>Responsável</th>
+          <th class="num">Contatos</th><th class="num">Propriedades</th><th class="num">Área total</th><th class="num">Área produtiva</th>
+        </tr></thead>
+        <tbody id="t1"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bloco">
+    <div class="bloco-cab">
+      <div><h2>Contatos por cliente</h2><p>Integrantes vinculados a cada cliente.</p></div>
+      <div class="acoes">
+        <button class="btn" data-act="exp2">Abrir página</button>
+        <button class="btn" data-act="col2">Recolher</button>
+      </div>
+    </div>
+    <div class="rolagem">
+      <table>
+        <thead><tr><th>Cliente / contato</th><th>Documento</th><th>Filial</th><th>Situação</th></tr></thead>
+        <tbody id="t2"></tbody>
+      </table>
+    </div>
+    <div class="pag" id="pag2"></div>
+  </section>
+
+  <section class="bloco">
+    <div class="bloco-cab">
+      <div><h2>Propriedades por cliente</h2><p>Abra uma propriedade para ver os proprietários e os números de CAR, INCRA e CIB.</p></div>
+      <div class="acoes">
+        <button class="btn" data-act="exp3">Abrir página</button>
+        <button class="btn" data-act="col3">Recolher</button>
+      </div>
+    </div>
+    <div class="rolagem">
+      <table>
+        <thead><tr>
+          <th>Cliente / propriedade</th><th>Cidade / UF</th><th>Posse</th>
+          <th class="num">Área total</th><th class="num">Área produtiva</th><th class="num">Aproveit.</th>
+          <th class="num">Talhões</th><th class="num">Produtiva / talhão</th><th class="num">Part. do cliente</th><th>Registros</th>
+        </tr></thead>
+        <tbody id="t3"></tbody>
+      </table>
+    </div>
+    <div class="pag" id="pag3"></div>
+  </section>
+</main>
+
+<script th:inline="none">
+(function(){
+  'use strict';
+
+  /* ---------- utilitários ---------- */
+  var POSSE = {OWNED:'Própria',LEASED:'Arrendada',PARTNERSHIP:'Parceria',CONDOMINIUM:'Condomínio',COUPLE_COMMOM_PROPERTY:'Comunhão de bens',OTHER:'Outra'};
+  var POR_PAGINA = 20, LOTE_T1 = 50;
+
+  function toArr(v){ if(typeof v === 'string'){ try{ v = JSON.parse(v); }catch(e){ v = []; } } return Array.isArray(v) ? v : []; }
+  function norm(v){ return toArr(v).map(function(o){ var r = {}; Object.keys(o || {}).forEach(function(k){ r[k.toUpperCase()] = o[k]; }); return r; }); }
+  function n(v){ if(v === null || v === undefined || v === '') return 0; var x = Number(v); return isFinite(x) ? x : 0; }
+  function s(v){ return v === null || v === undefined ? '' : String(v).trim(); }
+  function esc(v){ return s(v).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fold(t){ return s(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+  function dig(t){ return s(t).replace(/\D/g,''); }
+  function fN(v,d){ d = d || 0; return Number(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  function fHa(v){ return (Math.abs(v) >= 1000 ? fN(v,0) : fN(v,1)) + ' ha'; }
+  function fPct(v){ return fN(v,1) + '%'; }
+  function pct(a,b){ return b > 0 ? a / b * 100 : 0; }
+  function ou(v){ return v ? esc(v) : '<span class="sub">—</span>'; }
+
+  function fDoc(d){
+    var g = dig(d); if(!g) return '<span class="sub">—</span>';
+    var f;
+    if(g.length === 11) f = g.slice(0,3)+'.'+g.slice(3,6)+'.'+g.slice(6,9)+'-'+g.slice(9);
+    else if(g.length === 14) f = g.slice(0,2)+'.'+g.slice(2,5)+'.'+g.slice(5,8)+'/'+g.slice(8,12)+'-'+g.slice(12);
+    else f = s(d);
+    return '<span style="white-space:nowrap">'+esc(f)+'</span>';
+  }
+
+  /* ---------- dados de demonstração (somente se nenhuma consulta retornar dados) ---------- */
+  function demo(){
+    var POSSES_DEMO = ['OWNED','LEASED',null,'PARTNERSHIP'];
+    var fil = ['grPilar','ljItapeva','grRioVerde','ljPiedade','matriz'], C=[], K=[], P=[], O=[], pid=1, kid=1;
+    function doc(i,len){ var t=''; for(var j=0;j<len;j++) t += String((i*7+j*3)%10); return t; }
+    for(var i=1;i<=60;i++){
+      var cid = String(i), self = kid++;
+      C.push({CLIENTE_ID:cid,FILIAL:i%11===0?'(Sem filial)':fil[i%fil.length],NOME:'Cliente demonstração '+i,DOCUMENTO:doc(i,i%4?11:14),TIPO:'UNIT',EMAIL:'cliente'+i+'@exemplo.com',TELEFONE:'(15) 90000-'+String(1000+i),RESPONSAVEL:'consultor'+(i%6)+'@exemplo.com',QTD_CONTATOS:2});
+      K.push({CLIENTE_ID:cid,CONTATO_ID:self,NOME:'Cliente demonstração '+i,DOCUMENTO:doc(i,i%4?11:14)});
+      var soc = kid++; K.push({CLIENTE_ID:cid,CONTATO_ID:soc,NOME:'Sócio demonstração '+i,DOCUMENTO:doc(i+500,11)});
+      var np = i%5===0 ? 0 : (i%3)+1;
+      for(var q=0;q<np;q++){
+        var at = 80 + (i*37+q*91)%900, ap = Math.round(at*(0.35+((i+q)%5)/10)), tal=(i+q)%7;
+        P.push({CLIENTE_ID:cid,PROPRIEDADE_ID:pid,NOME:'Fazenda demonstração '+pid,CIDADE:(i+q)%4?'Pilar do Sul':'',UF:(i+q)%4?'SP':'',TIPO_POSSE:POSSES_DEMO[ (i+q)%4 ],AREA_TOTAL:at,AREA_PRODUTIVA:ap,PERC_CLIENTE:q%2?50:100,QTD_TALHOES:tal,QTD_CAR:(i+q)%6?1:0,QTD_INCRA:1,QTD_CIB:(i%2),CAR:(i+q)%6?'SP-0000000-DEMO'+pid:'',INCRA:'000.000.000.000-'+pid,CIB:i%2?'0.000.000-'+pid:''});
+        O.push({PROPRIEDADE_ID:pid,CONTATO_ID:self,NOME:'Cliente demonstração '+i,DOCUMENTO:doc(i,11),PERCENTUAL:q%2?50:100});
+        if(q%2) O.push({PROPRIEDADE_ID:pid,CONTATO_ID:soc,NOME:'Sócio demonstração '+i,DOCUMENTO:doc(i+500,11),PERCENTUAL:50});
+        pid++;
+      }
+    }
+    return {CLIENTES:C,CONTATOS:K,PROPRIEDADES:P,PROPRIETARIOS:O};
+  }
+
+  /* ---------- modelo ---------- */
+  var RAW = window.__DADOS__ || {};
+  var emDemo = ['CLIENTES','CONTATOS','PROPRIEDADES','PROPRIETARIOS'].every(function(k){ return toArr(RAW[k]).length === 0; });
+  if(emDemo){
+    RAW = demo();
+    document.getElementById('aviso').innerHTML = '<div class="aviso" role="status">Nenhuma consulta retornou dados. O painel está exibindo dados fictícios de demonstração.</div>';
+  }
+
+  var clientes = norm(RAW.CLIENTES).map(function(r){
+    return {id:s(r.CLIENTE_ID), filial:s(r.FILIAL)||'(Sem filial)', nome:s(r.NOME)||'(Sem nome)', doc:s(r.DOCUMENTO), tipo:s(r.TIPO),
+            email:s(r.EMAIL), tel:s(r.TELEFONE), resp:s(r.RESPONSAVEL), qtdContatos:n(r.QTD_CONTATOS),
+            contatos:[], props:[], areaTotal:0, areaProd:0, talhoes:0, nome_f:'', doc_d:''};
+  });
+  var porId = new Map();
+  clientes.forEach(function(c){ c.nome_f = fold(c.nome); c.doc_d = dig(c.doc); porId.set(c.id, c); });
+
+  norm(RAW.CONTATOS).forEach(function(r){
+    var c = porId.get(s(r.CLIENTE_ID)); if(c) c.contatos.push({id:s(r.CONTATO_ID), nome:s(r.NOME), doc:s(r.DOCUMENTO)});
+  });
+
+  var props = new Map();
+  norm(RAW.PROPRIEDADES).forEach(function(r){
+    var id = s(r.PROPRIEDADE_ID), p = props.get(id);
+    if(!p){
+      p = {id:id, nome:s(r.NOME)||'(Sem nome)', cidade:s(r.CIDADE), uf:s(r.UF), posse:s(r.TIPO_POSSE),
+           areaTotal:n(r.AREA_TOTAL), areaProd:n(r.AREA_PRODUTIVA), talhoes:n(r.QTD_TALHOES),
+           qCar:n(r.QTD_CAR), qIncra:n(r.QTD_INCRA), qCib:n(r.QTD_CIB), car:s(r.CAR), incra:s(r.INCRA), cib:s(r.CIB)};
+      props.set(id, p);
+    }
+    var c = porId.get(s(r.CLIENTE_ID));
+    if(c) c.props.push({p:p, perc:Math.min(100, n(r.PERC_CLIENTE))});
+  });
+
+  var donos = new Map(), contatosDonos = new Set();
+  norm(RAW.PROPRIETARIOS).forEach(function(r){
+    var pid = s(r.PROPRIEDADE_ID);
+    if(!donos.has(pid)) donos.set(pid, []);
+    donos.get(pid).push({id:s(r.CONTATO_ID), nome:s(r.NOME), doc:s(r.DOCUMENTO), perc:n(r.PERCENTUAL)});
+    contatosDonos.add(s(r.CONTATO_ID));
+  });
+  donos.forEach(function(l){ l.sort(function(a,b){ return b.perc - a.perc; }); });
+
+  clientes.forEach(function(c){
+    c.props.forEach(function(x){ c.areaTotal += x.p.areaTotal; c.areaProd += x.p.areaProd; c.talhoes += x.p.talhoes; });
+    c.props.sort(function(a,b){ return b.p.areaProd - a.p.areaProd; });
+    if(!c.qtdContatos) c.qtdContatos = c.contatos.length;
+  });
+  clientes.sort(function(a,b){ return (b.areaProd - a.areaProd) || a.nome.localeCompare(b.nome,'pt-BR'); });
+
+  /* ---------- estado ---------- */
+  var st = {filial:'', busca:'', comProp:false, foco:null, ord1:'areaProd',
+            ab1:new Set(), mais1:new Map(), pg2:1, pg3:1, ab2:new Set(), ab3:new Set(), abP:new Set()};
+  var vis = null, chave = null;
+
+  function calcular(){
+    var k = st.filial+'|'+st.busca+'|'+st.comProp+'|'+(st.foco||'');
+    if(k === chave) return; chave = k;
+    var q = fold(st.busca), qd = dig(st.busca);
+    var lista = st.foco ? clientes.filter(function(c){ return c.id === st.foco; }) : clientes.filter(function(c){
+      if(st.filial && c.filial !== st.filial) return false;
+      if(st.comProp && !c.props.length) return false;
+      if(q && c.nome_f.indexOf(q) < 0 && !(qd.length >= 3 && c.doc_d.indexOf(qd) >= 0)) return false;
+      return true;
+    });
+    var grupos = new Map(), todas = new Set();
+    lista.forEach(function(c){
+      var g = grupos.get(c.filial);
+      if(!g){ g = {filial:c.filial, clientes:[], props:new Set(), contatos:0}; grupos.set(c.filial, g); }
+      g.clientes.push(c); g.contatos += c.qtdContatos;
+      c.props.forEach(function(x){ g.props.add(x.p.id); todas.add(x.p.id); });
+    });
+    var gl = [];
+    grupos.forEach(function(g){
+      g.areaTotal = 0; g.areaProd = 0;
+      g.props.forEach(function(id){ var p = props.get(id); g.areaTotal += p.areaTotal; g.areaProd += p.areaProd; });
+      gl.push(g);
+    });
+    var k2 = {clientes:lista.length, comProp:0, props:todas.size, areaTotal:0, areaProd:0, talhoes:0, prodComTalhao:0, semCar:0, semLocal:0};
+    lista.forEach(function(c){ if(c.props.length) k2.comProp++; });
+    todas.forEach(function(id){
+      var p = props.get(id);
+      k2.areaTotal += p.areaTotal; k2.areaProd += p.areaProd; k2.talhoes += p.talhoes;
+      if(p.talhoes > 0) k2.prodComTalhao += p.areaProd;
+      if(!p.qCar) k2.semCar++;
+      if(!p.cidade || !p.uf) k2.semLocal++;
+    });
+    vis = {lista:lista, grupos:gl, kpi:k2};
+    st.pg2 = 1; st.pg3 = 1;
+  }
+
+  /* ---------- renderização ---------- */
+  function rFaixa(){
+    var k = vis.kpi, pp = pct(k.areaProd, k.areaTotal);
+    document.getElementById('faixa-prod').style.width = Math.min(100, pp) + '%';
+    document.getElementById('faixa-leg').innerHTML =
+      '<span><span class="sw" style="background:var(--verde-700)"></span><b>'+fHa(k.areaProd)+'</b>produtiva ('+fPct(pp)+')</span>'+
+      '<span><span class="sw" style="background:var(--verde-100);border:1px solid var(--borda)"></span><b>'+fHa(Math.max(0,k.areaTotal-k.areaProd))+'</b>não produtiva</span>'+
+      '<span><b>'+fHa(k.areaTotal)+'</b>área total em '+fN(k.props)+' propriedades</span>';
+  }
+
+  function rKpis(){
+    var k = vis.kpi;
+    var itens = [
+      {v:fN(k.clientes), r:'Clientes', d:fN(k.comProp)+' com propriedade ('+fPct(pct(k.comProp,k.clientes))+')'},
+      {v:fN(k.props), r:'Propriedades', d:'Contadas uma única vez, mesmo com mais de um dono'},
+      {v:fHa(k.props ? k.areaTotal/k.props : 0), r:'Área média por propriedade', d:'Produtiva média: '+fHa(k.props ? k.areaProd/k.props : 0)},
+      {v:fHa(k.comProp ? k.areaTotal/k.comProp : 0), r:'Área média por cliente', d:'Entre clientes com propriedade'},
+      {v:fN(k.talhoes), r:'Talhões', d:fN(k.props ? k.talhoes/k.props : 0,1)+' por propriedade, em média'},
+      {v:fHa(k.talhoes ? k.prodComTalhao/k.talhoes : 0), r:'Área produtiva por talhão', d:'Estimativa: área produtiva ÷ talhões cadastrados', c:'ouro'},
+      {v:fN(k.semCar), r:'Propriedades sem CAR', d:fPct(pct(k.semCar,k.props))+' do total', c:'ouro'},
+      {v:fN(k.semLocal), r:'Sem cidade ou UF', d:fPct(pct(k.semLocal,k.props))+' do cadastro incompleto'}
+    ];
+    document.getElementById('kpis').innerHTML = itens.map(function(i){
+      return '<div class="kpi '+(i.c||'')+'"><div class="v">'+i.v+'</div><div class="r">'+i.r+'</div><div class="d">'+i.d+'</div></div>';
+    }).join('');
+  }
+
+  function rTop(){
+    var gl = vis.grupos.slice().sort(function(a,b){ return b.areaProd - a.areaProd; }).slice(0,10);
+    var max = gl.length ? gl[0].areaProd : 0;
+    document.getElementById('top-filiais').innerHTML = gl.length && max > 0 ? gl.map(function(g){
+      return '<div class="barra"><span class="nome" title="'+esc(g.filial)+'">'+esc(g.filial)+'</span>'+
+             '<span class="t"><span style="width:'+(g.areaProd/max*100)+'%"></span></span>'+
+             '<span class="n">'+fHa(g.areaProd)+'</span></div>';
+    }).join('') : '<div class="vazio">Nenhuma área produtiva para os filtros aplicados.</div>';
+  }
+
+  function ordenarGrupos(){
+    var o = st.ord1;
+    return vis.grupos.slice().sort(function(a,b){
+      if(o === 'filial') return a.filial.localeCompare(b.filial,'pt-BR');
+      if(o === 'clientes') return b.clientes.length - a.clientes.length;
+      if(o === 'props') return b.props.size - a.props.size;
+      return b[o] - a[o];
+    });
+  }
+
+  function rT1(){
+    var gl = ordenarGrupos(), h = [];
+    if(!gl.length){ document.getElementById('t1').innerHTML = '<tr><td colspan="9" class="vazio">Nenhum cliente encontrado. Ajuste a filial ou a busca.</td></tr>'; return; }
+    gl.forEach(function(g){
+      var ab = st.ab1.has(g.filial);
+      h.push('<tr class="grupo"><td><button class="alt" data-act="g1" data-k="'+esc(g.filial)+'" aria-expanded="'+ab+'">'+esc(g.filial)+'</button></td>'+
+             '<td colspan="4"><span class="sub">'+fN(g.clientes.length)+' clientes</span></td>'+
+             '<td class="num">'+fN(g.contatos)+'</td><td class="num">'+fN(g.props.size)+'</td>'+
+             '<td class="num">'+fHa(g.areaTotal)+'</td><td class="num">'+fHa(g.areaProd)+'</td></tr>');
+      if(!ab) return;
+      var lim = st.mais1.get(g.filial) || LOTE_T1;
+      g.clientes.slice(0, lim).forEach(function(c){
+        h.push('<tr><td style="padding-left:28px"><button class="lnk" data-act="foco" data-id="'+esc(c.id)+'">'+esc(c.nome)+'</button>'+
+               (c.tipo === 'GROUP' ? ' <span class="tag ouro">Conta grupo</span>' : '')+'</td>'+
+               '<td>'+fDoc(c.doc)+'</td><td>'+ou(c.email)+'</td><td style="white-space:nowrap">'+ou(c.tel)+'</td><td>'+ou(c.resp)+'</td>'+
+               '<td class="num">'+fN(c.qtdContatos)+'</td><td class="num">'+fN(c.props.length)+'</td>'+
+               '<td class="num">'+fHa(c.areaTotal)+'</td><td class="num">'+fHa(c.areaProd)+'</td></tr>');
+      });
+      if(g.clientes.length > lim){
+        h.push('<tr class="mais"><td colspan="9"><button class="btn" data-act="mais1" data-k="'+esc(g.filial)+'">Mostrar mais '+
+               fN(Math.min(LOTE_T1, g.clientes.length - lim))+' de '+fN(g.clientes.length - lim)+' restantes</button></td></tr>');
+      }
+    });
+    document.getElementById('t1').innerHTML = h.join('');
+  }
+
+  function fonte(campo){
+    if(st.foco) return vis.lista;
+    return vis.lista.filter(function(c){ return c[campo].length > 0; });
+  }
+
+  function paginar(lista, pg, alvo, act){
+    var tot = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
+    if(pg > tot) pg = tot;
+    document.getElementById(alvo).innerHTML = lista.length > POR_PAGINA ?
+      '<span>'+fN(lista.length)+' clientes</span>'+
+      '<button class="btn" data-act="'+act+'" data-p="'+(pg-1)+'" '+(pg<=1?'disabled':'')+'>Anterior</button>'+
+      '<span>Página '+pg+' de '+tot+'</span>'+
+      '<button class="btn" data-act="'+act+'" data-p="'+(pg+1)+'" '+(pg>=tot?'disabled':'')+'>Próxima</button>' :
+      (lista.length ? '<span>'+fN(lista.length)+' cliente'+(lista.length>1?'s':'')+'</span>' : '');
+    return {itens:lista.slice((pg-1)*POR_PAGINA, pg*POR_PAGINA), pg:pg};
+  }
+
+  function rT2(){
+    var lista = fonte('contatos'), pg = paginar(lista, st.pg2, 'pag2', 'pg2'); st.pg2 = pg.pg;
+    if(!lista.length){ document.getElementById('t2').innerHTML = '<tr><td colspan="4" class="vazio">Nenhum contato para os clientes filtrados.</td></tr>'; return; }
+    var h = [];
+    pg.itens.forEach(function(c){
+      var ab = st.ab2.has(c.id) || !!st.foco;
+      h.push('<tr class="grupo2"><td><button class="alt" data-act="g2" data-id="'+esc(c.id)+'" aria-expanded="'+ab+'">'+esc(c.nome)+'</button></td>'+
+             '<td>'+fDoc(c.doc)+'</td><td>'+esc(c.filial)+'</td><td><span class="sub">'+fN(c.contatos.length)+' contato'+(c.contatos.length>1?'s':'')+'</span></td></tr>');
+      if(!ab) return;
+      c.contatos.forEach(function(k){
+        var tags = [];
+        if(dig(k.doc) && dig(k.doc) === c.doc_d) tags.push('<span class="tag">Próprio cliente</span>');
+        if(contatosDonos.has(k.id)) tags.push('<span class="tag ok">Proprietário de imóvel</span>');
+        h.push('<tr><td style="padding-left:28px">'+ou(k.nome)+'</td><td>'+fDoc(k.doc)+'</td><td></td><td>'+tags.join('')+'</td></tr>');
+      });
+    });
+    document.getElementById('t2').innerHTML = h.join('');
+  }
+
+  function tagsReg(p){
+    function t(rot,q){ return '<span class="tag '+(q?'ok':'zero')+'">'+rot+' '+q+'</span>'; }
+    return t('CAR',p.qCar)+t('INCRA',p.qIncra)+t('CIB',p.qCib);
+  }
+
+  function listaReg(rot, txt){
+    var itens = s(txt) ? s(txt).split(' | ').filter(Boolean) : [];
+    return '<div class="reg"><b>'+rot+'</b> '+(itens.length ? '<ul>'+itens.map(function(i){ return '<li>'+esc(i)+'</li>'; }).join('')+'</ul>' : '<span class="sub">Nenhum registro</span>')+'</div>';
+  }
+
+  function detalhe(p){
+    var ds = donos.get(p.id) || [], soma = 0;
+    ds.forEach(function(d){ soma += d.perc; });
+    var alerta = ds.length && Math.abs(soma - 100) > 0.5 ? ' <span class="tag alerta">Soma '+fPct(soma)+'</span>' : '';
+    var lis = ds.length ? ds.map(function(d){
+      return '<div class="dono"><span>'+ou(d.nome)+'<br><span class="sub">'+fDoc(d.doc)+'</span></span>'+
+             '<span class="p" aria-hidden="true"><span style="width:'+Math.min(100,d.perc)+'%"></span></span>'+
+             '<span class="num">'+fPct(d.perc)+'</span></div>';
+    }).join('') : '<span class="sub">Nenhum proprietário cadastrado.</span>';
+    return '<tr class="det"><td colspan="10"><div class="det-grid">'+
+           '<div><h3>Proprietários ('+ds.length+')'+alerta+'</h3>'+lis+'</div>'+
+           '<div><h3>Registros da propriedade</h3>'+listaReg('CAR',p.car)+listaReg('INCRA',p.incra)+listaReg('CIB',p.cib)+'</div>'+
+           '</div></td></tr>';
+  }
+
+  function rT3(){
+    var lista = fonte('props'), pg = paginar(lista, st.pg3, 'pag3', 'pg3'); st.pg3 = pg.pg;
+    if(!lista.length){ document.getElementById('t3').innerHTML = '<tr><td colspan="10" class="vazio">Nenhuma propriedade vinculada aos clientes filtrados.</td></tr>'; return; }
+    var h = [];
+    pg.itens.forEach(function(c){
+      var ab = st.ab3.has(c.id) || !!st.foco;
+      h.push('<tr class="grupo2"><td colspan="3"><button class="alt" data-act="g3" data-id="'+esc(c.id)+'" aria-expanded="'+ab+'">'+esc(c.nome)+'</button>'+
+             ' <span class="sub">'+esc(c.filial)+' | '+fN(c.props.length)+' propriedade'+(c.props.length>1?'s':'')+'</span></td>'+
+             '<td class="num">'+fHa(c.areaTotal)+'</td><td class="num">'+fHa(c.areaProd)+'</td><td class="num">'+fPct(pct(c.areaProd,c.areaTotal))+'</td>'+
+             '<td class="num">'+fN(c.talhoes)+'</td><td colspan="3"></td></tr>');
+      if(!ab) return;
+      c.props.forEach(function(x){
+        var p = x.p, key = c.id+'|'+p.id, abP = st.abP.has(key);
+        var local = p.cidade || p.uf ? esc(p.cidade || '—')+' / '+esc(p.uf || '—') : '<span class="tag alerta">Não informado</span>';
+        h.push('<tr><td style="padding-left:28px"><button class="alt" data-act="prop" data-k="'+esc(key)+'" aria-expanded="'+abP+'" style="font-weight:400">'+esc(p.nome)+'</button></td>'+
+               '<td>'+local+'</td><td>'+(POSSE[p.posse] ? esc(POSSE[p.posse]) : '<span class="sub">Não informado</span>')+'</td>'+
+               '<td class="num">'+fHa(p.areaTotal)+'</td><td class="num">'+fHa(p.areaProd)+'</td><td class="num">'+fPct(pct(p.areaProd,p.areaTotal))+'</td>'+
+               '<td class="num">'+fN(p.talhoes)+'</td><td class="num">'+(p.talhoes ? fHa(p.areaProd/p.talhoes) : '<span class="sub">—</span>')+'</td>'+
+               '<td class="num">'+fPct(x.perc)+'</td><td style="white-space:nowrap">'+tagsReg(p)+'</td></tr>');
+        if(abP) h.push(detalhe(p));
+      });
+    });
+    document.getElementById('t3').innerHTML = h.join('');
+  }
+
+  function rFoco(){
+    var el = document.getElementById('foco'), c = st.foco ? porId.get(st.foco) : null;
+    el.classList.toggle('on', !!c);
+    el.innerHTML = c ? 'Exibindo somente o cliente <strong>'+esc(c.nome)+'</strong><button data-act="limpaFoco">Voltar para todos os clientes</button>' : '';
+  }
+
+  function render(){ calcular(); rFaixa(); rKpis(); rTop(); rT1(); rT2(); rT3(); rFoco(); }
+
+  /* ---------- filtros ---------- */
+  var filiais = Array.from(new Set(clientes.map(function(c){ return c.filial; }))).sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+  var sel = document.getElementById('f-filial');
+  sel.insertAdjacentHTML('beforeend', filiais.map(function(f){ return '<option value="'+esc(f)+'">'+esc(f)+'</option>'; }).join(''));
+  sel.addEventListener('change', function(){ st.filial = sel.value; st.foco = null; render(); });
+
+  var tBusca;
+  document.getElementById('f-busca').addEventListener('input', function(e){
+    clearTimeout(tBusca);
+    tBusca = setTimeout(function(){ st.busca = e.target.value.trim(); st.foco = null; render(); }, 250);
+  });
+  document.getElementById('f-comprop').addEventListener('change', function(e){ st.comProp = e.target.checked; render(); });
+  document.getElementById('ord1').addEventListener('change', function(e){ st.ord1 = e.target.value; rT1(); });
+
+  /* ---------- ações ---------- */
+  function alternar(set, k){ if(set.has(k)) set.delete(k); else set.add(k); }
+  document.addEventListener('click', function(e){
+    var el = e.target.closest('[data-act]'); if(!el || el.disabled) return;
+    var a = el.getAttribute('data-act'), k = el.getAttribute('data-k'), id = el.getAttribute('data-id'), p = Number(el.getAttribute('data-p'));
+    switch(a){
+      case 'g1': alternar(st.ab1, k); rT1(); break;
+      case 'mais1': st.mais1.set(k, (st.mais1.get(k) || LOTE_T1) + LOTE_T1); rT1(); break;
+      case 'exp1': vis.grupos.forEach(function(g){ st.ab1.add(g.filial); }); rT1(); break;
+      case 'col1': st.ab1.clear(); rT1(); break;
+      case 'foco': st.foco = id; st.abP.clear(); if(porId.get(id)) st.ab1.add(porId.get(id).filial); render(); var fe = document.getElementById('foco'); if(fe.scrollIntoView) fe.scrollIntoView({behavior:'smooth', block:'start'}); break;
+      case 'limpaFoco': st.foco = null; render(); break;
+      case 'g2': alternar(st.ab2, id); rT2(); break;
+      case 'g3': alternar(st.ab3, id); rT3(); break;
+      case 'prop': alternar(st.abP, k); rT3(); break;
+      case 'pg2': st.pg2 = p; rT2(); break;
+      case 'pg3': st.pg3 = p; rT3(); break;
+      case 'exp2': fonte('contatos').slice((st.pg2-1)*POR_PAGINA, st.pg2*POR_PAGINA).forEach(function(c){ st.ab2.add(c.id); }); rT2(); break;
+      case 'col2': st.ab2.clear(); rT2(); break;
+      case 'exp3': fonte('props').slice((st.pg3-1)*POR_PAGINA, st.pg3*POR_PAGINA).forEach(function(c){ st.ab3.add(c.id); }); rT3(); break;
+      case 'col3': st.ab3.clear(); st.abP.clear(); rT3(); break;
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
