@@ -42,7 +42,8 @@ END AS FORO_COMPETENCIA,
                             CHR(10) ||
                         'j) Encargos Financeiros: ' ||
                         REPLACE(REPLACE(REPLACE(REPLACE(TO_CHAR(DADOS.PORCENTAGEMJUROS, '999G999G990D0', 'NLS_NUMERIC_CHARACTERS = '',.'''), ' ', ''), ',', 'TEMP'), ',', '.'), 'TEMP', ',') || '% ('
-                        || DADOS.DESC_PORCENTAGEMJUROS || ') ao mês'
+                        || DADOS.DESC_PORCENTAGEMJUROS || ') ao mês.'||  CHR(10) ||
+                        'A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).' 
                         /*
                         'j) Encargos Financeiros: ' ||
                         REPLACE(REPLACE(REPLACE(REPLACE(TO_CHAR(DADOS.PORCENTAGEMJUROS, '999G999G999'), ' ', ''), '.', 'TEMP'), ',', '.'), 'TEMP', ',') || '% (' || DADOS.DESC_PORCENTAGEMJUROS ||
@@ -75,7 +76,9 @@ END AS FORO_COMPETENCIA,
                             CHR(10) ||
                         ('i) Local de entrega/carregamento: CIF ' || DADOS.LOCAL_ALINEA) ||
                             CHR(10) ||
-                        'j) Prazo p/ Pagamento: ' || DADOS.DTPGTO ||
+                        'j) Prazo p/ Pagamento: ' || DADOS.DTPGTO ||  CHR(10) ||
+                        'A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).'
+                            ||                        
                             CHR(10) ||
                         (CASE
                             WHEN LENGTH(PEDCAB_U.CONTABANCPROD) >= 6
@@ -118,8 +121,12 @@ END AS FORO_COMPETENCIA,
                                                                     WHEN DADOS.OPTRIANGULAR = 'S' AND DADOS.NUMEROCM_CLIENTE NOT IN (24870) THEN '(1)'
                                                                     ELSE NULL
                                                                 END
-                                                                )
-                            ELSE NULL
+                                                                ) || CHR(10) || 
+                                                                'A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).'
+
+                            ELSE  CHR(10) || 
+                            'j) A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).'
+
                         END)
                         )
         WHEN (DADOS.CONTCONF = 7 AND DADOS.TIPOFRETES = 'FOB') OR DADOS.CONTCONF = 26
@@ -157,17 +164,23 @@ END AS FORO_COMPETENCIA,
                                                                     WHEN DADOS.OPTRIANGULAR = 'S' AND DADOS.NUMEROCM_CLIENTE NOT IN (24870) THEN '(1)'
                                                                     ELSE NULL
                                                                 END
-                                                                )
+                                                                ) || case when dados.contconf in (1,2,3,7,8) then
+                                                                CHR(10) || 'A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).'
+                                                                else null end
                             WHEN DADOS.CONTCONF = 26 AND DADOS.NOME = 'OURO SAFRA TRADING INTERNATIONAL S.A' THEN ('j) Boleta: ' || DADOS.NUMCOMPRADOR)
                             ELSE NULL
                         END
-                        ) || '' ||  (CASE
+                        ) || '' ||  CHR(10) || (CASE
                                         WHEN DADOS.CONTCONF IN (1,2,7)
-                                            THEN ' Eventuais alterações nos dados bancários deverão ser comunicadas previamente pelo(a) Vendedor(a)(1) e formalizadas por meio de termo aditivo, com solicitação realizada pelo e-mail contratos.aditivo@ourosafra.com.br em até 05 (cinco) dias úteis antes do prazo previsto para pagamento.'
+                                            THEN 'Eventuais alterações nos dados bancários deverão ser comunicadas previamente pelo(a) Vendedor(a)(1) e formalizadas por meio de termo aditivo, com solicitação realizada pelo e-mail contratos.aditivo@ourosafra.com.br em até 05 (cinco) dias úteis antes do prazo previsto para pagamento.'
                                         ELSE NULL
                                     END
                                     )
-                        )
+                        ) || '' || 
+                        CASE WHEN DADOS.CONTCONF = 7 AND LENGTH(PEDCAB_U.CONTABANCPROD) < 6 THEN
+                        CHR(10) ||
+                        'j) A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).'
+                        ELSE NULL END
         ELSE TO_CLOB(
                     'a) Mercadoria: ' || DADOS.PRODUTO || ' ' || DADOS.QTRIGO || ', ' || DADOS.DESCPRODUTO ||
                         CHR(10) ||
@@ -210,6 +223,10 @@ END AS FORO_COMPETENCIA,
                                     ELSE NULL
                                 END
                                 )
+                    ) || CHR(10) || (
+                        case when dados.contconf in (1,2,3,7,8) then
+                        'A cessão do crédito a terceiro não afasta as obrigações fiscais do(a) VENDEDOR(A) decorrentes desta operação. O pagamento realizado pelo(a) COMPRADOR(A) ao cessionário indicado pelo(a) VENDEDOR(A) será considerado, para todos os fins, como pagamento feito ao(a) próprio(a) VENDEDOR(A), devendo ser formalizada a respectiva quitação. Se o(a) VENDEDOR(A) for contribuinte do IBS e da CBS, a(o) COMPRADOR(A) poderá, quando permitido pela legislação, recolher diretamente os tributos incidentes sobre a operação e descontar esses valores do montante a ser pago ao cessionário, considerando-se essa parcela igualmente quitada perante o(a) VENDEDOR(A).'
+                        end 
                     )
     END
     ) AS CLAUSULA_UM_FORMATADA,
