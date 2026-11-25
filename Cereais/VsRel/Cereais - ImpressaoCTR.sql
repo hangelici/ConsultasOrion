@@ -582,7 +582,10 @@ FROM
     end DTEMIMES,
     CONTRATO.DTEMISSAO,
     
-    CASE WHEN CONTRATOCFG.ENTRADASAIDA='S' AND CONTRATOITE.ITEM IN (1,23,6) AND (contamov.cdclasspessoa IN (6, 21) OR endereco.cdclasspessoa IN (6,21))
+    CASE 
+        when CONTRATOCFG.ENTRADASAIDA='S' and contrato.contconf = 20 AND CONTRATOITE.ITEM IN (1,23,6) AND (contamov.cdclasspessoa IN (6, 21) OR endereco.cdclasspessoa IN (6,21))
+        then '"O(a) COMPRADOR(A) declara que destinará toda a mercadoria adquirida diretamente à fabricação de ração ou à alimentação de animais classificados nas posições 01.03 e 01.05, conforme previsto na legislação aplicável. Antes da primeira entrega, o(a) COMPRADOR(A) informará ao(a) VENDEDOR(A) seu regime tributário e se é contribuinte ou não contribuinte dos tributos incidentes sobre a operação, devendo comunicar imediatamente qualquer alteração nessa condição ou na destinação da mercadoria. Caso essa declaração não seja apresentada, o(a) VENDEDOR(A) emitirá os documentos fiscais com a incidência dos tributos devidos, aplicando-se também o disposto na Cláusula 3ª e prestará essa declaração no formato que a legislação vier a exigir."'
+        WHEN CONTRATOCFG.ENTRADASAIDA='S' AND CONTRATOITE.ITEM IN (1,23,6) AND (contamov.cdclasspessoa IN (6, 21) OR endereco.cdclasspessoa IN (6,21))
     THEN 'O(A) COMPRADOR(A) declara que faz jus a suspensão de PIS e COFINS conforme Inciso I, artigo 569 IN RFB nº 2121/22, ou seja, declara que destinará o consumo dessa aquisição, em sua totalidade, na preparação dos tipos utilizados na alimentação de animais vivos classificados nas posições 01.03 e 01.05, classificados no código 23.09.90 da TIPI.'
     END TRIBUTO,
     
