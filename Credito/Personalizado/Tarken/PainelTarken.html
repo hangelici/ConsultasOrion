@@ -174,7 +174,7 @@ main.painel{background:var(--painel);border-radius:17.5px;box-shadow:inset 0 0 0
 .kpi-in .sem-medidor{height:12px}
 
 /* ---------- cards grandes ---------- */
-.bloco,.campo-area{border-radius:24px;background:var(--card);box-shadow:inset 0 0 0 1.1px var(--borda);margin-bottom:20px;overflow:hidden;opacity:0;animation:subir .55s .15s cubic-bezier(.2,.7,.2,1) forwards}
+.bloco,.campo-area{border-radius:24px;background:var(--card);box-shadow:inset 0 0 0 1.1px var(--borda);margin-bottom:20px;opacity:0;animation:subir .55s .15s cubic-bezier(.2,.7,.2,1) forwards}
 .campo-area{padding:23px}
 .campo-area h2{font-size:17.5px;font-weight:500;margin:0 0 14px;color:var(--texto)}
 .bloco-cab{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 18px;padding:23px 23px 12px}
@@ -234,7 +234,7 @@ main.painel{background:var(--painel);border-radius:17.5px;box-shadow:inset 0 0 0
 @keyframes aparecer{to{opacity:1}}
 
 /* ---------- tabelas ---------- */
-.rolagem{overflow-x:auto;padding:0 23px}
+.rolagem{overflow-x:auto;padding:0;margin:0 23px}
 table{width:100%;border-collapse:separate;border-spacing:0;font-size:14.2px}
 thead th{background:var(--superficie-2);text-align:left;font-weight:500;font-size:13.2px;color:var(--texto-3);padding:11px 13px;white-space:nowrap;border:0}
 thead th:first-child{border-radius:8.8px 0 0 8.8px}
@@ -308,6 +308,35 @@ tr.st-ouro>td:first-child{box-shadow:inset 3px 0 0 var(--ouro-500)}
 tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 .legenda-st{display:flex;flex-wrap:wrap;gap:6px 16px;padding:0 23px 12px;font-size:13.2px;color:#52525B}
 .legenda-st i{display:inline-block;width:9.9px;height:9.9px;border-radius:2.7px;vertical-align:-1px;margin-right:7px}
+
+/* primeira coluna fixa ao rolar para o lado */
+.rolagem td:first-child,.rolagem th:first-child{position:sticky;left:0;z-index:1;background:var(--card)}
+.rolagem thead th:first-child{z-index:2;background:var(--superficie-2)}
+.rolagem tr.det>td,.rolagem tr.mais>td,.rolagem tr.sep>td,.rolagem td[colspan]:first-child:last-child{position:static}
+.rolagem tr.det>td>*,.rolagem tr.mais>td>*{position:sticky;left:0;max-width:var(--vis-w,100%);box-sizing:border-box}
+.rolagem tr.mais>td{text-align:left}
+.rolagem tr.mais>td>*{display:block;width:fit-content;margin-left:calc(var(--vis-w,100%) / 2 - 120px)}
+.rolagem.rolou td:first-child:not([colspan]),.rolagem.rolou th:first-child{box-shadow:6px 0 8px -6px rgba(0,0,0,.18)}
+.rolagem.rolou tr.st-ok>td:first-child{box-shadow:inset 3px 0 0 var(--verde-500),6px 0 8px -6px rgba(0,0,0,.18)}
+.rolagem.rolou tr.st-alerta>td:first-child{box-shadow:inset 3px 0 0 var(--alerta),6px 0 8px -6px rgba(0,0,0,.18)}
+.rolagem.rolou tr.st-ouro>td:first-child{box-shadow:inset 3px 0 0 var(--ouro-500),6px 0 8px -6px rgba(0,0,0,.18)}
+.rolagem.rolou tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza),6px 0 8px -6px rgba(0,0,0,.18)}
+.rolagem.com-barra{scrollbar-width:none}
+.rolagem.com-barra::-webkit-scrollbar{display:none}
+/* barra de rolagem lateral que acompanha a tela */
+.rolagem-barra{position:sticky;bottom:0;z-index:6;display:flex;align-items:center;gap:8px;margin:0 12px;padding:8px 11px;border-radius:13px;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:inset 0 0 0 1.1px var(--borda-2),0 -6px 16px rgba(0,0,0,.05);transition:opacity .2s}
+.rolagem-barra[hidden]{display:none!important}
+.rb-btn{flex:none;width:30px;height:26px;border:0;border-radius:7px;background:var(--painel);box-shadow:inset 0 0 0 1.1px #E0E0E3;color:#4D4D52;cursor:pointer;display:grid;place-items:center;transition:background .15s,transform .15s}
+.rb-btn:hover{background:var(--hover)}
+.rb-btn:active{transform:scale(.94)}
+.rb-btn[disabled]{opacity:.35;cursor:default}
+.rb-trilho{position:relative;flex:1;height:10px;border-radius:6px;background:var(--fundo);box-shadow:inset 0 0 0 1px var(--borda-2);cursor:pointer;touch-action:none}
+.rb-trilho:focus-visible{outline:2px solid var(--ouro-500);outline-offset:3px}
+.rb-polegar{position:absolute;top:0;left:0;height:100%;min-width:40px;border-radius:6px;background:var(--grad-verde);box-shadow:0 1px 2px rgba(0,0,0,.15);cursor:grab;transition:filter .15s,height .15s,top .15s}
+.rb-polegar:hover,.rb-trilho.arrastando .rb-polegar{filter:brightness(1.1)}
+.rb-trilho.arrastando .rb-polegar{cursor:grabbing}
+.rb-dica{flex:none;font-size:12px;color:var(--texto-4);white-space:nowrap}
+@media (max-width:700px){.rb-dica{display:none}}
 
 /* paginação */
 .pag{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:14px 23px 20px;font-size:13.2px;color:var(--texto-3)}
@@ -521,6 +550,7 @@ window.__DADOS__ = {
           <label>Agrupar por
             <select id="rk-por">
               <option value="filial">Filial</option>
+              <option value="cliente">Cliente</option>
               <option value="aut">Autorização CPR/SCR</option>
               <option value="rec">Receita Federal</option>
             </select>
@@ -532,7 +562,7 @@ window.__DADOS__ = {
               <option value="sis">Dívida SISBACEN</option>
               <option value="prot">Valor de protestos</option>
               <option value="clientes">Quantidade de clientes</option>
-              <option value="nome">Nome do grupo</option>
+              <option value="nome">Nome do grupo ou cliente</option>
             </select>
           </label>
           <button class="btn" data-act="pvexp" data-t="risco">Abrir página</button>
@@ -566,6 +596,7 @@ window.__DADOS__ = {
           <label>Agrupar por
             <select id="esg-por">
               <option value="filial">Filial</option>
+              <option value="cliente">Cliente</option>
               <option value="criminal">Antecedentes criminais</option>
               <option value="escravo">Trabalho análogo à escravidão</option>
               <option value="moraCpf">Moratória da Soja (CPF)</option>
@@ -811,6 +842,65 @@ window.__DADOS__ = {
       if(nd.querySelectorAll) nd.querySelectorAll(SEL).forEach(contar);
     }));
   }).observe(document.body, {childList:true, subtree:true});
+
+  /* Barra de rolagem lateral fixa na parte de baixo da tela para cada tabela larga */
+  function prepararRolagem(r){
+    if(r.dataset.barra) return;
+    r.dataset.barra = '1';
+    r.classList.add('com-barra');
+    const barra = document.createElement('div');
+    barra.className = 'rolagem-barra'; barra.hidden = true;
+    barra.innerHTML = '<button class="rb-btn" type="button" aria-label="Rolar tabela para a esquerda" data-dir="-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg></button>' +
+      '<div class="rb-trilho" tabindex="0" role="scrollbar" aria-orientation="horizontal" aria-label="Rolagem lateral da tabela" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="rb-polegar"></div></div>' +
+      '<button class="rb-btn" type="button" aria-label="Rolar tabela para a direita" data-dir="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button>' +
+      '<span class="rb-dica">Arraste a barra ou use Shift + roda do mouse</span>';
+    r.after(barra);
+    const trilho = barra.querySelector('.rb-trilho'), pol = barra.querySelector('.rb-polegar'), bts = barra.querySelectorAll('.rb-btn');
+    const maxR = () => Math.max(0, r.scrollWidth - r.clientWidth);
+    const geom = () => { const tw = trilho.clientWidth, pw = Math.max(40, tw * r.clientWidth / Math.max(1, r.scrollWidth)); return {tw, pw, curso:Math.max(1, tw - pw)}; };
+    const atualizar = () => {
+      const g = geom(), m = maxR(), fr = m ? r.scrollLeft / m : 0;
+      pol.style.width = g.pw + 'px';
+      pol.style.transform = `translateX(${fr * g.curso}px)`;
+      trilho.setAttribute('aria-valuenow', String(Math.round(fr * 100)));
+      bts[0].disabled = r.scrollLeft <= 1; bts[1].disabled = r.scrollLeft >= m - 1;
+      r.classList.toggle('rolou', r.scrollLeft > 1);
+    };
+    const medir = () => {
+      barra.hidden = !(r.scrollWidth > r.clientWidth + 2);
+      r.style.setProperty('--vis-w', r.clientWidth + 'px');
+      atualizar();
+    };
+    r.addEventListener('scroll', atualizar, {passive:true});
+    bts.forEach(b => b.addEventListener('click', () => r.scrollBy({left:Number(b.dataset.dir) * r.clientWidth * 0.6, behavior:'smooth'})));
+    let arraste = null;
+    pol.addEventListener('pointerdown', e => {
+      e.preventDefault(); e.stopPropagation();
+      arraste = {x:e.clientX, ini:r.scrollLeft}; trilho.classList.add('arrastando'); pol.setPointerCapture(e.pointerId);
+    });
+    pol.addEventListener('pointermove', e => {
+      if(!arraste) return;
+      const g = geom(); r.scrollLeft = arraste.ini + (e.clientX - arraste.x) * maxR() / g.curso;
+    });
+    const soltar = () => { arraste = null; trilho.classList.remove('arrastando'); };
+    pol.addEventListener('pointerup', soltar); pol.addEventListener('pointercancel', soltar);
+    trilho.addEventListener('pointerdown', e => {
+      if(e.target === pol) return;
+      const g = geom(), rc = trilho.getBoundingClientRect();
+      const fr = Math.max(0, Math.min(1, (e.clientX - rc.left - g.pw / 2) / g.curso));
+      r.scrollTo({left:fr * maxR(), behavior:'smooth'});
+    });
+    trilho.addEventListener('keydown', e => {
+      const passo = {ArrowLeft:-120, ArrowRight:120, PageUp:-r.clientWidth * 0.8, PageDown:r.clientWidth * 0.8}[e.key];
+      if(passo){ e.preventDefault(); r.scrollBy({left:passo, behavior:'smooth'}); }
+      if(e.key === 'Home'){ e.preventDefault(); r.scrollTo({left:0, behavior:'smooth'}); }
+      if(e.key === 'End'){ e.preventDefault(); r.scrollTo({left:maxR(), behavior:'smooth'}); }
+    });
+    if(window.ResizeObserver){ const ro = new ResizeObserver(medir); ro.observe(r); ro.observe(trilho); const t = r.querySelector('table'); if(t) ro.observe(t); }
+    new MutationObserver(() => (window.requestAnimationFrame || setTimeout)(medir)).observe(r, {childList:true, subtree:true});
+    medir();
+  }
+  document.querySelectorAll('.rolagem').forEach(prepararRolagem);
 
   document.getElementById('btn-menu').addEventListener('click', () => {
     if(innerWidth <= 980) document.body.classList.toggle('menu-aberto');
@@ -1441,8 +1531,9 @@ window.__DADOS__ = {
       const ab = P.ab.has(g.k) || !!st.foco;
       const un = cfg.unid || ['cliente','clientes'];
       const extra = cfg.extraGrupo ? cfg.extraGrupo(g) : '';
-      h.push(`<tr class="grupo"><td><button class="alt" data-act="pv" data-t="${cfg.id}" data-k="${esc(g.k)}" aria-expanded="${ab}">${esc(cfg.rotuloGrupo ? cfg.rotuloGrupo(g) : g.k)}</button> <span class="sub">${plural(g.clientes.length, un.at(0), un.at(1))}</span>${extra}</td>${cfg.cab(g)}</tr>`);
+      h.push(`<tr class="grupo"><td><button class="alt" data-act="pv" data-t="${cfg.id}" data-k="${esc(g.k)}" aria-expanded="${ab}">${esc(cfg.rotuloGrupo ? cfg.rotuloGrupo(g) : g.k)}</button>${cfg.semContagem ? '' : ` <span class="sub">${plural(g.clientes.length, un.at(0), un.at(1))}</span>`}${extra}</td>${cfg.cab(g)}</tr>`);
       if(!ab) return;
+      if(cfg.corpoGrupo){ h.push(cfg.corpoGrupo(g)); return; }
       const lim = P.mais.get(g.k) || LOTE;
       g.clientes.slice(0, lim).forEach(c => {
         const cid = cfg.focoId ? cfg.focoId(c) : c.id;
@@ -1460,25 +1551,54 @@ window.__DADOS__ = {
   function rRisco(){
     const ck = [chave, st.rkPor, st.rkOrd].join('|');
     if(ck === cache.risco.k && cache.risco.cfg){ rPivot(cache.risco.cfg); return; }
-    const chaveFn = st.rkPor === 'aut' ? autLbl : (st.rkPor === 'rec' ? recLbl : (c => c.filial));
+    const porCli = st.rkPor === 'cliente';
+    const chaveFn = porCli ? (c => c.id) : (st.rkPor === 'aut' ? autLbl : (st.rkPor === 'rec' ? recLbl : (c => c.filial)));
     gruposRisco = agrupar(vis.lista, chaveFn).map(g => Object.assign(g, somaRisco(g.clientes)));
     const o = st.rkOrd, campo = {patr:'patr', cpr:'cpr', sis:'sis', prot:'vProt'}[o];
-    gruposRisco.sort((a,b) => o === 'nome' ? a.k.localeCompare(b.k,'pt-BR') : (o === 'clientes' ? b.clientes.length - a.clientes.length : b[campo] - a[campo]));
+    const nomeG = g => porCli ? g.clientes.at(0).nome : g.k;
+    gruposRisco.sort((a,b) => o === 'nome' ? nomeG(a).localeCompare(nomeG(b),'pt-BR') : (o === 'clientes' ? (b.clientes.length - a.clientes.length) || nomeG(a).localeCompare(nomeG(b),'pt-BR') : b[campo] - a[campo]));
     const ordC = {patr:c => c.patr, cpr:c => c.r ? c.r.cpr : 0, sis:c => c.r ? c.r.sis : 0, prot:c => c.vProt}[o] || (c => c.patr);
     gruposRisco.forEach(g => g.clientes.sort((a,b) => (ordC(b) - ordC(a)) || a.nome.localeCompare(b.nome,'pt-BR')));
+    const linhaRisco = c => { const r = c.r || {}, al = autLbl(c), rl = recLbl(c);
+        return `<td>${fDoc(c.doc)}</td><td>${fData(r.data)}${r.idade > 365 ? ' ' + tag('+12 meses','ouro') : ''}</td><td>${tag(al, autTom(al))}</td><td>${tag(rl, recTom(rl))}</td>` +
+               `<td class="num">${fR(r.cpr)}</td><td class="num">${fR(r.sis)}</td>` +
+               `<td class="num">${fR(r.urbano)}</td><td class="num">${fR(r.rural)}</td><td class="num">${fR(r.equip)}</td><td class="num">${fR(r.outros)}</td><td class="num">${fR(r.financ)}</td><td class="num">${fR(r.rebanho)}</td>` +
+               `<td class="num">${fR(r.patr)}</td><td class="num">${r.qProt ? fN(r.qProt) : '<span class="sub">—</span>'}</td><td class="num">${fR(r.vProt)}</td>`; };
     cache.risco.k = ck; st.pv.risco.pg = 1;
-    rPivot(cache.risco.cfg = {
+    rPivot(cache.risco.cfg = porCli ? {
+      id:'risco', tbody:'t-risco', cols:16, grupos:gruposRisco, vazio:'Nenhum cliente encontrado para os filtros aplicados.', semContagem:true,
+      rotuloGrupo: g => g.clientes.at(0).nome,
+      extraGrupo: g => { const c = g.clientes.at(0); return `<br><span class="sub">${esc(c.filial)}</span> <button class="lnk sub" data-act="foco" data-id="${esc(c.id)}">filtrar painel</button>`; },
+      cab: g => linhaRisco(g.clientes.at(0)),
+      corpoGrupo: g => detalheRiscoCliente(g.clientes.at(0))
+    } : {
       id:'risco', tbody:'t-risco', cols:16, grupos:gruposRisco, vazio:'Nenhum cliente encontrado para os filtros aplicados.',
       cab: g => `<td></td><td><span class="sub">${plural(g.comAnalise,'analisado','analisados')}</span></td><td></td><td></td>` +
                 `<td class="num">${fR(g.cpr)}</td><td class="num">${fR(g.sis)}</td>` +
                 `<td class="num">${fR(g.urbano)}</td><td class="num">${fR(g.rural)}</td><td class="num">${fR(g.equip)}</td><td class="num">${fR(g.outros)}</td><td class="num">${fR(g.financ)}</td><td class="num">${fR(g.rebanho)}</td>` +
                 `<td class="num">${fR(g.patr)}</td><td class="num">${fN(g.qProt)}</td><td class="num">${fR(g.vProt)}</td>`,
-      linha: c => { const r = c.r || {}, al = autLbl(c), rl = recLbl(c);
-        return `<td>${fDoc(c.doc)}</td><td>${fData(r.data)}${r.idade > 365 ? ' ' + tag('+12 meses','ouro') : ''}</td><td>${tag(al, autTom(al))}</td><td>${tag(rl, recTom(rl))}</td>` +
-               `<td class="num">${fR(r.cpr)}</td><td class="num">${fR(r.sis)}</td>` +
-               `<td class="num">${fR(r.urbano)}</td><td class="num">${fR(r.rural)}</td><td class="num">${fR(r.equip)}</td><td class="num">${fR(r.outros)}</td><td class="num">${fR(r.financ)}</td><td class="num">${fR(r.rebanho)}</td>` +
-               `<td class="num">${fR(r.patr)}</td><td class="num">${r.qProt ? fN(r.qProt) : '<span class="sub">—</span>'}</td><td class="num">${fR(r.vProt)}</td>`; }
+      linha: linhaRisco
     });
+  }
+
+  function detalheRiscoCliente(c){
+    const r = c.r;
+    if(!r) return `<tr class="det"><td colspan="16"><div class="prop-det sub">Cliente sem perfil de risco nas views.</div></td></tr>`;
+    const div = r.cpr + r.sis, rel = pct(div, r.patr);
+    const comp = r.patr > 0
+      ? `<div class="faixa" style="height:14px">${PATR.map(p => `<span title="${p.nome}" style="width:${pct(r[p.k], r.patr)}%;background:${p.cor}"></span>`).join('')}</div>` +
+        `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px 16px;margin-top:10px;font-size:13px">` +
+        PATR.map(p => `<span><span class="sw" style="background:${p.cor}"></span>${p.nome}: <b style="font-weight:500">${fR(r[p.k])}</b> <span class="sub">${fPct(pct(r[p.k], r.patr))}</span></span>`).join('') + `</div>`
+      : '<span class="sub">Nenhum patrimônio consolidado informado.</span>';
+    const ind = `<div class="prop-info" style="margin-top:14px"><span>Dívidas (CPR + SISBACEN): <b>${fR(div)}</b></span>` +
+                `<span>Dívidas sobre patrimônio: <b>${r.patr > 0 ? fPct(rel) : '—'}</b> ${r.patr > 0 && rel > 50 ? tag('Acima de 50%','alerta') : ''}${!r.patr && div > 0 ? tag('Dívida sem patrimônio','ouro') : ''}</span>` +
+                `<span>Protestos: <b>${r.qProt ? fN(r.qProt) + ' | ' + fR(r.vProt) : 'nenhum'}</b></span></div>`;
+    const bur = c.bureaus.length ? c.bureaus.slice().sort((a,b) => ORDEM_FONTES.indexOf(a.fonte) - ORDEM_FONTES.indexOf(b.fonte)).map(b =>
+      `<div class="dono" style="grid-template-columns:110px 1fr auto"><span>${tag(fonteNome(b.fonte), b.restr ? 'alerta' : 'ok')}</span>` +
+      `<span class="sub">${fData(b.data)} | score ${b.score !== null ? fN(b.score, 0) : '—'}${b.prob !== null ? ' | prob. ' + fProb(b.prob) : ''}</span>` +
+      `<span class="num">${b.vDiv ? fR(b.vDiv) + ' em dívidas' : '<span class="sub">sem dívidas</span>'}</span></div>`).join('')
+      : '<span class="sub">Nenhuma análise de bureau.</span>';
+    return `<tr class="det"><td colspan="16"><div class="det-grid"><div><h3>Composição do patrimônio</h3>${comp}${ind}</div><div><h3>Último resultado por bureau</h3>${bur}</div></div></td></tr>`;
   }
 
   function rEsgKpis(lista){
@@ -1509,7 +1629,8 @@ window.__DADOS__ = {
     let lista = vis.lista;
     if(st.esgPend) lista = lista.filter(c => (c.e && c.e.pend > 0) || c.esgNC > 0 || (c.e && ESG_CAMPOS.some(f => esgLbl(c.e[f.k]) === 'Não conforme')));
     rEsgKpis(vis.lista);
-    const chaveFn = st.esgPor === 'filial' ? (c => c.filial) : (c => esgLbl(c.e ? c.e[st.esgPor] : ''));
+    const porCli = st.esgPor === 'cliente';
+    const chaveFn = porCli ? (c => c.id) : (st.esgPor === 'filial' ? (c => c.filial) : (c => esgLbl(c.e ? c.e[st.esgPor] : '')));
     gruposEsg = agrupar(lista, chaveFn);
     const ncCount = c => c.e ? ESG_CAMPOS.filter(f => esgLbl(c.e[f.k]) === 'Não conforme').length : 0;
     gruposEsg.forEach(g => {
@@ -1517,8 +1638,29 @@ window.__DADOS__ = {
       g.clientes.forEach(c => { g.pend += c.e ? c.e.pend : 0; if(ncCount(c) || c.esgNC) g.nc++; g.props += c.esgProps.length; g.propsNC += c.esgNC; });
       g.clientes.sort((a,b) => (ncCount(b) + b.esgNC - ncCount(a) - a.esgNC) || a.nome.localeCompare(b.nome,'pt-BR'));
     });
-    gruposEsg.sort((a,b) => (b.nc - a.nc) || (b.clientes.length - a.clientes.length));
+    gruposEsg.sort((a,b) => (b.nc - a.nc) || (porCli ? (ncCount(b.clientes.at(0)) + b.propsNC - ncCount(a.clientes.at(0)) - a.propsNC) || a.clientes.at(0).nome.localeCompare(b.clientes.at(0).nome,'pt-BR') : b.clientes.length - a.clientes.length));
+    const cabEsgCli = c => { const e = c.e || {};
+      return `<td>${fDoc(c.doc)}</td>` + ESG_CAMPOS.map(f => `<td>${esgTag(e[f.k])}</td>`).join('') +
+             `<td class="num">${e.pend ? tag(fN(e.pend),'alerta') : '<span class="sub">0</span>'}</td>` +
+             `<td class="num">${c.esgProps.length ? fN(c.esgProps.length) : '<span class="sub">—</span>'}${c.esgNC ? ' ' + tag(fN(c.esgNC) + ' não conf.','alerta') : ''}</td>`; };
+    const corpoEsgCli = c => { const e = c.e || {};
+      const resumo = `<div class="prop-info"><span>Verificações ESG: <b>${fN(e.verif || 0)}</b></span><span>Pendências: <b>${fN(e.pend || 0)}</b></span>` +
+                     `<span>Indicadores não conformes: <b>${fN(ncCount(c))}</b></span><span>Propriedades na moratória: <b>${fN(c.esgProps.length)}</b></span></div>`;
+      const moras = c.esgProps.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${c.esgProps.slice().sort((a,b) => esgLbl(b.status) === 'Não conforme' ? 1 : -1)
+                     .map(p => `<span class="tag ${esgTom(esgLbl(p.status))}">${esc(p.nome || '(Sem nome)')}: ${esc(esgLbl(p.status))}</span>`).join('')}</div>`
+                   : '<span class="sub">Nenhuma propriedade avaliada na Moratória da Soja.</span>';
+      return `<tr class="det"><td colspan="12"><div class="prop-det">${resumo}<h3 style="font-size:13.2px;font-weight:500;color:var(--texto-3);margin:4px 0 8px">Propriedades na Moratória da Soja</h3>${moras}</div></td></tr>`; };
     cache.esg.k = ck; st.pv.esg.pg = 1;
+    if(porCli){
+      rPivot(cache.esg.cfg = {
+        id:'esg', tbody:'t-esg', cols:12, grupos:gruposEsg, vazio:'Nenhum cliente encontrado para os filtros aplicados.', semContagem:true,
+        rotuloGrupo: g => g.clientes.at(0).nome,
+        extraGrupo: g => { const c = g.clientes.at(0); return `<br><span class="sub">${esc(c.filial)}</span> <button class="lnk sub" data-act="foco" data-id="${esc(c.id)}">filtrar painel</button>`; },
+        cab: g => cabEsgCli(g.clientes.at(0)),
+        corpoGrupo: g => corpoEsgCli(g.clientes.at(0))
+      });
+      return;
+    }
     rPivot(cache.esg.cfg = {
       id:'esg', tbody:'t-esg', cols:12, grupos:gruposEsg, vazio:'Nenhum cliente encontrado para os filtros aplicados.',
       cab: g => `<td colspan="9"><span class="sub">${plural(g.nc,'cliente com não conformidade','clientes com não conformidade')}</span></td>` +
