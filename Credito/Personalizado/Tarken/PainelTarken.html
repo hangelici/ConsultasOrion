@@ -172,6 +172,10 @@ main.painel{background:var(--painel);border-radius:17.5px;box-shadow:inset 0 0 0
 .kpi .d{font-size:13.2px;color:var(--texto-3);font-weight:500;line-height:1.45}
 .kpi .d::first-letter{text-transform:uppercase}
 .kpi-in .sem-medidor{height:12px}
+.kpi .f{font-size:12px;line-height:1.45;color:var(--texto-4);margin-top:7px;padding-top:7px;border-top:1px dashed var(--borda-3)}
+.kpi .f b{font-weight:500;color:var(--texto-3)}
+.bloco-cab .calc{display:block;margin-top:4px;color:var(--texto-3)}
+.bloco-cab .calc b{font-weight:500;color:var(--texto-2)}
 
 /* ---------- cards grandes ---------- */
 .bloco,.campo-area{border-radius:24px;background:var(--card);box-shadow:inset 0 0 0 1.1px var(--borda);margin-bottom:20px;opacity:0;animation:subir .55s .15s cubic-bezier(.2,.7,.2,1) forwards}
@@ -1467,7 +1471,7 @@ window.__DADOS__ = {
     return itens.map(i => {
       const fr = fracKpi(i), cor = i.c === 'alerta' ? 'var(--alerta)' : (i.c === 'ouro' ? 'var(--ouro-500)' : 'var(--verde-500)');
       return `<div class="kpi ${i.c || ''}"><div class="kpi-cab">${icoKpi(i.r)}<span class="r" title="${esc(i.r)}">${i.r}</span>${PONTOS}</div>` +
-             `<div class="kpi-in"><div class="v">${i.v}</div>${fr === null ? '<div class="sem-medidor"></div>' : medidor(fr, cor)}${i.d ? `<div class="d">${i.d}</div>` : ''}</div></div>`;
+             `<div class="kpi-in"><div class="v">${i.v}</div>${fr === null ? '<div class="sem-medidor"></div>' : medidor(fr, cor)}${i.d ? `<div class="d">${i.d}</div>` : ''}${i.f ? `<div class="f"><b>Cálculo:</b> ${i.f}</div>` : ''}</div></div>`;
     }).join('');
   }
 
@@ -2283,14 +2287,27 @@ window.__DADOS__ = {
       ? `<span>Indicadores da cultura <b>${esc(foco)}</b>${st.prCult ? '' : ' (maior área nos filtros)'}</span><span>Safra: <b>${esc(st.prSafra || 'todas as safras')}</b></span><span>Estatística: <b>${estTxt}</b></span>`
       : '<span>Nenhum dado de produtividade para os filtros aplicados.</span>';
     const folga = a.prodX && a.equil ? pct(a.prodX - a.equil, a.prodX) : null;
+    const med = st.prEst === 'mediana';
+    const safrasTxt = st.prSafra ? `na safra ${esc(st.prSafra)}` : 'com os registros de todas as safras juntos';
     document.getElementById('kpr').innerHTML = kpiHtml([
-      {v:a.prodX !== null ? fN(a.prodX, 1) : '—', r:'Produtividade média', d:`${esc(foco || '—')} | na unidade da cultura (ex.: sc/ha)`},
-      {v:a.custoX !== null ? 'R$ ' + fN(a.custoX, 0) : '—', r:'Custo médio por hectare', d:`${esc(foco || '—')} | ${fN(a.cv.length)} registros válidos`},
-      {v:a.recX !== null ? 'R$ ' + fN(a.recX, 0) : '—', r:'Receita estimada por hectare', d:'Produtividade × cotação média'},
-      {v:a.margX !== null ? 'R$ ' + fN(a.margX, 0) : '—', r:'Margem estimada por hectare', d: a.recX ? `${fPct(Math.max(0, pct(a.margX, a.recX)))} da receita estimada` : 'Sem cotação ou custo válido', c: a.margX !== null && a.margX < 0 ? 'alerta' : ''},
-      {v:a.equil !== null ? fN(a.equil, 1) : '—', r:'Produtividade de equilíbrio', d: folga !== null ? `Custo ÷ cotação | folga de ${fPct(Math.max(0, folga))} sobre a produtividade` : 'Custo ÷ cotação', c: folga !== null && folga < 15 ? 'ouro' : ''},
-      {v:fHa(tArea.area), r:'Área produtiva efetiva', d:`Safra ${esc(refSafra || '—')} | ${fN(tArea.props.size)} propriedades, todas as culturas filtradas`},
-      {v:fN(tot.atip), r:'Registros com valores atípicos', d:`${fPct(pct(tot.atip, tot.n))} dos registros, fora das médias`, c: tot.atip ? 'ouro' : ''}
+      {v:a.prodX !== null ? fN(a.prodX, 1) : '—', r:'Produtividade média', d:`${esc(foco || '—')} | na unidade da cultura (ex.: sc/ha)`,
+       f: med ? `mediana da produtividade dos ${fN(a.pv.length)} registros válidos, ${safrasTxt}.`
+              : `soma de (produtividade × área produtiva) ÷ soma da área, em ${fN(a.pv.length)} registros sem valores atípicos, ${safrasTxt}.`},
+      {v:a.custoX !== null ? 'R$ ' + fN(a.custoX, 0) : '—', r:'Custo médio por hectare', d:`${esc(foco || '—')} | ${fN(a.cv.length)} registros válidos`,
+       f: med ? `mediana do custo por hectare dos registros válidos, ${safrasTxt}.`
+              : `soma de (custo por ha × área produtiva) ÷ soma da área, sem valores atípicos, ${safrasTxt}.`},
+      {v:a.recX !== null ? 'R$ ' + fN(a.recX, 0) : '—', r:'Receita estimada por hectare', d:'Quanto cada hectare rende pela cotação informada',
+       f: med ? 'produtividade mediana × cotação média ponderada pela área.'
+              : 'média ponderada pela área de (produtividade × cotação) de cada registro válido.'},
+      {v:a.margX !== null ? 'R$ ' + fN(a.margX, 0) : '—', r:'Margem estimada por hectare', d: a.recX ? `${fPct(Math.max(0, pct(a.margX, a.recX)))} da receita estimada` : 'Sem cotação ou custo válido', c: a.margX !== null && a.margX < 0 ? 'alerta' : '',
+       f: med ? 'receita estimada (produtividade mediana × cotação média) − custo mediano por ha.'
+              : 'média ponderada pela área de (produtividade × cotação − custo por ha), só nos registros com produtividade e custo válidos.'},
+      {v:a.equil !== null ? fN(a.equil, 1) : '—', r:'Produtividade de equilíbrio', d: folga !== null ? `Folga de ${fPct(Math.max(0, folga))} sobre a produtividade` : 'Produtividade mínima para cobrir o custo', c: folga !== null && folga < 15 ? 'ouro' : '',
+       f:`custo por ha ÷ cotação média. Folga = (produtividade − equilíbrio) ÷ produtividade.`},
+      {v:fHa(tArea.area), r:'Área produtiva efetiva', d:`Safra ${esc(refSafra || '—')} | ${fN(tArea.props.size)} propriedades, todas as culturas filtradas`,
+       f:`soma da área produtiva efetiva dos registros da safra ${esc(refSafra || '—')}${st.prSafra ? '' : ' (a mais recente, para não somar a mesma área de safras diferentes)'}.`},
+      {v:fN(tot.atip), r:'Registros com valores atípicos', d:`${fPct(pct(tot.atip, tot.n))} dos registros, fora das médias`, c: tot.atip ? 'ouro' : '',
+       f:'registros com produtividade ou custo fora do intervalo Q1 − 3×IQR a Q3 + 3×IQR da própria cultura. Ficam fora das médias e das medianas.'}
     ]);
   }
 
@@ -2307,7 +2324,19 @@ window.__DADOS__ = {
     const val = {prod:x => x.t.prodX, custo:x => x.t.custoX, marg:x => x.t.margX, area:x => x.areaRef}[m];
     const fmt = {prod:v => fN(v, 1), custo:v => 'R$ ' + fN(v, 0), marg:v => 'R$ ' + fN(v, 0), area:fHa}[m];
     const l = itens.map(x => ({k:x.crop, v:val(x) || 0, extra: x.crop === st.prCult ? '| em foco' : ''})).filter(x => x.v > 0).sort((a,b) => b.v - a.v);
-    document.getElementById('pr-cult-sub').textContent = m === 'area' ? `Área produtiva na safra ${refSafra || '—'}, nas doze culturas de maior área.` : `Doze culturas de maior área, ${st.prSafra ? 'na safra ' + st.prSafra : 'considerando todas as safras'}. Produtividade na unidade de cada cultura.`;
+    const med = st.prEst === 'mediana';
+    const CALC = {
+      prod: med ? 'mediana da produtividade dos registros válidos de cada cultura.'
+                : 'soma de (produtividade × área produtiva) ÷ soma da área de cada cultura, sem valores atípicos.',
+      custo: med ? 'mediana do custo por hectare dos registros válidos de cada cultura.'
+                 : 'soma de (custo por ha × área produtiva) ÷ soma da área de cada cultura, sem valores atípicos.',
+      marg: (med ? 'produtividade mediana × cotação média − custo mediano por ha, em cada cultura.'
+                 : 'média ponderada pela área de (produtividade × cotação − custo por ha), só nos registros com produtividade e custo válidos.') + ' Culturas com margem negativa não aparecem nas barras.',
+      area: `soma da área produtiva efetiva dos registros da safra ${refSafra || '—'}${st.prSafra ? '' : ' (a mais recente, para não somar a mesma área de safras diferentes)'}. Não usa média nem mediana.`
+    }[m];
+    const base = m === 'area' ? `Área produtiva na safra ${esc(refSafra || '—')}, nas doze culturas de maior área.`
+                              : `Doze culturas de maior área, ${st.prSafra ? 'na safra ' + esc(st.prSafra) : 'considerando todas as safras juntas'}. Produtividade na unidade de cada cultura.`;
+    document.getElementById('pr-cult-sub').innerHTML = `${base}<span class="calc"><b>Cálculo (${m === 'area' ? 'soma' : (med ? 'mediana' : 'média sem atípicos')}):</b> ${CALC}</span>`;
     document.getElementById('pr-culturas').innerHTML = barrasHtml(l, fmt, 0, m === 'custo' ? '' : (m === 'marg' || m === 'prod' ? 'v' : ''));
   }
 
