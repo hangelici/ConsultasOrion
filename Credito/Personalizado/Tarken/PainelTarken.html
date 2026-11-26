@@ -155,6 +155,24 @@ tr.mais td{text-align:center}
 .graf-leg .ln{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
 td.lbl{font-weight:600}
 tr.sep td{background:var(--superficie-2);font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--texto-2);font-weight:600;padding:6px 10px}
+tr.st-ok>td:first-child{box-shadow:inset 4px 0 0 var(--verde-500)}
+tr.st-alerta>td:first-child{box-shadow:inset 4px 0 0 var(--alerta)}
+tr.st-ouro>td:first-child{box-shadow:inset 4px 0 0 var(--ouro-500)}
+tr.st-neutro>td:first-child{box-shadow:inset 4px 0 0 var(--cinza)}
+.legenda-st{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 16px 0;font-size:13px;color:var(--texto-2)}
+.legenda-st i{display:inline-block;width:4px;height:14px;border-radius:2px;vertical-align:-2px;margin-right:6px}
+.prop-det{padding:6px 4px 10px}
+.prop-info{display:flex;flex-wrap:wrap;gap:4px 22px;font-size:13px;color:var(--texto-2);margin-bottom:10px}
+.prop-info b{color:var(--texto);font-weight:600}
+table.mini{font-size:13px;background:var(--superficie);border:1px solid var(--borda);border-radius:6px}
+table.mini th{background:var(--superficie)}
+table.mini tr.ult td{background:var(--ouro-100)}
+pre.detalhe{white-space:pre-wrap;word-break:break-word;max-height:160px;overflow:auto;background:var(--superficie-2);border:1px solid var(--borda);padding:8px 10px;border-radius:6px;font:12px/1.45 ui-monospace,Consolas,monospace;margin:0}
+dl.detalhe{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px;margin:0;font-size:12px;max-height:160px;overflow:auto}
+dl.detalhe dt{color:var(--texto-2)} dl.detalhe dd{margin:0;word-break:break-word}
+.graf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:20px;margin-bottom:20px}
+@media (max-width:520px){.graf-grid{grid-template-columns:1fr}}
+.graf-grid .bloco{margin-bottom:0}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -174,7 +192,11 @@ window.__DADOS__ = {
   RISCO:            /*[[${RISCO}]]*/ [],
   ESG:              /*[[${ESG}]]*/ [],
   ESG_PROPRIEDADES: /*[[${ESG_PROPRIEDADES}]]*/ [],
-  BUREAU:           /*[[${BUREAU}]]*/ []
+  BUREAU:           /*[[${BUREAU}]]*/ [],
+  PROPOSTAS:        /*[[${PROPOSTAS}]]*/ [],
+  APROVACOES:       /*[[${APROVACOES}]]*/ [],
+  AVALIACOES:       /*[[${AVALIACOES}]]*/ [],
+  PROPOSTAS_COMPOSICAO: /*[[${PROPOSTAS_COMPOSICAO}]]*/ []
 };
 /*]]>*/
 </script>
@@ -185,7 +207,7 @@ window.__DADOS__ = {
     <nav class="abas" role="tablist" aria-label="Análises">
       <button class="aba" role="tab" aria-selected="true" data-act="aba" data-k="clientes" id="aba-clientes" aria-controls="pn-clientes">Clientes e propriedades</button>
       <button class="aba" role="tab" aria-selected="false" data-act="aba" data-k="risco" id="aba-risco" aria-controls="pn-risco">Perfil de risco</button>
-      <button class="aba" role="tab" aria-selected="false" aria-disabled="true" title="Disponível em uma próxima etapa">Propostas<em>em breve</em></button>
+      <button class="aba" role="tab" aria-selected="false" data-act="aba" data-k="propostas" id="aba-propostas" aria-controls="pn-propostas">Propostas</button>
     </nav>
   </div>
 </header>
@@ -491,6 +513,99 @@ window.__DADOS__ = {
       </section>
     </div>
   </div>
+
+  <!-- ================= ABA PROPOSTAS ================= -->
+  <div id="pn-propostas" role="tabpanel" aria-labelledby="aba-propostas" hidden>
+    <section class="filtros" aria-label="Filtros de propostas">
+      <label class="campo">Situação
+        <select id="p-sit">
+          <option value="">Todas</option>
+          <option>Aprovada</option><option>Reprovada</option><option>Em análise</option><option>Em cadastro</option>
+        </select>
+      </label>
+      <label class="campo">Tipo de proposta
+        <select id="p-tipo"><option value="">Todos</option></select>
+      </label>
+      <label class="campo">Criadas em
+        <select id="p-per">
+          <option value="0">Todo o período</option>
+          <option value="12">Últimos 12 meses</option>
+          <option value="24">Últimos 24 meses</option>
+        </select>
+      </label>
+    </section>
+
+    <h2 class="secao-tit">Visão geral</h2>
+    <section class="kpis" id="kp1" aria-label="Indicadores de propostas"></section>
+
+    <h2 class="secao-tit">Vigência e aprovação</h2>
+    <section class="kpis" id="kp2" aria-label="Indicadores de vigência"></section>
+
+    <div class="duas">
+      <section class="bloco">
+        <div class="bloco-cab"><div><h2>Propostas por fase</h2><p>Quantidade e valor solicitado na fase atual.</p></div></div>
+        <div class="barras" id="p-fases"></div>
+      </section>
+      <section class="bloco">
+        <div class="bloco-cab"><div><h2>Propostas por nota de rating</h2><p>Nota do rating mais recente de cada proposta.</p></div></div>
+        <div class="barras" id="p-notas"></div>
+      </section>
+    </div>
+
+    <div class="bloco-cab" style="border:0;padding:4px 0 12px">
+      <div><h2>Composição do valor</h2><p>Valor financeiro por categoria das linhas da proposta. Os nomes foram padronizados em maiúsculas para agrupar sem duplicidade.</p></div>
+      <div class="acoes"><div class="segm" id="p-comp" role="group" aria-label="Valor considerado"></div></div>
+    </div>
+    <div class="graf-grid" id="p-graf"></div>
+
+    <section class="bloco">
+      <div class="bloco-cab">
+        <div><h2>Propostas e aprovações</h2><p>Abra o identificador para ver todas as aprovações da proposta, com rating e detalhes. Clique no cliente para filtrar o painel.</p></div>
+        <div class="acoes">
+          <label>Agrupar por
+            <select id="p-por">
+              <option value="sit">Situação</option>
+              <option value="cliente">Cliente</option>
+              <option value="fase">Fase</option>
+              <option value="filial">Filial</option>
+              <option value="tipoProp">Tipo de proposta</option>
+              <option value="tipoCli">Tipo de cliente</option>
+              <option value="nota">Nota de rating</option>
+              <option value="mes">Mês de criação</option>
+            </select>
+          </label>
+          <label>Ordenar por
+            <select id="p-ord">
+              <option value="solic">Valor solicitado</option>
+              <option value="aprov">Valor aprovado</option>
+              <option value="qtd">Quantidade de propostas</option>
+              <option value="nome">Nome do grupo</option>
+            </select>
+          </label>
+          <button class="btn" data-act="pvexp" data-t="propostas">Abrir página</button>
+          <button class="btn" data-act="pvcol" data-t="propostas">Recolher</button>
+        </div>
+      </div>
+      <div class="legenda-st">
+        <span><i style="background:var(--verde-500)"></i>Aprovada</span>
+        <span><i style="background:var(--alerta)"></i>Reprovada</span>
+        <span><i style="background:var(--ouro-500)"></i>Em análise</span>
+        <span><i style="background:var(--cinza)"></i>Em cadastro ou sem fase</span>
+      </div>
+      <div class="rolagem">
+        <table>
+          <thead><tr>
+            <th>Grupo / proposta</th><th>Cliente</th><th>Tipo de proposta</th><th>Tipo de cliente</th><th>Fase atual</th>
+            <th>Criada em</th><th>Atualizada em</th><th>Validade da aprovação</th>
+            <th class="num">Valor solicitado</th><th class="num">Valor aprovado</th><th class="num">Limite clean</th>
+            <th class="num">Score</th><th>Nota</th><th class="num">Limite sugerido</th>
+          </tr></thead>
+          <tbody id="t-propostas"></tbody>
+        </table>
+      </div>
+      <div class="pag" id="pag-propostas"></div>
+    </section>
+  </div>
 </main>
 
 <script th:inline="none">
@@ -538,6 +653,12 @@ window.__DADOS__ = {
   const IND_RESTR = ['vDiv','vPefin','vRefin','vVenc','vProt','vAcoes','qCheq'];
   const FAIXAS = [{max:300, nome:'Score de 0 a 300'}, {max:500, nome:'Score de 301 a 500'}, {max:700, nome:'Score de 501 a 700'}, {max:Infinity, nome:'Score acima de 700'}];
   const MESES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const SIT = {CONCLUDED:{nome:'Aprovada', tom:'ok'}, REJECTED:{nome:'Reprovada', tom:'alerta'}, IN_PROGRESS:{nome:'Em análise', tom:'ouro'}, BACKLOG:{nome:'Em cadastro', tom:''}};
+  const TIPO_CLI = {pessoaFisica:'Pessoa física', pessoaJuridica:'Pessoa jurídica'};
+  const ORDEM_NOTA = ['AA','A','B+','B','B-','C+','C','C-','D','E'];
+  const ORDEM_ROTULOS = ['Cultura','Forma de Pagamento','Modalidade','Ciclo'];
+  const hoje = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+  const em30 = (() => { const d = new Date(Date.now() + 30 * 864e5); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
   const POR_PAGINA = 20, LOTE = 50;
 
   const toArr = v => { if(typeof v === 'string'){ try{ v = JSON.parse(v); }catch(e){ v = []; } } return Array.isArray(v) ? v : []; };
@@ -582,6 +703,7 @@ window.__DADOS__ = {
     if(g.length === 14) return `${g.slice(0,2)}.${g.slice(2,5)}.${g.slice(5,8)}/${g.slice(8,12)}-${g.slice(12)}`;
     return s(d);
   }
+  function fDH(d){ if(!d) return '<span class="sub">—</span>'; const [dt, hr] = d.split(' '); const p = dt.split('-'); return p.length === 3 ? `<span style="white-space:nowrap">${p.at(2)}/${p.at(1)}/${p.at(0)}${hr ? ' <span class="sub">' + esc(hr) + '</span>' : ''}</span>` : esc(d); }
   function fData(d){ if(!d) return '<span class="sub">Sem análise</span>'; const p = d.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : esc(d); }
   function idadeDias(d){ if(!d) return null; const p = d.split('-').map(Number); if(p.length !== 3) return null; return Math.floor((Date.now() - new Date(p[0], p[1]-1, p[2]).getTime()) / 864e5); }
 
@@ -597,6 +719,10 @@ window.__DADOS__ = {
   function demo(){
     const fil = ['grPilar','ljItapeva','grRioVerde','ljPiedade','matriz'], C = [], K = [], P = [], O = [], R = [], E = [], EP = [], B = [];
     const fontesDemo = ['SPC','BOA_VISTA','QUOD'];
+    const PR = [], AP = [], AV = [], PC = [];
+    const fasesDemo = [ ['8 - Crédito Aprovado','CONCLUDED'],['8 - Crédito Aprovado','CONCLUDED'],['9 - Crédito Reprovado','REJECTED'],['3 - Análise de Crédito','IN_PROGRESS'],['8 - Crédito Aprovado','CONCLUDED'],['1 - Consultor de Vendas','BACKLOG']];
+    const culturas = ['Soja','soja ','Milho','MILHO','Café','Trigo'], formas = ['Moeda','Grãos','moeda'], notas = ['A','B','C ','B','D','AA','C','E'];
+    let tid = 1, aid = 1;
     const posses = ['OWNED','LEASED',null,'PARTNERSHIP'];
     const auts = ['Ativa','Sem pedido','Sem pedido','Recusado','Em análise'], recs = ['REGULAR',null,'REGULAR','INAPT',null,'PENDING REGULARIZATION'];
     const esgv = ['CONFORMING',null,'NON_CONFORMING','UNDEFINED'], esgv2 = ['OK',null,'NONCONFORMING','UPDATING','NEVER_ANALYZED'];
@@ -630,15 +756,35 @@ window.__DADOS__ = {
                 VALOR_REFIN: ruim ? i*900 : 0, VALOR_PEFIN: ruim ? i*2100 : 0, VALOR_DIVIDAS_VENCIDAS: ruim ? i*500 : 0, VALOR_PROTESTOS: ruim && i%2 ? i*3000 : 0,
                 QTD_PROTESTOS: ruim && i%2 ? 2 : 0, VALOR_DIVIDAS: ruim ? i*3500 : 0, QTD_DIVIDAS: ruim ? 3 : 0, QTD_CONSULTAS: (i*7)%15, VALOR_CONSULTAS:0});
       });
+      const nt = i % 4 === 0 ? 0 : (i % 3) + 1;
+      for(let q = 0; q < nt; q++){
+        const f = fasesDemo.at((i + q) % fasesDemo.length), mes = (i * 3 + q * 5) % 22, ano = 2025 + Math.floor(mes / 12), mm = String((mes % 12) + 1).padStart(2,'0');
+        const solic = 50000 + ((i * 7919 + q * 104729) % 900000), criada = `${ano}-${mm}-0${1 + (i % 8)} 10:${String(10 + q).padStart(2,'0')}`;
+        const t = tid++, a1 = aid++, a2 = aid++, aprovado = f.at(1) === 'REJECTED' ? 0 : Math.round(solic * (0.6 + (i % 4) / 10));
+        const valAp = (q + i) % 3 === 0 ? (hoje.slice(0,4) === '2026' ? '2027-0' + (1 + i % 9) + '-15' : '2028-01-15') : `${ano}-${mm}-28`;
+        PR.push({TICKET_ID:t, CLIENTE_ID:cid, IDENTIFICADOR:'PRP-' + String(t).padStart(5,'0'), CRIADA_EM:criada, ATUALIZADA_EM:criada.replace(' 10:', ' 15:'), VALIDADE:valAp,
+                 VALOR_SOLICITADO:solic, TIPO_PROPOSTA:i % 9 ? 'insumos' : 'cereais', TIPO_CLIENTE:i % 4 ? 'pessoaFisica' : 'pessoaJuridica', LOJA:'Loja ' + (i % 5), SAFRA:'25/26', WORKFLOW:'Crédito',
+                 RESPONSAVEL:'analista' + (i % 3) + '@exemplo.com', CRIADOR:'consultor' + (i % 6) + '@exemplo.com', FASE:f.at(0), FASE_TIPO:f.at(1), ULTIMA_APROVACAO_ID: f.at(1) === 'BACKLOG' ? null : a2});
+        if(f.at(1) !== 'BACKLOG'){
+          AP.push({APROVACAO_ID:a1, TICKET_ID:t, CRIADA_EM:criada.replace(' 10:', ' 12:'), VALIDADE:valAp, VALOR_APROVADO:Math.round(aprovado * 0.9), LIMITE_CLEAN:Math.round(aprovado * 0.5), FASE_APROVACAO:'4 - Crédito Regional', RESPONSAVEL:'regional@exemplo.com', DETALHES: JSON.stringify({observacao:'Aprovação na alçada regional', garantias:'Penhor de safra'})});
+          AP.push({APROVACAO_ID:a2, TICKET_ID:t, CRIADA_EM:criada.replace(' 10:', ' 14:'), VALIDADE:valAp, VALOR_APROVADO:aprovado, LIMITE_CLEAN:Math.round(aprovado * 0.55), FASE_APROVACAO:'5 - Gerente de Crédito', RESPONSAVEL:'gerente@exemplo.com', DETALHES: i % 2 ? 'Limite condicionado à apresentação do CAR atualizado.' : ''});
+        }
+        AV.push({TICKET_ID:t, DATA:criada.replace(' 10:', ' 11:'), SCORE:300 + (i * 37) % 700, NOTA:notas.at(i % notas.length), LIMITE_SUGERIDO:Math.round(solic * 0.8)});
+        [ ['Cultura', culturas], ['Forma de Pagamento', formas], ['Modalidade', ['Safra','Custeio']], ['Ciclo', ['Verão','Inverno']]].forEach(par => {
+          const v = par.at(1).at((i + q) % par.at(1).length);
+          PC.push({TICKET_ID:t, TIPO:'SOLICITADO', ROTULO:par.at(0), VALOR:v.trim().toUpperCase(), VALOR_FINANCEIRO:solic});
+          if(f.at(1) === 'CONCLUDED') PC.push({TICKET_ID:t, TIPO:'APROVADO', ROTULO:par.at(0), VALOR:v.trim().toUpperCase(), VALOR_FINANCEIRO:aprovado});
+        });
+      }
       E.push({CLIENTE_ID:cid,ESG_CRIMINAL:esgv.at(i%2),ESG_TRABALHO_ESCRAVO:esgv.at(i%4),ESG_MORATORIA_CPF:esgv2.at(i%5),ESG_CAR:['COMPLIANT',null,'NOT_COMPLIANT'].at(i%3),
               ESG_DESMATAMENTO:esgv2.at(i%5),ESG_RESTRICAO:esgv2.at((i+1)%5),ESG_SOBREPOSICAO:esgv2.at((i+2)%5),ESG_MORATORIA:esgv2.at((i+3)%5),QTD_PENDENCIAS:i%4===2?2:0,QTD_VERIFICACOES:i%2?8:0});
     }
-    return {CLIENTES:C,CONTATOS:K,PROPRIEDADES:P,PROPRIETARIOS:O,RISCO:R,ESG:E,ESG_PROPRIEDADES:EP,BUREAU:B};
+    return {CLIENTES:C,CONTATOS:K,PROPRIEDADES:P,PROPRIETARIOS:O,RISCO:R,ESG:E,ESG_PROPRIEDADES:EP,BUREAU:B,PROPOSTAS:PR,APROVACOES:AP,AVALIACOES:AV,PROPOSTAS_COMPOSICAO:PC};
   }
 
   /* ===================== modelo ===================== */
   let RAW = window.__DADOS__ || {};
-  const emDemo = ['CLIENTES','CONTATOS','PROPRIEDADES','PROPRIETARIOS','RISCO','ESG','ESG_PROPRIEDADES','BUREAU'].every(k => toArr(RAW[k]).length === 0);
+  const emDemo = ['CLIENTES','CONTATOS','PROPRIEDADES','PROPRIETARIOS','RISCO','ESG','ESG_PROPRIEDADES','BUREAU','PROPOSTAS','APROVACOES','AVALIACOES','PROPOSTAS_COMPOSICAO'].every(k => toArr(RAW[k]).length === 0);
   if(emDemo){
     RAW = demo();
     document.getElementById('aviso').innerHTML = '<div class="aviso" role="status">Nenhuma consulta retornou dados. O painel está exibindo dados fictícios de demonstração.</div>';
@@ -647,7 +793,7 @@ window.__DADOS__ = {
   const clientes = norm(RAW.CLIENTES).map(r => ({
     id:s(r.CLIENTE_ID), filial:s(r.FILIAL)||'(Sem filial)', nome:s(r.NOME)||'(Sem nome)', doc:s(r.DOCUMENTO), tipo:s(r.TIPO),
     email:s(r.EMAIL), tel:s(r.TELEFONE), resp:s(r.RESPONSAVEL), qtdContatos:n(r.QTD_CONTATOS),
-    contatos:[], props:[], areaTotal:0, areaProd:0, talhoes:0, r:null, e:null, esgProps:[], bureaus:[]
+    contatos:[], props:[], areaTotal:0, areaProd:0, talhoes:0, r:null, e:null, esgProps:[], bureaus:[], tickets:[]
   }));
   const porId = new Map();
   clientes.forEach(c => { c.nome_f = fold(c.nome); c.doc_d = dig(c.doc); porId.set(c.id, c); });
@@ -708,6 +854,46 @@ window.__DADOS__ = {
     b.restr = IND_RESTR.some(k => b[k] > 0);
     c.bureaus.push(b); fontesExistentes.add(b.fonte);
   });
+  const tickets = new Map(), tiposProposta = new Set(), rotulosComp = new Set();
+  const capitaliza = v => v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
+  norm(RAW.PROPOSTAS).forEach(r => {
+    const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
+    const t = {id:s(r.TICKET_ID), c, ident:s(r.IDENTIFICADOR) || ('#' + s(r.TICKET_ID)), criada:s(r.CRIADA_EM), atual:s(r.ATUALIZADA_EM), validade:s(r.VALIDADE).slice(0,10),
+      solic:n(r.VALOR_SOLICITADO), tipoProp:capitaliza(s(r.TIPO_PROPOSTA)) || 'Não informado', tipoCli:TIPO_CLI[s(r.TIPO_CLIENTE)] || s(r.TIPO_CLIENTE) || 'Não informado',
+      loja:s(r.LOJA), safra:s(r.SAFRA), wf:s(r.WORKFLOW), resp:s(r.RESPONSAVEL), criador:s(r.CRIADOR), fase:s(r.FASE) || 'Sem fase', faseTipo:s(r.FASE_TIPO),
+      ultId:s(r.ULTIMA_APROVACAO_ID), aprs:[], rts:[], comp:[]};
+    tickets.set(t.id, t); c.tickets.push(t); tiposProposta.add(t.tipoProp);
+  });
+  norm(RAW.APROVACOES).forEach(r => {
+    const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
+    t.aprs.push({id:s(r.APROVACAO_ID), criada:s(r.CRIADA_EM), validade:s(r.VALIDADE).slice(0,10), valor:n(r.VALOR_APROVADO), clean:n(r.LIMITE_CLEAN), fase:s(r.FASE_APROVACAO) || 'Sem fase', resp:s(r.RESPONSAVEL), det:s(r.DETALHES)});
+  });
+  norm(RAW.AVALIACOES).forEach(r => {
+    const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
+    t.rts.push({data:s(r.DATA), score:numOuNulo(r.SCORE), nota:s(r.NOTA).toUpperCase().trim(), sug:n(r.LIMITE_SUGERIDO)});
+  });
+  norm(RAW.PROPOSTAS_COMPOSICAO).forEach(r => {
+    const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
+    const rot = s(r.ROTULO) || 'Sem rótulo';
+    t.comp.push({tipo:s(r.TIPO).toUpperCase(), rot, val:s(r.VALOR).toUpperCase().trim() || '(NÃO INFORMADO)', vf:n(r.VALOR_FINANCEIRO)});
+    rotulosComp.add(rot);
+  });
+  tickets.forEach(t => {
+    t.aprs.sort((a,b) => a.criada.localeCompare(b.criada));
+    t.rts.sort((a,b) => a.data.localeCompare(b.data));
+    t.ult = t.aprs.find(a => a.id === t.ultId) || t.aprs.at(-1) || null;
+    t.aprs.forEach(a => { let rr = null; t.rts.forEach(x => { if(!a.criada || x.data <= a.criada) rr = x; }); a.rt = rr || t.rts.at(-1) || null; });
+    t.rt = t.rts.at(-1) || null;
+    t.sit = SIT[t.faseTipo] || {nome:'Sem fase', tom:''};
+    t.aprovada = t.sit.nome === 'Aprovada';
+    t.aprovado = t.aprovada && t.ult ? t.ult.valor : 0;
+    t.cleanA = t.aprovada && t.ult ? t.ult.clean : 0;
+    t.vig = t.ult ? t.ult.validade : '';
+    t.mes = t.criada.slice(0,7);
+    t.nota = t.rt && t.rt.nota ? t.rt.nota : 'Sem nota';
+  });
+  const ROTULOS = ORDEM_ROTULOS.filter(r => rotulosComp.has(r)).concat(Array.from(rotulosComp).filter(r => !ORDEM_ROTULOS.includes(r)).sort());
+
   const ORDEM_FONTES = ['SPC','BOA_VISTA','QUOD'].filter(f => fontesExistentes.has(f)).concat(Array.from(fontesExistentes).filter(f => !FONTES[f]).sort());
 
   clientes.forEach(c => {
@@ -722,12 +908,12 @@ window.__DADOS__ = {
   /* ===================== estado e filtro ===================== */
   const novoPv = () => ({ab:new Set(), mais:new Map(), det:new Set(), pg:1});
   const GRUPOS_POR_PAGINA = 25;
-  const cache = {risco:{k:null, cfg:null}, esg:{k:null, cfg:null}, bureau:{k:null, cfg:null}};
-  const paginaAtual = {risco:[], esg:[], bureau:[]};
+  const cache = {risco:{k:null, cfg:null}, esg:{k:null, cfg:null}, bureau:{k:null, cfg:null}, propostas:{k:null, cfg:null}, tk:{k:null, l:null}};
+  const paginaAtual = {risco:[], esg:[], bureau:[], propostas:[]};
   const st = {aba:'clientes', filial:'', busca:'', comProp:false, comAnalise:false, foco:null, ord1:'areaProd',
               ab1:new Set(), mais1:new Map(), pg2:1, pg3:1, ab2:new Set(), ab3:new Set(), abP:new Set(),
-              pv:{risco:novoPv(), esg:novoPv(), bureau:novoPv()}, rkPor:'filial', rkOrd:'patr', esgPor:'filial', esgPend:false,
-              sub:'perfil', fonte:'', periodo:24, gInd:'vDiv', gMet:'soma', buPor:'fonte', buOrd:'vDiv', buRestr:false};
+              pv:{risco:novoPv(), esg:novoPv(), bureau:novoPv(), propostas:novoPv()}, rkPor:'filial', rkOrd:'patr', esgPor:'filial', esgPend:false,
+              sub:'perfil', fonte:'', periodo:24, pSit:'', pTipo:'', pPer:0, pComp:'SOLICITADO', pPor:'sit', pOrd:'solic', gInd:'vDiv', gMet:'soma', buPor:'fonte', buOrd:'vDiv', buRestr:false};
   let vis = null, chave = null;
 
   function calcular(){
@@ -996,8 +1182,8 @@ window.__DADOS__ = {
       const lim = P.mais.get(g.k) || LOTE;
       g.clientes.slice(0, lim).forEach(c => {
         const cid = cfg.focoId ? cfg.focoId(c) : c.id;
-        const primeira = cfg.primeira ? cfg.primeira(c) : `<button class="lnk" data-act="foco" data-id="${esc(cid)}">${esc(c.nome)}</button><br><span class="sub">${esc(c.filial)}</span>`;
-        h.push(`<tr><td class="recuo">${primeira}</td>${cfg.linha(c, P.det.has(c.id))}</tr>`);
+        const primeira = cfg.primeira ? cfg.primeira(c, P.det.has(c.id)) : `<button class="lnk" data-act="foco" data-id="${esc(cid)}">${esc(c.nome)}</button><br><span class="sub">${esc(c.filial)}</span>`;
+        h.push(`<tr class="${cfg.classeLinha ? cfg.classeLinha(c) : ''}"><td class="recuo">${primeira}</td>${cfg.linha(c, P.det.has(c.id))}</tr>`);
         if(cfg.det && P.det.has(c.id)) h.push(cfg.det(c));
       });
       if(g.clientes.length > lim) h.push(`<tr class="mais"><td colspan="${cfg.cols}"><button class="btn" data-act="pvm" data-t="${cfg.id}" data-k="${esc(g.k)}">Mostrar mais ${fN(Math.min(LOTE, g.clientes.length - lim))} de ${fN(g.clientes.length - lim)} restantes</button></td></tr>`);
@@ -1296,6 +1482,190 @@ window.__DADOS__ = {
     rAbaRisco();
   }
 
+
+  /* ===================== aba propostas ===================== */
+  let gruposProp = [];
+
+  function ticketsVis(){
+    const ck = [chave, st.pSit, st.pTipo, st.pPer].join('|');
+    if(ck === cache.tk.k) return cache.tk.l;
+    let lim = '';
+    if(st.pPer){ const d = new Date(); d.setMonth(d.getMonth() - (st.pPer - 1)); lim = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0'); }
+    const l = [];
+    vis.lista.forEach(c => c.tickets.forEach(t => {
+      if(st.pSit && t.sit.nome !== st.pSit) return;
+      if(st.pTipo && t.tipoProp !== st.pTipo) return;
+      if(lim && t.mes < lim) return;
+      l.push(t);
+    }));
+    cache.tk = {k:ck, l};
+    return l;
+  }
+
+  function agProp(l){
+    const t = {n:l.length, sit:new Map(), solic:0, aprov:0, clean:0, nAprov:0, solicAprov:0, vig:0, vigV:0, venc:0, vencV:0, v30:0, v30V:0, and:0, andV:0, sug:0, aprovComSug:0, cli:new Set()};
+    l.forEach(x => {
+      t.cli.add(x.c.id);
+      t.sit.set(x.sit.nome, (t.sit.get(x.sit.nome) || 0) + 1);
+      t.solic += x.solic;
+      if(x.sit.nome === 'Em análise' || x.sit.nome === 'Em cadastro'){ t.and++; t.andV += x.solic; }
+      if(!x.aprovada) return;
+      t.nAprov++; t.aprov += x.aprovado; t.clean += x.cleanA; t.solicAprov += x.solic;
+      if(x.vig && x.vig >= hoje){ t.vig++; t.vigV += x.aprovado; if(x.vig <= em30){ t.v30++; t.v30V += x.aprovado; } }
+      else if(x.vig){ t.venc++; t.vencV += x.aprovado; }
+      if(x.rt && x.rt.sug > 0){ t.sug += x.rt.sug; t.aprovComSug += x.aprovado; }
+    });
+    return t;
+  }
+
+  function rKpisProp(t){
+    const rep = t.sit.get('Reprovada') || 0, fin = t.nAprov + rep;
+    document.getElementById('kp1').innerHTML = kpiHtml([
+      {v:fN(t.n), r:'Propostas', d:`${fN(t.nAprov)} aprovadas, ${fN(rep)} reprovadas, ${fN(t.and)} em andamento`},
+      {v:fRc(t.solic), r:'Valor total solicitado', d:'Ticket médio: ' + fRc(t.n ? t.solic / t.n : 0)},
+      {v:fRc(t.aprov), r:'Valor total aprovado', d:`Última aprovação das propostas aprovadas | ${fPct(pct(t.aprov, t.solicAprov))} do solicitado nelas`, c:'ouro'},
+      {v:fRc(t.clean), r:'Limite clean', d:fPct(pct(t.clean, t.aprov)) + ' do valor aprovado'},
+      {v:fN(t.cli.size), r:'Clientes com proposta', d:fN(t.cli.size ? t.n / t.cli.size : 0, 1) + ' propostas por cliente, em média'}
+    ]);
+    document.getElementById('kp2').innerHTML = kpiHtml([
+      {v:fPct(pct(t.nAprov, fin)), r:'Taxa de aprovação', d:`Aprovadas sobre propostas finalizadas (${fN(fin)})`},
+      {v:fRc(t.vigV), r:'Aprovado vigente', d:`${plural(t.vig,'proposta','propostas')} com aprovação dentro da validade`, c:'ouro'},
+      {v:fN(t.venc), r:'Aprovações vencidas', d:fRc(t.vencV) + ' aprovados com validade expirada', c: t.venc ? 'alerta' : ''},
+      {v:fN(t.v30), r:'Vencem nos próximos 30 dias', d:fRc(t.v30V) + ' para renovar', c: t.v30 ? 'ouro' : ''},
+      {v:fN(t.and), r:'Propostas em andamento', d:fRc(t.andV) + ' solicitados em análise ou cadastro'},
+      {v:fPct(pct(t.aprov === 0 ? 0 : t.aprovComSug, t.sug)), r:'Aprovado sobre limite sugerido', d:'Valor aprovado ÷ limite sugerido pelo rating, nas propostas aprovadas com rating'}
+    ]);
+  }
+
+  function barrasHtml(itens, fmt, total, cls){
+    const max = itens.length ? Math.max.apply(null, itens.map(i => i.v)) : 0;
+    if(!itens.length || max <= 0) return '<div class="vazio">Sem dados para os filtros aplicados.</div>';
+    return itens.map(i => `<div class="barra"><span class="nome" title="${esc(i.k)}">${esc(i.k)}</span><span class="t"><span class="${cls || ''}" style="width:${pct(i.v, max)}%"></span></span><span class="n">${fmt(i.v)}${total ? ' <span class="sub">(' + fPct(pct(i.v, total)) + ')</span>' : ''}${i.extra ? ' <span class="sub">' + i.extra + '</span>' : ''}</span></div>`).join('');
+  }
+
+  function rFasesNotas(l){
+    const fases = new Map(), notas = new Map();
+    l.forEach(t => {
+      const f = fases.get(t.fase) || {k:t.fase, v:0, s:0}; f.v++; f.s += t.solic; fases.set(t.fase, f);
+      notas.set(t.nota, (notas.get(t.nota) || 0) + 1);
+    });
+    const fl = Array.from(fases.values()).sort((a,b) => a.k.localeCompare(b.k,'pt-BR', {numeric:true})).map(f => ({k:f.k, v:f.v, extra:'| ' + fRc(f.s)}));
+    document.getElementById('p-fases').innerHTML = barrasHtml(fl, v => fN(v), 0, 'v');
+    const ordem = k => { const i = ORDEM_NOTA.indexOf(k); return i < 0 ? 99 : i; };
+    const nl = Array.from(notas.entries()).map(e => ({k:e.at(0), v:e.at(1)})).sort((a,b) => (ordem(a.k) - ordem(b.k)) || a.k.localeCompare(b.k));
+    document.getElementById('p-notas').innerHTML = barrasHtml(nl, v => fN(v), l.length);
+  }
+
+  function rComposicao(l){
+    document.getElementById('p-comp').innerHTML = [ ['SOLICITADO','Valor solicitado'],['APROVADO','Valor aprovado']].map(o =>
+      `<button data-act="pcomp" data-k="${o.at(0)}" aria-pressed="${st.pComp === o.at(0)}">${o.at(1)}</button>`).join('');
+    const ag = new Map(ROTULOS.map(r => [r, new Map()]));
+    l.forEach(t => {
+      if(st.pComp === 'APROVADO' && !t.aprovada) return;
+      t.comp.forEach(x => {
+        if(x.tipo !== st.pComp) return;
+        const m = ag.get(x.rot); if(!m) return;
+        m.set(x.val, (m.get(x.val) || 0) + x.vf);
+      });
+    });
+    const html = ROTULOS.map(rot => {
+      const m = ag.get(rot), l2 = Array.from(m.entries()).map(e => ({k:e.at(0), v:e.at(1)})).sort((a,b) => b.v - a.v);
+      const total = l2.reduce((a,x) => a + x.v, 0);
+      let itens = l2.slice(0, 10);
+      if(l2.length > 10) itens.push({k:`Outros (${l2.length - 10})`, v:l2.slice(10).reduce((a,x) => a + x.v, 0)});
+      return `<section class="bloco"><div class="bloco-cab"><div><h2>${esc(rot)}</h2><p>${fRc(total)} em ${plural(l2.length,'categoria','categorias')}</p></div></div><div class="barras">${barrasHtml(itens, fRc, total, st.pComp === 'APROVADO' ? 'v' : '')}</div></section>`;
+    }).join('');
+    document.getElementById('p-graf').innerHTML = html || '<section class="bloco"><div class="vazio">Sem linhas de composição para os filtros aplicados.</div></section>';
+  }
+
+  function fDetalhe(txt){
+    if(!txt) return '';
+    let o = null;
+    try{ o = JSON.parse(txt); }catch(e){ o = null; }
+    if(o && typeof o === 'object' && !Array.isArray(o)){
+      const ks = Object.keys(o);
+      if(ks.length) return `<dl class="detalhe">${ks.map(k => `<dt>${esc(k)}</dt><dd>${esc(typeof o[k] === 'object' ? JSON.stringify(o[k]) : o[k])}</dd>`).join('')}</dl>`;
+    }
+    return `<pre class="detalhe">${esc(o !== null && typeof o === 'object' ? JSON.stringify(o, null, 2) : txt)}</pre>`;
+  }
+
+  function tagValidade(t){
+    if(!t.vig) return '<span class="sub">—</span>';
+    let tg = '';
+    if(t.aprovada){
+      if(t.vig < hoje) tg = tag('Vencida','alerta');
+      else if(t.vig <= em30) tg = tag('Vence em ' + (idadeDias(t.vig) === null ? '' : Math.abs(idadeDias(t.vig))) + ' dias','ouro');
+      else tg = tag('Vigente','ok');
+    }
+    return `${fData(t.vig)} ${tg}`;
+  }
+
+  function detalheProposta(t){
+    const info = [ ['Validade da proposta', t.validade ? fData(t.validade) : '—'], ['Loja', ou(t.loja)], ['Safra', ou(t.safra)], ['Workflow', ou(t.wf)], ['Responsável', ou(t.resp)], ['Criada por', ou(t.criador)]]
+      .map(x => `<span>${x.at(0)}: <b>${x.at(1)}</b></span>`).join('');
+    const linhas = t.aprs.length ? t.aprs.slice().reverse().map(a => {
+      const ult = t.ult && a.id === t.ult.id, rt = a.rt;
+      const val = a.validade ? `${fData(a.validade)}${a.validade < hoje ? ' ' + tag('Vencida','alerta') : ''}` : '<span class="sub">—</span>';
+      return `<tr class="${ult ? 'ult' : ''}"><td>${fDH(a.criada)}${ult ? ' ' + tag('Última','ouro') : ''}</td><td>${esc(a.fase)}</td><td>${val}</td>` +
+             `<td class="num">${fR(a.valor)}</td><td class="num">${fR(a.clean)}</td>` +
+             `<td class="num">${rt && rt.score !== null ? fN(rt.score, 0) : '<span class="sub">—</span>'}</td><td>${rt && rt.nota ? tag(rt.nota) : '<span class="sub">—</span>'}</td>` +
+             `<td class="num">${rt ? fR(rt.sug) : '<span class="sub">—</span>'}</td><td>${ou(a.resp)}</td></tr>` +
+             (a.det ? `<tr class="${ult ? 'ult' : ''}"><td colspan="9">${fDetalhe(a.det)}</td></tr>` : '');
+    }).join('') : '<tr><td colspan="9" class="sub">Nenhuma aprovação registrada.</td></tr>';
+    return `<tr class="det"><td colspan="14"><div class="prop-det"><div class="prop-info">${info}</div>` +
+           `<div class="rolagem"><table class="mini"><thead><tr><th>Aprovação em</th><th>Fase da aprovação</th><th>Validade</th><th class="num">Valor aprovado</th><th class="num">Limite clean</th><th class="num">Score</th><th>Nota</th><th class="num">Limite sugerido</th><th>Responsável</th></tr></thead><tbody>${linhas}</tbody></table></div>` +
+           `<p class="sub" style="margin:6px 0 0">O rating de cada aprovação é o mais recente até a data da aprovação.</p></div></td></tr>`;
+  }
+
+  function rPropTabela(){
+    const l = ticketsVis();
+    const ck = [cache.tk.k, st.pPor, st.pOrd].join('|');
+    if(ck === cache.propostas.k && cache.propostas.cfg){ rPivot(cache.propostas.cfg); return; }
+    const porCli = st.pPor === 'cliente';
+    const chaveFn = {sit:t => t.sit.nome, cliente:t => t.c.id, fase:t => t.fase, filial:t => t.c.filial, tipoProp:t => t.tipoProp, tipoCli:t => t.tipoCli, nota:t => t.nota,
+                     mes:t => t.mes ? fMes(t.mes) + ' (' + t.mes + ')' : 'Sem data'}[st.pPor];
+    const itens = l.map(t => ({id:'t' + t.id, nome:t.c.nome, filial:t.c.filial, cid:t.c.id, t}));
+    gruposProp = agrupar(itens, x => chaveFn(x.t)).map(g => {
+      const a = agProp(g.clientes.map(x => x.t));
+      return Object.assign(g, {a, cli: porCli ? g.clientes.at(0).t.c : null});
+    });
+    const o = st.pOrd, nomeG = g => porCli ? g.cli.nome : g.k;
+    gruposProp.sort((a,b) => {
+      if(o === 'nome') return st.pPor === 'mes' ? b.k.localeCompare(a.k) : (st.pPor === 'fase' ? nomeG(a).localeCompare(nomeG(b),'pt-BR',{numeric:true}) : nomeG(a).localeCompare(nomeG(b),'pt-BR'));
+      if(o === 'qtd') return b.clientes.length - a.clientes.length;
+      return b.a[o] - a.a[o];
+    });
+    gruposProp.forEach(g => g.clientes.sort((a,b) => b.t.criada.localeCompare(a.t.criada)));
+    cache.propostas.k = ck; st.pv.propostas.pg = 1;
+    rPivot(cache.propostas.cfg = {
+      id:'propostas', tbody:'t-propostas', cols:14, grupos:gruposProp, unid:['proposta','propostas'], focoId:x => x.cid,
+      vazio:'Nenhuma proposta para os filtros aplicados.',
+      rotuloGrupo: g => porCli ? g.cli.nome : g.k,
+      extraGrupo: g => porCli ? `<br><span class="sub">${esc(g.cli.filial)}</span> <button class="lnk sub" data-act="foco" data-id="${esc(g.cli.id)}">filtrar painel</button>` : '',
+      classeLinha: x => 'st-' + (x.t.sit.tom || 'neutro'),
+      primeira: (x, aberto) => `<button class="alt" data-act="pvd" data-t="propostas" data-id="${esc(x.id)}" aria-expanded="${aberto}">${esc(x.t.ident)}</button><br><span class="sub">${plural(x.t.aprs.length,'aprovação','aprovações')}</span>`,
+      cab: g => { const ap = g.a.nAprov, rp = g.a.sit.get('Reprovada') || 0;
+        return `<td colspan="7"><span class="sub">${fN(ap)} aprovadas, ${fN(rp)} reprovadas, ${fN(g.a.and)} em andamento</span></td>` +
+               `<td class="num">${fR(g.a.solic)}</td><td class="num">${fR(g.a.aprov)}</td><td class="num">${fR(g.a.clean)}</td><td colspan="3"></td>`; },
+      linha: x => { const t = x.t, rt = t.rt;
+        return `<td><button class="lnk" data-act="foco" data-id="${esc(t.c.id)}">${esc(t.c.nome)}</button><br><span class="sub">${esc(t.c.filial)}</span></td>` +
+               `<td>${esc(t.tipoProp)}</td><td>${esc(t.tipoCli)}</td><td>${tag(t.fase, t.sit.tom)}</td>` +
+               `<td>${fDH(t.criada)}</td><td>${fDH(t.atual)}</td><td>${tagValidade(t)}</td>` +
+               `<td class="num">${fR(t.solic)}</td><td class="num">${t.ult ? fR(t.ult.valor) : '<span class="sub">—</span>'}</td><td class="num">${t.ult ? fR(t.ult.clean) : '<span class="sub">—</span>'}</td>` +
+               `<td class="num">${rt && rt.score !== null ? fN(rt.score, 0) : '<span class="sub">—</span>'}</td><td>${rt && rt.nota ? tag(rt.nota) : '<span class="sub">—</span>'}</td>` +
+               `<td class="num">${rt ? fR(rt.sug) : '<span class="sub">—</span>'}</td>`; },
+      det: x => detalheProposta(x.t)
+    });
+  }
+
+  function rAbaPropostas(){
+    const l = ticketsVis();
+    rKpisProp(agProp(l));
+    rFasesNotas(l);
+    rComposicao(l);
+    rPropTabela();
+  }
+
   /* ===================== render geral ===================== */
   function rFoco(){
     const el = document.getElementById('foco'), c = st.foco ? porId.get(st.foco) : null;
@@ -1305,13 +1675,15 @@ window.__DADOS__ = {
   function render(){
     calcular(); rFoco();
     if(st.aba === 'clientes'){ rFaixa(); rKpis1(); rTop(); rT1(); rT2(); rT3(); }
-    else rAbaRisco();
+    else if(st.aba === 'risco') rAbaRisco();
+    else rAbaPropostas();
   }
   function trocarAba(a){
     st.aba = a;
     document.querySelectorAll('.aba[data-k]').forEach(b => b.setAttribute('aria-selected', String(b.getAttribute('data-k') === a)));
     document.getElementById('pn-clientes').hidden = a !== 'clientes';
     document.getElementById('pn-risco').hidden = a !== 'risco';
+    document.getElementById('pn-propostas').hidden = a !== 'propostas';
     render();
   }
 
@@ -1339,14 +1711,24 @@ window.__DADOS__ = {
   document.getElementById('bu-ord').addEventListener('change', e => { st.buOrd = e.target.value; rBuTabela(); });
   document.getElementById('bu-restr').addEventListener('change', e => { st.buRestr = e.target.checked; st.pv.bureau = novoPv(); rBuTabela(); });
 
+  const pTipo = document.getElementById('p-tipo');
+  pTipo.insertAdjacentHTML('beforeend', Array.from(tiposProposta).sort((a,b) => a.localeCompare(b,'pt-BR')).map(t => `<option>${esc(t)}</option>`).join(''));
+  const novoFiltroProp = () => { st.pv.propostas = novoPv(); rAbaPropostas(); };
+  document.getElementById('p-sit').addEventListener('change', e => { st.pSit = e.target.value; novoFiltroProp(); });
+  pTipo.addEventListener('change', e => { st.pTipo = e.target.value; novoFiltroProp(); });
+  document.getElementById('p-per').addEventListener('change', e => { st.pPer = Number(e.target.value); novoFiltroProp(); });
+  document.getElementById('p-por').addEventListener('change', e => { st.pPor = e.target.value; st.pv.propostas = novoPv(); rPropTabela(); });
+  document.getElementById('p-ord').addEventListener('change', e => { st.pOrd = e.target.value; rPropTabela(); });
+
   const alternar = (set, k) => { if(set.has(k)) set.delete(k); else set.add(k); };
-  const rTabela = t => t === 'risco' ? rRisco() : (t === 'esg' ? rEsg() : rBuTabela());
+  const rTabela = t => ({risco:rRisco, esg:rEsg, bureau:rBuTabela, propostas:rPropTabela})[t]();
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-act]'); if(!el || el.disabled) return;
     const a = el.getAttribute('data-act'), k = el.getAttribute('data-k'), id = el.getAttribute('data-id'), t = el.getAttribute('data-t'), p = Number(el.getAttribute('data-p'));
     switch(a){
       case 'aba': trocarAba(k); break;
       case 'sub': trocarSub(k); break;
+      case 'pcomp': st.pComp = k; rComposicao(ticketsVis()); break;
       case 'fonte': st.fonte = k; st.pv.bureau = novoPv(); rBureau(); break;
       case 'g1': alternar(st.ab1, k); rT1(); break;
       case 'mais1': st.mais1.set(k, (st.mais1.get(k) || LOTE) + LOTE); rT1(); break;
