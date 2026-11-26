@@ -128,7 +128,7 @@ main.painel{background:var(--painel);border-radius:17.5px;box-shadow:inset 0 0 0
 .foco button{border:0;border-radius:8.8px;background:var(--painel);box-shadow:inset 0 0 0 1.1px #E0E0E3;padding:6px 11px;cursor:pointer;color:#4D4D52;font-weight:500;font-size:13px}
 
 /* entrada das telas */
-[role="tabpanel"]:not([hidden]),#sb-perfil:not([hidden]),#sb-esg:not([hidden]),#sb-bureau:not([hidden]){animation:entrar .45s cubic-bezier(.2,.7,.2,1)}
+[role="tabpanel"]:not([hidden]),#sb-cli:not([hidden]),#sb-prop:not([hidden]),#sb-perfil:not([hidden]),#sb-esg:not([hidden]),#sb-bureau:not([hidden]){animation:entrar .45s cubic-bezier(.2,.7,.2,1)}
 @keyframes entrar{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes subir{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
@@ -338,6 +338,11 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 .rb-dica{flex:none;font-size:12px;color:var(--texto-4);white-space:nowrap}
 @media (max-width:700px){.rb-dica{display:none}}
 
+.foco-cultura{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:0 0 14px;font-size:13.5px;color:var(--texto-3)}
+.foco-cultura b{color:var(--texto-forte);font-weight:500}
+.donos{white-space:nowrap;display:inline-block;line-height:1.5}
+.valor-atip{color:var(--texto-4);text-decoration:line-through}
+
 /* paginação */
 .pag{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:14px 23px 20px;font-size:13.2px;color:var(--texto-3)}
 .pag:empty{padding:0}
@@ -382,7 +387,8 @@ window.__DADOS__ = {
   PROPOSTAS:        /*[[${PROPOSTAS}]]*/ [],
   APROVACOES:       /*[[${APROVACOES}]]*/ [],
   AVALIACOES:       /*[[${AVALIACOES}]]*/ [],
-  PROPOSTAS_COMPOSICAO: /*[[${PROPOSTAS_COMPOSICAO}]]*/ []
+  PROPOSTAS_COMPOSICAO: /*[[${PROPOSTAS_COMPOSICAO}]]*/ [],
+  PRODUTIVIDADE:    /*[[${PRODUTIVIDADE}]]*/ []
 };
 /*]]>*/
 </script>
@@ -433,6 +439,12 @@ window.__DADOS__ = {
 
   <!-- ================= ABA CLIENTES E PROPRIEDADES ================= -->
   <div id="pn-clientes" role="tabpanel" aria-labelledby="aba-clientes">
+    <nav class="subabas" role="tablist" aria-label="Seções de clientes e propriedades">
+      <button class="subaba" role="tab" aria-selected="true" data-act="subc" data-k="cli">Clientes</button>
+      <button class="subaba" role="tab" aria-selected="false" data-act="subc" data-k="prop">Propriedades</button>
+    </nav>
+
+    <div id="sb-cli">
     <section class="campo-area" aria-label="Uso da área">
       <h2>Uso da área dos clientes filtrados</h2>
       <div class="faixa" aria-hidden="true"><span id="faixa-prod" style="width:0;background:var(--grad-verde)"></span></div>
@@ -509,6 +521,96 @@ window.__DADOS__ = {
       </div>
       <div class="pag" id="pag3"></div>
     </section>
+    </div>
+
+    <!-- ===== Seção Propriedades (produtividade) ===== -->
+    <div id="sb-prop" hidden>
+      <p class="nota">Produtividade, cotação e custo por hectare vêm do consolidado de cada propriedade. Registros com valores atípicos (prováveis erros de digitação) ficam fora das médias e aparecem riscados na tabela. A produtividade está na unidade de cada cultura.</p>
+
+      <section class="filtros" aria-label="Filtros de produtividade">
+        <label class="campo">Safra
+          <select id="pr-safra"><option value="">Todas as safras (média)</option></select>
+        </label>
+        <label class="campo">Cultura
+          <select id="pr-cult"><option value="">Todas as culturas</option></select>
+        </label>
+        <div class="campo">Estatística
+          <div class="segm" id="pr-est" role="group" aria-label="Estatística">
+            <button data-act="prest" data-k="media" aria-pressed="true">Média sem atípicos</button>
+            <button data-act="prest" data-k="mediana" aria-pressed="false">Mediana</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="foco-cultura" id="pr-foco"></div>
+      <section class="kpis" id="kpr" aria-label="Indicadores de produtividade"></section>
+
+      <section class="bloco">
+        <div class="bloco-cab">
+          <div><h2>Indicadores por cultura</h2><p id="pr-cult-sub">Doze culturas de maior área, na safra selecionada.</p></div>
+          <div class="acoes">
+            <div class="segm" id="pr-met" role="group" aria-label="Indicador">
+              <button data-act="prmet" data-k="prod" aria-pressed="true">Produtividade</button>
+              <button data-act="prmet" data-k="custo" aria-pressed="false">Custo por ha</button>
+              <button data-act="prmet" data-k="marg" aria-pressed="false">Margem por ha</button>
+              <button data-act="prmet" data-k="area" aria-pressed="false">Área</button>
+            </div>
+          </div>
+        </div>
+        <div class="barras" id="pr-culturas"></div>
+      </section>
+
+      <section class="bloco">
+        <div class="bloco-cab"><div><h2>Evolução do custo por hectare</h2><p id="g-custo-sub">Por safra, nas culturas de maior área.</p></div></div>
+        <div class="graf" id="g-custo"></div>
+      </section>
+
+      <section class="bloco">
+        <div class="bloco-cab"><div><h2>Evolução da produtividade</h2><p>Por safra, na unidade de cada cultura.</p></div></div>
+        <div class="graf" id="g-prod"></div>
+      </section>
+
+      <section class="bloco">
+        <div class="bloco-cab">
+          <div><h2>Produtividade por propriedade</h2><p>Dados consolidados por propriedade, cultura e safra, com os proprietários.</p></div>
+          <div class="acoes">
+            <label>Agrupar por
+              <select id="pr-por">
+                <option value="cultura">Cultura</option>
+                <option value="safra">Safra</option>
+                <option value="propriedade">Propriedade</option>
+                <option value="cliente">Cliente</option>
+                <option value="filial">Filial</option>
+              </select>
+            </label>
+            <label>Ordenar por
+              <select id="pr-ord">
+                <option value="area">Área produtiva</option>
+                <option value="prod">Produtividade</option>
+                <option value="custo">Custo por ha</option>
+                <option value="marg">Margem por ha</option>
+                <option value="qtd">Quantidade de registros</option>
+                <option value="nome">Nome do grupo</option>
+              </select>
+            </label>
+            <button class="btn" data-act="pvexp" data-t="prod">Abrir página</button>
+            <button class="btn" data-act="pvcol" data-t="prod">Recolher</button>
+          </div>
+        </div>
+        <div class="rolagem">
+          <table>
+            <thead><tr>
+              <th>Grupo / propriedade</th><th>Proprietários</th><th>Cultura</th><th>Safra</th>
+              <th class="num">Área produtiva</th><th class="num">Produtividade</th><th class="num">Cotação</th><th class="num">Custo por ha</th>
+              <th class="num">Receita est. por ha</th><th class="num">Margem est. por ha</th><th class="num">Prod. de equilíbrio</th>
+            </tr></thead>
+            <tbody id="t-prod"></tbody>
+          </table>
+        </div>
+        <div class="pag" id="pag-prod"></div>
+      </section>
+
+    </div>
   </div>
 
   <!-- ================= ABA PERFIL DE RISCO ================= -->
@@ -1013,7 +1115,8 @@ window.__DADOS__ = {
     const t = fold(r);
     let k = 'grafico';
     if(/area|talh/.test(t)) k = 'area';
-    else if(/protest|restri|vencid|pendenc|escrav|desmat|sobrepos|sem car|sem cidade|sem patrim|fora da/.test(t)) k = 'alerta';
+    else if(/protest|restri|vencid|pendenc|escrav|desmat|sobrepos|sem car|sem cidade|sem patrim|fora da|atipic/.test(t)) k = 'alerta';
+    else if(/tempo|ciclo|equilibrio|margem|receita/.test(t)) k = 'grafico';
     else if(/score|taxa|cobertura|probab|sobre|media por/.test(t)) k = 'grafico';
     else if(/propriedad|moratori/.test(t)) k = 'mapa';
     else if(/cliente/.test(t)) k = 'clientes';
@@ -1128,12 +1231,27 @@ window.__DADOS__ = {
       E.push({CLIENTE_ID:cid,ESG_CRIMINAL:esgv.at(i%2),ESG_TRABALHO_ESCRAVO:esgv.at(i%4),ESG_MORATORIA_CPF:esgv2.at(i%5),ESG_CAR:['COMPLIANT',null,'NOT_COMPLIANT'].at(i%3),
               ESG_DESMATAMENTO:esgv2.at(i%5),ESG_RESTRICAO:esgv2.at((i+1)%5),ESG_SOBREPOSICAO:esgv2.at((i+2)%5),ESG_MORATORIA:esgv2.at((i+3)%5),QTD_PENDENCIAS:i%4===2?2:0,QTD_VERIFICACOES:i%2?8:0});
     }
-    return {CLIENTES:C,CONTATOS:K,PROPRIEDADES:P,PROPRIETARIOS:O,RISCO:R,ESG:E,ESG_PROPRIEDADES:EP,BUREAU:B,PROPOSTAS:PR,APROVACOES:AP,AVALIACOES:AV,PROPOSTAS_COMPOSICAO:PC};
+    const PD = [];
+    const cultDemo = [ ['Soja',62,4000,130,120], ['Milho',100,3000,70,140], ['Trigo',50,2800,78,150], ['Café Arábica',29,14000,1370,330]];
+    const safrasDemo = ['20/21','21/22','22/23','23/24','24/25','25/26','24/26'];
+    for(let q = 1; q < pid; q++){
+      safrasDemo.forEach((sf, si) => {
+        cultDemo.forEach((cu, ci) => {
+          if((q + si + ci) % 3 === 0 || (si === 6 && q % 4)) return;
+          const area = 30 + (q * 13 + ci * 7) % 300, fator = 0.85 + ((q * 7 + si * 3 + ci) % 30) / 100;
+          let prod = cu.at(1) * fator * (1 + si * 0.02), custo = cu.at(2) * (0.9 + ((q + ci) % 20) / 100) * (1 + si * 0.06);
+          if(q % 37 === 0 && ci === 1) custo *= 10000;
+          if(q % 41 === 0 && ci === 0) prod *= 150;
+          PD.push({PROPRIEDADE_ID:q, CULTURA:cu.at(0), SAFRA:sf, AREA_PRODUTIVA:area, PRODUTIVIDADE:+prod.toFixed(2), COTACAO:+(cu.at(3) * (0.9 + si * 0.04)).toFixed(2), CUSTO_HA:+custo.toFixed(2)});
+        });
+      });
+    }
+    return {CLIENTES:C,CONTATOS:K,PROPRIEDADES:P,PROPRIETARIOS:O,RISCO:R,ESG:E,ESG_PROPRIEDADES:EP,BUREAU:B,PROPOSTAS:PR,APROVACOES:AP,AVALIACOES:AV,PROPOSTAS_COMPOSICAO:PC,PRODUTIVIDADE:PD};
   }
 
   /* ===================== modelo ===================== */
   let RAW = window.__DADOS__ || {};
-  const emDemo = ['CLIENTES','CONTATOS','PROPRIEDADES','PROPRIETARIOS','RISCO','ESG','ESG_PROPRIEDADES','BUREAU','PROPOSTAS','APROVACOES','AVALIACOES','PROPOSTAS_COMPOSICAO'].every(k => toArr(RAW[k]).length === 0);
+  const emDemo = ['CLIENTES','CONTATOS','PROPRIEDADES','PROPRIETARIOS','RISCO','ESG','ESG_PROPRIEDADES','BUREAU','PROPOSTAS','APROVACOES','AVALIACOES','PROPOSTAS_COMPOSICAO','PRODUTIVIDADE'].every(k => toArr(RAW[k]).length === 0);
   if(emDemo){
     RAW = demo();
     document.getElementById('aviso').innerHTML = '<div class="aviso" role="status">Nenhuma consulta retornou dados. O painel está exibindo dados fictícios de demonstração.</div>';
@@ -1243,6 +1361,36 @@ window.__DADOS__ = {
   });
   const ROTULOS = ORDEM_ROTULOS.filter(r => rotulosComp.has(r)).concat(Array.from(rotulosComp).filter(r => !ORDEM_ROTULOS.includes(r)).sort());
 
+  /* ----- produtividade (consolidado) e ciclo (talhões) ----- */
+  const PALETA = ['var(--verde-700)','var(--ouro-500)','var(--terra)','var(--verde-300)','var(--cinza)','var(--alerta)'];
+  const safraPadrao = sf => { const m = /^(\d{2})\/(\d{2})$/.exec(sf); return !!m && (Number(m[2]) - Number(m[1]) + 100) % 100 === 1; };
+  const quantil = (arr, q) => { if(!arr.length) return null; const pos = (arr.length - 1) * q, b = Math.floor(pos), r = pos - b; return arr[b + 1] !== undefined ? arr[b] + r * (arr[b + 1] - arr[b]) : arr[b]; };
+  const mediana = a => a.length ? quantil(a.slice().sort((x,y) => x - y), 0.5) : null;
+  const prodRows = [];
+  norm(RAW.PRODUTIVIDADE).forEach(r => {
+    const p = props.get(s(r.PROPRIEDADE_ID)); if(!p) return;
+    const o = {uid:'c' + prodRows.length, p, crop:s(r.CULTURA) || 'Não informada', safra:s(r.SAFRA) || 'Sem safra', area:n(r.AREA_PRODUTIVA),
+      prod:numOuNulo(r.PRODUTIVIDADE), cot:numOuNulo(r.COTACAO), custo:numOuNulo(r.CUSTO_HA)};
+    prodRows.push(o);
+  });
+  /* limites de valores atípicos por cultura: fora de Q1 - 3*IQR e Q3 + 3*IQR */
+  const limites = new Map(), amostras = new Map();
+  prodRows.forEach(o => { if(!amostras.has(o.crop)) amostras.set(o.crop, {p:[], c:[]}); const x = amostras.get(o.crop); if(o.prod > 0) x.p.push(o.prod); if(o.custo > 0) x.c.push(o.custo); });
+  const cerca = arr => { if(arr.length < 20) return [0, Infinity]; arr.sort((a,b) => a - b); const q1 = quantil(arr, .25), q3 = quantil(arr, .75), iqr = q3 - q1; return [Math.max(0, q1 - 3 * iqr), q3 + 3 * iqr]; };
+  amostras.forEach((x, k) => limites.set(k, {p:cerca(x.p), c:cerca(x.c)}));
+  prodRows.forEach(o => {
+    const L = limites.get(o.crop);
+    o.okP = o.prod > 0 && o.prod >= L.p.at(0) && o.prod <= L.p.at(1);
+    o.okC = o.custo > 0 && o.custo >= L.c.at(0) && o.custo <= L.c.at(1);
+    o.atip = (o.prod > 0 && !o.okP) || (o.custo > 0 && !o.okC);
+    o.rec = o.okP && o.cot > 0 ? o.prod * o.cot : null;
+    o.marg = o.rec !== null && o.okC ? o.rec - o.custo : null;
+    o.equil = o.okC && o.cot > 0 ? o.custo / o.cot : null;
+  });
+  const contaCult = new Map(); prodRows.forEach(o => contaCult.set(o.crop, (contaCult.get(o.crop) || 0) + 1));
+  const CULTURAS = Array.from(contaCult.entries()).sort((a,b) => (b.at(1) - a.at(1)) || a.at(0).localeCompare(b.at(0),'pt-BR')).map(e => e.at(0));
+  const SAFRAS = Array.from(new Set(prodRows.map(o => o.safra))).sort((a,b) => b.localeCompare(a));
+
   const ORDEM_FONTES = ['SPC','BOA_VISTA','QUOD'].filter(f => fontesExistentes.has(f)).concat(Array.from(fontesExistentes).filter(f => !FONTES[f]).sort());
 
   clientes.forEach(c => {
@@ -1257,12 +1405,12 @@ window.__DADOS__ = {
   /* ===================== estado e filtro ===================== */
   const novoPv = () => ({ab:new Set(), mais:new Map(), det:new Set(), pg:1});
   const GRUPOS_POR_PAGINA = 25;
-  const cache = {risco:{k:null, cfg:null}, esg:{k:null, cfg:null}, bureau:{k:null, cfg:null}, propostas:{k:null, cfg:null}, tk:{k:null, l:null}};
-  const paginaAtual = {risco:[], esg:[], bureau:[], propostas:[]};
+  const cache = {risco:{k:null, cfg:null}, esg:{k:null, cfg:null}, bureau:{k:null, cfg:null}, propostas:{k:null, cfg:null}, tk:{k:null, l:null}, prod:{k:null, cfg:null}, pr:{k:null}};
+  const paginaAtual = {risco:[], esg:[], bureau:[], propostas:[], prod:[]};
   const st = {aba:'clientes', filial:'', busca:'', comProp:false, comAnalise:false, foco:null, ord1:'areaProd',
               ab1:new Set(), mais1:new Map(), pg2:1, pg3:1, ab2:new Set(), ab3:new Set(), abP:new Set(),
-              pv:{risco:novoPv(), esg:novoPv(), bureau:novoPv(), propostas:novoPv()}, rkPor:'filial', rkOrd:'patr', esgPor:'filial', esgPend:false,
-              sub:'perfil', fonte:'', periodo:24, pSit:'', pTipo:'', pPer:0, pComp:'SOLICITADO', pPor:'sit', pOrd:'solic', gInd:'vDiv', gMet:'soma', buPor:'fonte', buOrd:'vDiv', buRestr:false};
+              pv:{risco:novoPv(), esg:novoPv(), bureau:novoPv(), propostas:novoPv(), prod:novoPv()}, rkPor:'filial', rkOrd:'patr', esgPor:'filial', esgPend:false,
+              sub:'perfil', subC:'cli', prSafra:'', prCult:'', prEst:'media', prMet:'prod', prPor:'cultura', prOrd:'area', fonte:'', periodo:24, pSit:'', pTipo:'', pPer:0, pComp:'SOLICITADO', pPor:'sit', pOrd:'solic', gInd:'vDiv', gMet:'soma', buPor:'fonte', buOrd:'vDiv', buRestr:false};
   let vis = null, chave = null;
 
   function calcular(){
@@ -1883,7 +2031,7 @@ window.__DADOS__ = {
   }
   function trocarSub(k){
     st.sub = k;
-    document.querySelectorAll('.subaba').forEach(b => b.setAttribute('aria-selected', String(b.getAttribute('data-k') === k)));
+    document.querySelectorAll('.subaba[data-act="sub"]').forEach(b => b.setAttribute('aria-selected', String(b.getAttribute('data-k') === k)));
     ['perfil','esg','bureau'].forEach(x => { document.getElementById('sb-' + x).hidden = x !== k; });
     rAbaRisco();
   }
@@ -2072,6 +2220,160 @@ window.__DADOS__ = {
     rPropTabela();
   }
 
+
+  /* ===================== seção propriedades (produtividade) ===================== */
+  function trocarSubC(k){
+    st.subC = k;
+    document.querySelectorAll('.subaba[data-act="subc"]').forEach(b => b.setAttribute('aria-selected', String(b.getAttribute('data-k') === k)));
+    document.getElementById('sb-cli').hidden = k !== 'cli';
+    document.getElementById('sb-prop').hidden = k !== 'prop';
+    render();
+  }
+
+  function prodVis(){
+    const ck = [chave, st.prSafra, st.prCult].join('|');
+    if(cache.pr.k === ck) return cache.pr;
+    const ids = new Set(), cliPorProp = new Map();
+    vis.lista.forEach(c => c.props.forEach(x => { ids.add(x.p.id); if(!cliPorProp.has(x.p.id)) cliPorProp.set(x.p.id, []); cliPorProp.get(x.p.id).push(c); }));
+    const okS = o => !st.prSafra || o.safra === st.prSafra, okC = o => !st.prCult || o.crop === st.prCult;
+    const base = prodRows.filter(o => ids.has(o.p.id));
+    cache.pr = {k:ck, ids, cliPorProp, base, okS, okC, rows: base.filter(o => okS(o) && okC(o)), rowsS: base.filter(okS)};
+    return cache.pr;
+  }
+
+  function agProd(rows){
+    const t = {n:rows.length, area:0, pw:0, pa:0, pv:[], cw:0, ca:0, cv:[], rw:0, ra:0, mw:0, ma:0, cotw:0, cota:0, atip:0, props:new Set(), crops:new Set()};
+    rows.forEach(o => {
+      t.props.add(o.p.id); t.crops.add(o.crop); t.area += o.area; if(o.atip) t.atip++;
+      const w = o.area > 0 ? o.area : 1;
+      if(o.okP){ t.pw += o.prod * w; t.pa += w; t.pv.push(o.prod); }
+      if(o.okC){ t.cw += o.custo * w; t.ca += w; t.cv.push(o.custo); }
+      if(o.rec !== null){ t.rw += o.rec * w; t.ra += w; }
+      if(o.marg !== null){ t.mw += o.marg * w; t.ma += w; }
+      if(o.cot > 0){ t.cotw += o.cot * w; t.cota += w; }
+    });
+    t.prodMedia = t.pa ? t.pw / t.pa : null; t.custoMedia = t.ca ? t.cw / t.ca : null; t.cot = t.cota ? t.cotw / t.cota : null;
+    if(st.prEst === 'mediana'){
+      t.prodX = mediana(t.pv); t.custoX = mediana(t.cv);
+      t.recX = t.prodX !== null && t.cot ? t.prodX * t.cot : null;
+      t.margX = t.recX !== null && t.custoX !== null ? t.recX - t.custoX : null;
+    } else {
+      t.prodX = t.prodMedia; t.custoX = t.custoMedia;
+      t.recX = t.ra ? t.rw / t.ra : null; t.margX = t.ma ? t.mw / t.ma : null;
+    }
+    t.equil = t.custoX !== null && t.cot ? t.custoX / t.cot : null;
+    return t;
+  }
+
+  const fRha = v => v === null || v === undefined ? '<span class="sub">—</span>' : 'R$ ' + fN(v, 0);
+  const fProd = v => v === null || v === undefined ? '<span class="sub">—</span>' : fN(v, 1);
+  const ultimaSafra = rows => { const l = Array.from(new Set(rows.map(o => o.safra))).filter(safraPadrao).sort(); return l.length ? l.at(-1) : (rows.length ? rows.at(0).safra : ''); };
+  const dominante = rows => { const m = new Map(); rows.forEach(o => m.set(o.crop, (m.get(o.crop) || 0) + (o.area || 0))); let k = '', v = -1; m.forEach((a, c) => { if(a > v){ v = a; k = c; } }); return k; };
+  const donosTxt = p => { const ds = donos.get(p.id) || []; if(!ds.length) return '<span class="sub">—</span>';
+    return '<span class="donos">' + ds.slice(0,2).map(d => `${esc(d.nome)} <span class="sub">${fPct(d.perc)}</span>`).join('<br>') + (ds.length > 2 ? `<br><span class="sub">+${ds.length - 2} proprietários</span>` : '') + '</span>'; };
+
+  function rProdKpis(d){
+    const foco = st.prCult || dominante(d.rows);
+    const a = agProd(d.rows.filter(o => o.crop === foco));
+    const refSafra = st.prSafra || ultimaSafra(d.rows);
+    const tArea = agProd(d.rows.filter(o => o.safra === refSafra));
+    const tot = agProd(d.rows);
+    const estTxt = st.prEst === 'mediana' ? 'mediana' : 'média ponderada pela área, sem atípicos';
+    document.getElementById('pr-foco').innerHTML = foco
+      ? `<span>Indicadores da cultura <b>${esc(foco)}</b>${st.prCult ? '' : ' (maior área nos filtros)'}</span><span>Safra: <b>${esc(st.prSafra || 'todas as safras')}</b></span><span>Estatística: <b>${estTxt}</b></span>`
+      : '<span>Nenhum dado de produtividade para os filtros aplicados.</span>';
+    const folga = a.prodX && a.equil ? pct(a.prodX - a.equil, a.prodX) : null;
+    document.getElementById('kpr').innerHTML = kpiHtml([
+      {v:a.prodX !== null ? fN(a.prodX, 1) : '—', r:'Produtividade média', d:`${esc(foco || '—')} | na unidade da cultura (ex.: sc/ha)`},
+      {v:a.custoX !== null ? 'R$ ' + fN(a.custoX, 0) : '—', r:'Custo médio por hectare', d:`${esc(foco || '—')} | ${fN(a.cv.length)} registros válidos`},
+      {v:a.recX !== null ? 'R$ ' + fN(a.recX, 0) : '—', r:'Receita estimada por hectare', d:'Produtividade × cotação média'},
+      {v:a.margX !== null ? 'R$ ' + fN(a.margX, 0) : '—', r:'Margem estimada por hectare', d: a.recX ? `${fPct(Math.max(0, pct(a.margX, a.recX)))} da receita estimada` : 'Sem cotação ou custo válido', c: a.margX !== null && a.margX < 0 ? 'alerta' : ''},
+      {v:a.equil !== null ? fN(a.equil, 1) : '—', r:'Produtividade de equilíbrio', d: folga !== null ? `Custo ÷ cotação | folga de ${fPct(Math.max(0, folga))} sobre a produtividade` : 'Custo ÷ cotação', c: folga !== null && folga < 15 ? 'ouro' : ''},
+      {v:fHa(tArea.area), r:'Área produtiva efetiva', d:`Safra ${esc(refSafra || '—')} | ${fN(tArea.props.size)} propriedades, todas as culturas filtradas`},
+      {v:fN(tot.atip), r:'Registros com valores atípicos', d:`${fPct(pct(tot.atip, tot.n))} dos registros, fora das médias`, c: tot.atip ? 'ouro' : ''}
+    ]);
+  }
+
+  function rProdCulturas(d){
+    const por = new Map();
+    d.rowsS.forEach(o => { if(!por.has(o.crop)) por.set(o.crop, []); por.get(o.crop).push(o); });
+    const refSafra = st.prSafra || ultimaSafra(d.rowsS);
+    const itens = Array.from(por.entries()).map(e => {
+      const t = agProd(e.at(1));
+      const areaRef = e.at(1).filter(o => o.safra === refSafra).reduce((a,o) => a + o.area, 0);
+      return {crop:e.at(0), t, areaRef};
+    }).sort((a,b) => b.areaRef - a.areaRef || b.t.area - a.t.area).slice(0, 12);
+    const m = st.prMet;
+    const val = {prod:x => x.t.prodX, custo:x => x.t.custoX, marg:x => x.t.margX, area:x => x.areaRef}[m];
+    const fmt = {prod:v => fN(v, 1), custo:v => 'R$ ' + fN(v, 0), marg:v => 'R$ ' + fN(v, 0), area:fHa}[m];
+    const l = itens.map(x => ({k:x.crop, v:val(x) || 0, extra: x.crop === st.prCult ? '| em foco' : ''})).filter(x => x.v > 0).sort((a,b) => b.v - a.v);
+    document.getElementById('pr-cult-sub').textContent = m === 'area' ? `Área produtiva na safra ${refSafra || '—'}, nas doze culturas de maior área.` : `Doze culturas de maior área, ${st.prSafra ? 'na safra ' + st.prSafra : 'considerando todas as safras'}. Produtividade na unidade de cada cultura.`;
+    document.getElementById('pr-culturas').innerHTML = barrasHtml(l, fmt, 0, m === 'custo' ? '' : (m === 'marg' || m === 'prod' ? 'v' : ''));
+  }
+
+  function rProdEvolucao(d){
+    const base = st.prCult ? d.base.filter(o => o.crop === st.prCult) : d.base;
+    const areaCrop = new Map(); base.forEach(o => areaCrop.set(o.crop, (areaCrop.get(o.crop) || 0) + o.area));
+    const crops = st.prCult ? [st.prCult] : Array.from(areaCrop.entries()).sort((a,b) => b.at(1) - a.at(1)).slice(0, 5).map(e => e.at(0));
+    const safras = Array.from(new Set(base.map(o => o.safra))).filter(safraPadrao).sort();
+    const grupos = new Map();
+    base.forEach(o => { if(!safraPadrao(o.safra) || !crops.includes(o.crop)) return; const k = o.crop + '|' + o.safra; if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(o); });
+    const series = campo => crops.map((cr, i) => {
+      const pts = new Map();
+      safras.forEach(sf => { const g = grupos.get(cr + '|' + sf); if(!g) return; const t = agProd(g); const v = t[campo]; if(v !== null && v > 0) pts.set(sf, {v, n:g.length}); });
+      return {nome:cr, cor:PALETA.at(i % PALETA.length), pts};
+    });
+    document.getElementById('g-custo-sub').textContent = st.prCult ? `Por safra, cultura ${st.prCult}.` : 'Por safra, nas cinco culturas de maior área.';
+    grafLinhas(document.getElementById('g-custo'), safras, series('custoX'), (v, completo) => completo ? 'R$ ' + fN(v, 0) : fRc(v));
+    grafLinhas(document.getElementById('g-prod'), safras, series('prodX'), v => fN(v, v > 0 && v < 10 ? 1 : 0));
+  }
+
+  function rProdTabela(){
+    const d = prodVis();
+    const ck = [d.k, st.prPor, st.prOrd, st.prEst].join('|');
+    if(ck === cache.prod.k && cache.prod.cfg){ rPivot(cache.prod.cfg); return; }
+    const por = st.prPor;
+    let itens;
+    if(por === 'cliente') itens = d.rows.flatMap(o => (d.cliPorProp.get(o.p.id) || []).map(c => ({id:o.uid + '_' + c.id, nome:o.p.nome, filial:c.filial, cli:c, o})));
+    else itens = d.rows.map(o => { const c = (d.cliPorProp.get(o.p.id) || []).at(0); return {id:o.uid, nome:o.p.nome, filial:c ? c.filial : '(Sem filial)', cli:c, o}; });
+    const chaveFn = {cultura:x => x.o.crop, safra:x => x.o.safra, propriedade:x => x.o.p.id, cliente:x => x.cli ? x.cli.id : '—', filial:x => x.filial}[por];
+    const grupos = agrupar(itens, chaveFn).map(g => Object.assign(g, {t:agProd(g.clientes.map(x => x.o))}));
+    const rot = g => por === 'propriedade' ? g.clientes.at(0).o.p.nome : (por === 'cliente' ? (g.clientes.at(0).cli ? g.clientes.at(0).cli.nome : '—') : g.k);
+    const o = st.prOrd;
+    grupos.sort((a,b) => {
+      if(o === 'nome') return por === 'safra' ? b.k.localeCompare(a.k) : rot(a).localeCompare(rot(b),'pt-BR');
+      if(o === 'qtd') return b.clientes.length - a.clientes.length;
+      const v = {area:g => g.t.area, prod:g => g.t.prodX || 0, custo:g => g.t.custoX || 0, marg:g => g.t.margX || -1e15}[o];
+      return v(b) - v(a);
+    });
+    grupos.forEach(g => g.clientes.sort((a,b) => (b.o.area - a.o.area) || b.o.safra.localeCompare(a.o.safra)));
+    const umaCult = g => g.t.crops.size === 1;
+    cache.prod.k = ck; st.pv.prod.pg = 1;
+    rPivot(cache.prod.cfg = {
+      id:'prod', tbody:'t-prod', cols:11, grupos, unid:['registro','registros'], vazio:'Nenhum dado de produtividade para os filtros aplicados.',
+      rotuloGrupo: rot,
+      extraGrupo: g => por === 'cliente' && g.clientes.at(0).cli ? `<br><span class="sub">${esc(g.clientes.at(0).cli.filial)}</span> <button class="lnk sub" data-act="foco" data-id="${esc(g.clientes.at(0).cli.id)}">filtrar painel</button>`
+                     : (por === 'propriedade' ? `<br><span class="sub">${esc([g.clientes.at(0).o.p.cidade, g.clientes.at(0).o.p.uf].filter(Boolean).join(' / ') || 'Local não informado')}</span>` : ''),
+      cab: g => { const t = g.t, u = umaCult(g);
+        return `<td>${por === 'propriedade' ? donosTxt(g.clientes.at(0).o.p) : ''}</td><td>${u ? esc(Array.from(t.crops).at(0)) : `<span class="sub">${fN(t.crops.size)} culturas</span>`}</td><td></td>` +
+               `<td class="num">${fHa(t.area)}</td><td class="num">${u ? fProd(t.prodX) : '<span class="sub">—</span>'}</td><td class="num">${u && t.cot ? 'R$ ' + fN(t.cot, 2) : '<span class="sub">—</span>'}</td>` +
+               `<td class="num">${fRha(t.custoX)}</td><td class="num">${u ? fRha(t.recX) : '<span class="sub">—</span>'}</td><td class="num">${u ? fRha(t.margX) : '<span class="sub">—</span>'}</td>` +
+               `<td class="num">${u ? fProd(t.equil) : '<span class="sub">—</span>'}</td>`; },
+      primeira: x => `<span class="cli"><span><b style="font-weight:500">${esc(x.o.p.nome)}</b>${x.o.atip ? ' ' + tag('atípico','ouro') : ''}<br><span class="sub">${esc([x.o.p.cidade, x.o.p.uf].filter(Boolean).join(' / ') || 'Local não informado')}</span></span></span>`,
+      linha: x => { const r = x.o;
+        const prod = r.prod === null ? '<span class="sub">—</span>' : (r.okP ? fN(r.prod, 1) : `<span class="valor-atip" title="Valor atípico, fora das médias">${fN(r.prod, 1)}</span>`);
+        const custo = r.custo === null ? '<span class="sub">—</span>' : (r.okC ? 'R$ ' + fN(r.custo, 0) : `<span class="valor-atip" title="Valor atípico, fora das médias">R$ ${fN(r.custo, 0)}</span>`);
+        return `<td>${donosTxt(r.p)}</td><td>${esc(r.crop)}</td><td>${esc(r.safra)}</td><td class="num">${fHa(r.area)}</td><td class="num">${prod}</td>` +
+               `<td class="num">${r.cot ? 'R$ ' + fN(r.cot, 2) : '<span class="sub">—</span>'}</td><td class="num">${custo}</td><td class="num">${fRha(r.rec)}</td>` +
+               `<td class="num">${r.marg === null ? '<span class="sub">—</span>' : (r.marg < 0 ? tag('R$ ' + fN(r.marg, 0), 'alerta') : 'R$ ' + fN(r.marg, 0))}</td><td class="num">${fProd(r.equil)}</td>`; }
+    });
+  }
+
+  function rAbaProd(){
+    const d = prodVis();
+    rProdKpis(d); rProdCulturas(d); rProdEvolucao(d); rProdTabela();
+  }
+
   /* ===================== render geral ===================== */
   function rFoco(){
     const el = document.getElementById('foco'), c = st.foco ? porId.get(st.foco) : null;
@@ -2080,7 +2382,7 @@ window.__DADOS__ = {
   }
   function render(){
     calcular(); rFoco();
-    if(st.aba === 'clientes'){ rFaixa(); rKpis1(); rTop(); rT1(); rT2(); rT3(); }
+    if(st.aba === 'clientes'){ if(st.subC === 'prop') rAbaProd(); else { rFaixa(); rKpis1(); rTop(); rT1(); rT2(); rT3(); } }
     else if(st.aba === 'risco') rAbaRisco();
     else rAbaPropostas();
   }
@@ -2133,14 +2435,27 @@ window.__DADOS__ = {
   document.getElementById('p-por').addEventListener('change', e => { st.pPor = e.target.value; st.pv.propostas = novoPv(); rPropTabela(); });
   document.getElementById('p-ord').addEventListener('change', e => { st.pOrd = e.target.value; rPropTabela(); });
 
+  const prSafra = document.getElementById('pr-safra'), prCult = document.getElementById('pr-cult');
+  prSafra.insertAdjacentHTML('beforeend', SAFRAS.map(sf => `<option value="${esc(sf)}">${esc(sf)}${safraPadrao(sf) ? '' : ' (plurianual)'}</option>`).join(''));
+  prCult.insertAdjacentHTML('beforeend', CULTURAS.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''));
+  const novoFiltroProd = () => { st.pv.prod = novoPv(); rAbaProd(); };
+  prSafra.addEventListener('change', e => { st.prSafra = e.target.value; novoFiltroProd(); });
+  prCult.addEventListener('change', e => { st.prCult = e.target.value; novoFiltroProd(); });
+  document.getElementById('pr-por').addEventListener('change', e => { st.prPor = e.target.value; st.pv.prod = novoPv(); rProdTabela(); });
+  document.getElementById('pr-ord').addEventListener('change', e => { st.prOrd = e.target.value; rProdTabela(); });
+  const marcarSegm = (id, k) => document.querySelectorAll('#' + id + ' button').forEach(b => b.setAttribute('aria-pressed', String(b.getAttribute('data-k') === k)));
+
   const alternar = (set, k) => { if(set.has(k)) set.delete(k); else set.add(k); };
-  const rTabela = t => ({risco:rRisco, esg:rEsg, bureau:rBuTabela, propostas:rPropTabela})[t]();
+  const rTabela = t => ({risco:rRisco, esg:rEsg, bureau:rBuTabela, propostas:rPropTabela, prod:rProdTabela})[t]();
   document.addEventListener('click', e => {
     const el = e.target.closest('[data-act]'); if(!el || el.disabled) return;
     const a = el.getAttribute('data-act'), k = el.getAttribute('data-k'), id = el.getAttribute('data-id'), t = el.getAttribute('data-t'), p = Number(el.getAttribute('data-p'));
     switch(a){
       case 'aba': trocarAba(k); break;
       case 'sub': trocarSub(k); break;
+      case 'subc': trocarSubC(k); break;
+      case 'prest': st.prEst = k; marcarSegm('pr-est', k); st.pv.prod = novoPv(); rAbaProd(); break;
+      case 'prmet': st.prMet = k; marcarSegm('pr-met', k); rProdCulturas(prodVis()); break;
       case 'pcomp': st.pComp = k; rComposicao(ticketsVis()); break;
       case 'fonte': st.fonte = k; st.pv.bureau = novoPv(); rBureau(); break;
       case 'g1': alternar(st.ab1, k); rT1(); break;
