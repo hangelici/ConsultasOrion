@@ -377,23 +377,11 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 <body>
 
 <!-- =====================================================================
-     DADOS: cada consulta fica em um bloco JSON próprio, com o mesmo nome da
-     consulta. O navegador não interpreta esses blocos ao abrir a página;
-     cada um é lido só quando a aba que o usa é aberta (lazy parse).
+     DADOS: o Orion injeta automaticamente cada consulta do relatório como
+     variável global (ex.: var CLIENTES = [...]). O painel lê essas variáveis
+     diretamente; por isso o template não usa mais a injeção do Thymeleaf,
+     o que evitava carregar os mesmos dados duas vezes.
      ===================================================================== -->
-<script type="application/json" id="d-CLIENTES" th:inline="javascript">/*[[${CLIENTES}]]*/ []</script>
-<script type="application/json" id="d-CONTATOS" th:inline="javascript">/*[[${CONTATOS}]]*/ []</script>
-<script type="application/json" id="d-PROPRIEDADES" th:inline="javascript">/*[[${PROPRIEDADES}]]*/ []</script>
-<script type="application/json" id="d-PROPRIETARIOS" th:inline="javascript">/*[[${PROPRIETARIOS}]]*/ []</script>
-<script type="application/json" id="d-RISCO" th:inline="javascript">/*[[${RISCO}]]*/ []</script>
-<script type="application/json" id="d-ESG" th:inline="javascript">/*[[${ESG}]]*/ []</script>
-<script type="application/json" id="d-ESG_PROPRIEDADES" th:inline="javascript">/*[[${ESG_PROPRIEDADES}]]*/ []</script>
-<script type="application/json" id="d-BUREAU" th:inline="javascript">/*[[${BUREAU}]]*/ []</script>
-<script type="application/json" id="d-PROPOSTAS" th:inline="javascript">/*[[${PROPOSTAS}]]*/ []</script>
-<script type="application/json" id="d-APROVACOES" th:inline="javascript">/*[[${APROVACOES}]]*/ []</script>
-<script type="application/json" id="d-AVALIACOES" th:inline="javascript">/*[[${AVALIACOES}]]*/ []</script>
-<script type="application/json" id="d-PROPOSTAS_COMPOSICAO" th:inline="javascript">/*[[${PROPOSTAS_COMPOSICAO}]]*/ []</script>
-<script type="application/json" id="d-PRODUTIVIDADE" th:inline="javascript">/*[[${PRODUTIVIDADE}]]*/ []</script>
 
 <a href="#principal" class="pular" style="position:absolute;left:-999px">Pular para o conteúdo</a>
 <div class="app">
@@ -1023,7 +1011,9 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 </script>
 
 <script th:inline="none">
-(function(){
+/* O Orion acrescenta o script com os dados (var CLIENTES = [...]) no fim da página,
+   depois deste script. Por isso o painel só inicia quando a página terminou de ser lida. */
+function iniciarPainel(){
   'use strict';
 
   /* ===================== utilitários ===================== */
@@ -1279,8 +1269,23 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
   /* ===================== modelo ===================== */
   /* Lê um bloco de dados só quando ele é necessário e libera o texto depois. */
   let demoDados = null;
+  function registrar(nome, res, mb, ms, origem){
+    const info = window.__PAINEL_INFO__ = window.__PAINEL_INFO__ || {blocos:{}};
+    info.blocos[nome] = {linhas:Array.isArray(res) ? res.length : 0, mb, leitura_ms:ms, origem};
+  }
   function dado(nome){
     if(demoDados) return demoDados[nome] || [];
+    /* 1) variável global criada pelo Orion (var NOME = [...]) */
+    let glob;
+    try{ glob = window[nome]; }catch(e){ glob = undefined; }
+    if(glob !== undefined && glob !== null && (Array.isArray(glob) || typeof glob === 'string')){
+      const t0 = performance.now();
+      let res = glob;
+      if(typeof glob === 'string'){ try{ res = JSON.parse(glob); }catch(e){ res = []; } }
+      try{ window[nome] = null; }catch(e){ /* libera a referência global depois da leitura */ }
+      registrar(nome, res, null, Math.round(performance.now() - t0), 'variável do Orion');
+      return res;
+    }
     const g = window.__DADOS__;
     if(g && g[nome] !== undefined) return g[nome];
     const el = document.getElementById('d-' + nome);
@@ -1296,8 +1301,7 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
       }
     }
     /* diagnóstico de desempenho: consulte window.__PAINEL_INFO__ no Console */
-    const info = window.__PAINEL_INFO__ = window.__PAINEL_INFO__ || {blocos:{}};
-    info.blocos[nome] = {linhas:Array.isArray(res) ? res.length : 0, mb:+(txt.length / 1048576).toFixed(1), leitura_ms:Math.round(performance.now() - t0)};
+    registrar(nome, res, +(txt.length / 1048576).toFixed(1), Math.round(performance.now() - t0), 'bloco do template');
     return res;
   }
 
@@ -1305,7 +1309,13 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
   const emDemo = toArr(cliBruto).length === 0;
   if(emDemo){
     demoDados = demo();
-    document.getElementById('aviso').innerHTML = '<div class="aviso" role="status">Nenhuma consulta retornou dados. O painel está exibindo dados fictícios de demonstração.</div>';
+    const local = location.protocol === 'file:';
+    const semVariavel = typeof window.CLIENTES === 'undefined';
+    document.getElementById('aviso').innerHTML = local
+      ? '<div class="aviso" role="status">Arquivo aberto fora do Orion: o painel está exibindo dados fictícios de demonstração.</div>'
+      : `<div class="aviso" role="alert" style="background:var(--alerta-bg);color:var(--alerta);box-shadow:inset 0 0 0 1.1px var(--alerta)"><b>O painel não recebeu os dados do Orion.</b> ${semVariavel ? 'A consulta CLIENTES não foi encontrada na página.' : 'A consulta CLIENTES veio vazia.'} Os números abaixo são fictícios, apenas de demonstração. Verifique se as consultas estão vinculadas ao relatório.</div>`;
+    const info = window.__PAINEL_INFO__ = window.__PAINEL_INFO__ || {blocos:{}};
+    info.alerta = semVariavel ? 'variável CLIENTES não encontrada' : 'consulta CLIENTES vazia';
   }
 
   const clientes = norm(emDemo ? demoDados.CLIENTES : cliBruto, 'CLIENTES').map(r => ({
@@ -2601,7 +2611,9 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
   });
 
   render();
-})();
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciarPainel, {once:true});
+else iniciarPainel();
 </script>
 </body>
 </html>
