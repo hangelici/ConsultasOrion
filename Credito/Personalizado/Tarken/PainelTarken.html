@@ -909,6 +909,9 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 </div>
 
 <script th:inline="none">
+/* Marcadores de desempenho (consulte window.__PAINEL_INFO__.tempos no Console) */
+window.__PAINEL_INFO__ = window.__PAINEL_INFO__ || {blocos:{}};
+window.__PAINEL_INFO__.marcas = {scriptsDoPainel: performance.now()};
 /* Animações e interações da moldura (não altera dados nem cálculos). */
 (function(){
   'use strict';
@@ -1015,6 +1018,8 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
    depois deste script. Por isso o painel só inicia quando a página terminou de ser lida. */
 function iniciarPainel(){
   'use strict';
+  const MARCAS = (window.__PAINEL_INFO__ = window.__PAINEL_INFO__ || {blocos:{}}).marcas = (window.__PAINEL_INFO__.marcas || {});
+  MARCAS.inicioDoPainel = performance.now();
 
   /* ===================== utilitários ===================== */
   const POSSE = {OWNED:'Própria',LEASED:'Arrendada',PARTNERSHIP:'Parceria',CONDOMINIUM:'Condomínio',COUPLE_COMMOM_PROPERTY:'Comunhão de bens',OTHER:'Outra'};
@@ -1022,6 +1027,11 @@ function iniciarPainel(){
   const AUT_OK = ['Ativa'], AUT_RUIM = ['Recusado','Revogada','Falha ao confirmar ID','ID não confirmada'];
   const ESG_LBL = {CONFORMING:'Conforme',OK:'Conforme',COMPLIANT:'Conforme',NON_CONFORMING:'Não conforme',NONCONFORMING:'Não conforme',NOT_COMPLIANT:'Não conforme',
                    WARNING:'Alerta',UNDEFINED:'Indefinido',NEVER_ANALYZED:'Nunca analisado',UPDATING:'Em atualização',NOT_APPLICABLE:'Não se aplica'};
+  /* Códigos curtos das consultas ESG e ESG_PROPRIEDADES: um código para cada valor da origem.
+     Na leitura, o painel converte o código de volta para o valor original. */
+  const ESG_COD = {CF:'CONFORMING', NCF:'NON_CONFORMING', NC:'NONCONFORMING', CP:'COMPLIANT', NCP:'NOT_COMPLIANT', OK:'OK',
+                   WR:'WARNING', UD:'UNDEFINED', NA:'NEVER_ANALYZED', UP:'UPDATING', NAP:'NOT_APPLICABLE'};
+  const esgOrig = v => { const t = s(v); return ESG_COD[t] || t; };
   const ESG_CAMPOS = [
     {k:'criminal', col:'ESG_CRIMINAL', nome:'Antecedentes criminais'},
     {k:'escravo',  col:'ESG_TRABALHO_ESCRAVO', nome:'Trabalho análogo à escravidão'},
@@ -1182,7 +1192,7 @@ function iniciarPainel(){
   const recTom = l => l === 'Regular' ? 'ok' : (l === 'Não consultado' ? '' : 'alerta');
   const esgLbl = v => v ? (ESG_LBL[v] || v) : 'Não consultado';
   const esgTom = l => l === 'Conforme' ? 'ok' : (l === 'Não conforme' ? 'alerta' : (l === 'Alerta' ? 'ouro' : ''));
-  const esgTag = v => { const l = esgLbl(v); return tag(l, esgTom(l)); };
+  const esgTag = v => { const l = esgLbl(v); return v ? `<span title="Valor na origem: ${esc(v)}">${tag(l, esgTom(l))}</span>` : tag(l, esgTom(l)); };
 
   /* ===================== dados de demonstração ===================== */
   function demo(){
@@ -1375,6 +1385,7 @@ function iniciarPainel(){
     c.patr = c.r ? c.r.patr : 0; c.vProt = c.r ? c.r.vProt : 0;
   });
   clientes.sort((a,b) => (b.areaProd - a.areaProd) || a.nome.localeCompare(b.nome,'pt-BR'));
+  MARCAS.dadosMontados = performance.now();
 
   /* ---------- carga sob demanda: cada conjunto é lido na primeira vez que uma aba precisa dele ---------- */
   const carregado = {esg:false, bureau:false, propostas:false, prod:false};
@@ -1387,10 +1398,10 @@ function iniciarPainel(){
     norm(dado('ESG'), 'ESG').forEach(r => {
       const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
       const x = {pend:n(r.QTD_PENDENCIAS), verif:n(r.QTD_VERIFICACOES)};
-      ESG_CAMPOS.forEach(f => { x[f.k] = s(r[f.col]); });
+      ESG_CAMPOS.forEach(f => { x[f.k] = esgOrig(r[f.col]); });
       c.e = x;
     });
-    norm(dado('ESG_PROPRIEDADES'), 'ESG_PROPRIEDADES').forEach(r => { const c = porId.get(s(r.CLIENTE_ID)); if(c) c.esgProps.push({nome:s(r.PROPRIEDADE), status:s(r.STATUS)}); });
+    norm(dado('ESG_PROPRIEDADES'), 'ESG_PROPRIEDADES').forEach(r => { const c = porId.get(s(r.CLIENTE_ID)); if(c) c.esgProps.push({nome:s(r.PROPRIEDADE), status:esgOrig(r.STATUS)}); });
     clientes.forEach(c => { c.esgNC = c.esgProps.filter(p => esgLbl(p.status) === 'Não conforme').length; });
   }
 
@@ -2220,6 +2231,7 @@ function iniciarPainel(){
 
   function fDetalhe(txt){
     if(!txt) return '';
+    if(/ \[…\]$/.test(txt)) return `<pre class="detalhe">${esc(txt)}</pre><span class="sub">Texto cortado em 600 caracteres. O texto completo está no Tarken.</span>`;
     let o = null;
     try{ o = JSON.parse(txt); }catch(e){ o = null; }
     if(o && typeof o === 'object' && !Array.isArray(o)){
@@ -2610,7 +2622,21 @@ function iniciarPainel(){
     }
   });
 
+  MARCAS.antesDaPrimeiraTela = performance.now();
   render();
+  MARCAS.primeiraTela = performance.now();
+  (window.requestAnimationFrame || setTimeout)(() => {
+    MARCAS.telaPintada = performance.now();
+    const n = performance.getEntriesByType('navigation')[0] || {}, r = v => Math.round(v);
+    window.__PAINEL_INFO__.tempos = {
+      '1. Página recebida (fim do download)': r(n.responseEnd || 0) + ' ms',
+      '2. Navegador lendo a página e o script do Orion': r(MARCAS.inicioDoPainel - (n.responseEnd || 0)) + ' ms',
+      '3. Painel montando os dados da 1ª tela': r(MARCAS.dadosMontados - MARCAS.inicioDoPainel) + ' ms',
+      '4. Painel desenhando a 1ª tela': r(MARCAS.primeiraTela - MARCAS.antesDaPrimeiraTela) + ' ms',
+      '5. Navegador pintando a tela': r(MARCAS.telaPintada - MARCAS.primeiraTela) + ' ms',
+      'TOTAL até a tela aparecer': r(MARCAS.telaPintada) + ' ms'
+    };
+  });
 }
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciarPainel, {once:true});
 else iniciarPainel();
