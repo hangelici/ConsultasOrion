@@ -347,6 +347,9 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 .donos{white-space:nowrap;display:inline-block;line-height:1.5}
 .valor-atip{color:var(--texto-4);text-decoration:line-through}
 
+.carga-aviso{position:sticky;top:12px;z-index:20;width:fit-content;margin:0 auto 14px;padding:8px 16px;border-radius:999px;background:var(--verde-700);color:#fff;font-weight:500;box-shadow:0 6px 18px rgba(0,0,0,.15);animation:subir .25s}
+@media (prefers-color-scheme: dark){.carga-aviso{color:#0F1311}}
+
 /* paginação */
 .pag{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:14px 23px 20px;font-size:13.2px;color:var(--texto-3)}
 .pag:empty{padding:0}
@@ -374,28 +377,23 @@ tr.st-neutro>td:first-child{box-shadow:inset 3px 0 0 var(--cinza)}
 <body>
 
 <!-- =====================================================================
-     DADOS: cada consulta é injetada pelo nome. Se a sua plataforma entrega
-     os dados de outra forma, ajuste somente este bloco.
+     DADOS: cada consulta fica em um bloco JSON próprio, com o mesmo nome da
+     consulta. O navegador não interpreta esses blocos ao abrir a página;
+     cada um é lido só quando a aba que o usa é aberta (lazy parse).
      ===================================================================== -->
-<script th:inline="javascript">
-/*<![CDATA[*/
-window.__DADOS__ = {
-  CLIENTES:         /*[[${CLIENTES}]]*/ [],
-  CONTATOS:         /*[[${CONTATOS}]]*/ [],
-  PROPRIEDADES:     /*[[${PROPRIEDADES}]]*/ [],
-  PROPRIETARIOS:    /*[[${PROPRIETARIOS}]]*/ [],
-  RISCO:            /*[[${RISCO}]]*/ [],
-  ESG:              /*[[${ESG}]]*/ [],
-  ESG_PROPRIEDADES: /*[[${ESG_PROPRIEDADES}]]*/ [],
-  BUREAU:           /*[[${BUREAU}]]*/ [],
-  PROPOSTAS:        /*[[${PROPOSTAS}]]*/ [],
-  APROVACOES:       /*[[${APROVACOES}]]*/ [],
-  AVALIACOES:       /*[[${AVALIACOES}]]*/ [],
-  PROPOSTAS_COMPOSICAO: /*[[${PROPOSTAS_COMPOSICAO}]]*/ [],
-  PRODUTIVIDADE:    /*[[${PRODUTIVIDADE}]]*/ []
-};
-/*]]>*/
-</script>
+<script type="application/json" id="d-CLIENTES" th:inline="javascript">/*[[${CLIENTES}]]*/ []</script>
+<script type="application/json" id="d-CONTATOS" th:inline="javascript">/*[[${CONTATOS}]]*/ []</script>
+<script type="application/json" id="d-PROPRIEDADES" th:inline="javascript">/*[[${PROPRIEDADES}]]*/ []</script>
+<script type="application/json" id="d-PROPRIETARIOS" th:inline="javascript">/*[[${PROPRIETARIOS}]]*/ []</script>
+<script type="application/json" id="d-RISCO" th:inline="javascript">/*[[${RISCO}]]*/ []</script>
+<script type="application/json" id="d-ESG" th:inline="javascript">/*[[${ESG}]]*/ []</script>
+<script type="application/json" id="d-ESG_PROPRIEDADES" th:inline="javascript">/*[[${ESG_PROPRIEDADES}]]*/ []</script>
+<script type="application/json" id="d-BUREAU" th:inline="javascript">/*[[${BUREAU}]]*/ []</script>
+<script type="application/json" id="d-PROPOSTAS" th:inline="javascript">/*[[${PROPOSTAS}]]*/ []</script>
+<script type="application/json" id="d-APROVACOES" th:inline="javascript">/*[[${APROVACOES}]]*/ []</script>
+<script type="application/json" id="d-AVALIACOES" th:inline="javascript">/*[[${AVALIACOES}]]*/ []</script>
+<script type="application/json" id="d-PROPOSTAS_COMPOSICAO" th:inline="javascript">/*[[${PROPOSTAS_COMPOSICAO}]]*/ []</script>
+<script type="application/json" id="d-PRODUTIVIDADE" th:inline="javascript">/*[[${PRODUTIVIDADE}]]*/ []</script>
 
 <a href="#principal" class="pular" style="position:absolute;left:-999px">Pular para o conteúdo</a>
 <div class="app">
@@ -439,6 +437,7 @@ window.__DADOS__ = {
         </div>
       </div>
       <div id="aviso"></div>
+      <div class="carga-aviso" id="carga-aviso" role="status" hidden>Carregando os dados desta seção…</div>
       <div class="foco" id="foco" role="status"></div>
 
   <!-- ================= ABA CLIENTES E PROPRIEDADES ================= -->
@@ -1077,7 +1076,31 @@ window.__DADOS__ = {
   const POR_PAGINA = 20, LOTE = 50;
 
   const toArr = v => { if(typeof v === 'string'){ try{ v = JSON.parse(v); }catch(e){ v = []; } } return Array.isArray(v) ? v : []; };
-  const norm = v => toArr(v).map(o => { const r = {}; Object.keys(o || {}).forEach(k => { r[k.toUpperCase()] = o[k]; }); return r; });
+  /* Nomes curtos usados nas consultas -> nomes usados no painel */
+  const ALIAS = {
+    CLIENTES:{I:'CLIENTE_ID', F:'FILIAL', N:'NOME', D:'DOCUMENTO', T:'TIPO', E:'EMAIL', FO:'TELEFONE', R:'RESPONSAVEL'},
+    CONTATOS:{C:'CLIENTE_ID', I:'CONTATO_ID', N:'NOME', D:'DOCUMENTO'},
+    PROPRIEDADES:{C:'CLIENTE_ID', P:'PROPRIEDADE_ID', N:'NOME', CI:'CIDADE', U:'UF', TP:'TIPO_POSSE', AT:'AREA_TOTAL', AP:'AREA_PRODUTIVA', PC:'PERC_CLIENTE',
+                  QT:'QTD_TALHOES', QC:'QTD_CAR', QI:'QTD_INCRA', QB:'QTD_CIB', CAR:'CAR', INC:'INCRA', CIB:'CIB'},
+    PROPRIETARIOS:{P:'PROPRIEDADE_ID', I:'CONTATO_ID', N:'NOME', D:'DOCUMENTO', PC:'PERCENTUAL'},
+    RISCO:{C:'CLIENTE_ID', UA:'ULTIMA_ANALISE', SA:'STATUS_AUTORIZACAO', SR:'STATUS_RECEITA', DC:'DIVIDA_CPR', DS:'DIVIDA_SISBACEN', PU:'PATR_URBANO', PR:'PATR_RURAL',
+           PE:'PATR_EQUIPAMENTOS', PO:'PATR_OUTROS', PF:'PATR_FINANCEIRO', PB:'PATR_REBANHO', QP:'QTD_PROTESTOS', VP:'VALOR_PROTESTOS'},
+    ESG:{C:'CLIENTE_ID', E1:'ESG_CRIMINAL', E2:'ESG_TRABALHO_ESCRAVO', E3:'ESG_MORATORIA_CPF', E4:'ESG_CAR', E5:'ESG_DESMATAMENTO', E6:'ESG_RESTRICAO', E7:'ESG_SOBREPOSICAO',
+         E8:'ESG_MORATORIA', QP:'QTD_PENDENCIAS', QV:'QTD_VERIFICACOES'},
+    ESG_PROPRIEDADES:{C:'CLIENTE_ID', N:'PROPRIEDADE', S:'STATUS'},
+    BUREAU:{C:'CLIENTE_ID', F:'FONTE', DT:'DATA_ANALISE', SC:'SCORE', PP:'PROB_PAGAMENTO', QH:'QTD_CHEQUES', VR:'VALOR_REFIN', VF:'VALOR_PEFIN', VV:'VALOR_DIVIDAS_VENCIDAS',
+            VP:'VALOR_PROTESTOS', QP:'QTD_PROTESTOS', VD:'VALOR_DIVIDAS', QD:'QTD_DIVIDAS', QC:'QTD_CONSULTAS'},
+    PROPOSTAS:{T:'TICKET_ID', C:'CLIENTE_ID', ID:'IDENTIFICADOR', CR:'CRIADA_EM', AT:'ATUALIZADA_EM', VA:'VALIDADE', VS:'VALOR_SOLICITADO', TP:'TIPO_PROPOSTA', TC:'TIPO_CLIENTE',
+               LJ:'LOJA', SF:'SAFRA', WF:'WORKFLOW', RS:'RESPONSAVEL', CD:'CRIADOR', FS:'FASE', FT:'FASE_TIPO', UA:'ULTIMA_APROVACAO_ID'},
+    APROVACOES:{A:'APROVACAO_ID', T:'TICKET_ID', CR:'CRIADA_EM', VA:'VALIDADE', VL:'VALOR_APROVADO', LC:'LIMITE_CLEAN', FS:'FASE_APROVACAO', RS:'RESPONSAVEL', DT:'DETALHES'},
+    AVALIACOES:{T:'TICKET_ID', DT:'DATA', SC:'SCORE', NT:'NOTA', LS:'LIMITE_SUGERIDO'},
+    PROPOSTAS_COMPOSICAO:{T:'TICKET_ID', TP:'TIPO', R:'ROTULO', V:'VALOR', VF:'VALOR_FINANCEIRO'},
+    PRODUTIVIDADE:{P:'PROPRIEDADE_ID', C:'CULTURA', S:'SAFRA', A:'AREA_PRODUTIVA', PR:'PRODUTIVIDADE', CT:'COTACAO', CU:'CUSTO_HA'}
+  };
+  const norm = (v, nome) => {
+    const m = ALIAS[nome] || {};
+    return toArr(v).map(o => { const r = {}; for(const k in o){ const K = k.toUpperCase(); r[m[K] || K] = o[k]; } return r; });
+  };
   const n = v => { if(v === null || v === undefined || v === '') return 0; const x = Number(v); return isFinite(x) ? x : 0; };
   const s = v => v === null || v === undefined ? '' : String(v).trim();
   const esc = v => s(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -1254,25 +1277,49 @@ window.__DADOS__ = {
   }
 
   /* ===================== modelo ===================== */
-  let RAW = window.__DADOS__ || {};
-  const emDemo = ['CLIENTES','CONTATOS','PROPRIEDADES','PROPRIETARIOS','RISCO','ESG','ESG_PROPRIEDADES','BUREAU','PROPOSTAS','APROVACOES','AVALIACOES','PROPOSTAS_COMPOSICAO','PRODUTIVIDADE'].every(k => toArr(RAW[k]).length === 0);
+  /* Lê um bloco de dados só quando ele é necessário e libera o texto depois. */
+  let demoDados = null;
+  function dado(nome){
+    if(demoDados) return demoDados[nome] || [];
+    const g = window.__DADOS__;
+    if(g && g[nome] !== undefined) return g[nome];
+    const el = document.getElementById('d-' + nome);
+    if(!el) return [];
+    const t0 = performance.now(), txt = el.textContent.trim();
+    el.remove();
+    let res = [];
+    if(txt && txt !== 'null'){
+      try{ res = JSON.parse(txt); }
+      catch(e){
+        try{ res = Function('"use strict";return (' + txt + ');')(); }
+        catch(e2){ console.error('Não foi possível ler os dados de ' + nome, e2); res = []; }
+      }
+    }
+    /* diagnóstico de desempenho: consulte window.__PAINEL_INFO__ no Console */
+    const info = window.__PAINEL_INFO__ = window.__PAINEL_INFO__ || {blocos:{}};
+    info.blocos[nome] = {linhas:Array.isArray(res) ? res.length : 0, mb:+(txt.length / 1048576).toFixed(1), leitura_ms:Math.round(performance.now() - t0)};
+    return res;
+  }
+
+  const cliBruto = dado('CLIENTES');
+  const emDemo = toArr(cliBruto).length === 0;
   if(emDemo){
-    RAW = demo();
+    demoDados = demo();
     document.getElementById('aviso').innerHTML = '<div class="aviso" role="status">Nenhuma consulta retornou dados. O painel está exibindo dados fictícios de demonstração.</div>';
   }
 
-  const clientes = norm(RAW.CLIENTES).map(r => ({
+  const clientes = norm(emDemo ? demoDados.CLIENTES : cliBruto, 'CLIENTES').map(r => ({
     id:s(r.CLIENTE_ID), filial:s(r.FILIAL)||'(Sem filial)', nome:s(r.NOME)||'(Sem nome)', doc:s(r.DOCUMENTO), tipo:s(r.TIPO),
     email:s(r.EMAIL), tel:s(r.TELEFONE), resp:s(r.RESPONSAVEL), qtdContatos:n(r.QTD_CONTATOS),
-    contatos:[], props:[], areaTotal:0, areaProd:0, talhoes:0, r:null, e:null, esgProps:[], bureaus:[], tickets:[]
+    contatos:[], props:[], areaTotal:0, areaProd:0, talhoes:0, r:null, e:null, esgProps:[], esgNC:0, bureaus:[], tickets:[]
   }));
   const porId = new Map();
   clientes.forEach(c => { c.nome_f = fold(c.nome); c.doc_d = dig(c.doc); porId.set(c.id, c); });
 
-  norm(RAW.CONTATOS).forEach(r => { const c = porId.get(s(r.CLIENTE_ID)); if(c) c.contatos.push({id:s(r.CONTATO_ID), nome:s(r.NOME), doc:s(r.DOCUMENTO)}); });
+  norm(dado('CONTATOS'), 'CONTATOS').forEach(r => { const c = porId.get(s(r.CLIENTE_ID)); if(c) c.contatos.push({id:s(r.CONTATO_ID), nome:s(r.NOME), doc:s(r.DOCUMENTO)}); });
 
   const props = new Map();
-  norm(RAW.PROPRIEDADES).forEach(r => {
+  norm(dado('PROPRIEDADES'), 'PROPRIEDADES').forEach(r => {
     const id = s(r.PROPRIEDADE_ID);
     let p = props.get(id);
     if(!p){
@@ -1286,7 +1333,7 @@ window.__DADOS__ = {
   });
 
   const donos = new Map(), contatosDonos = new Set();
-  norm(RAW.PROPRIETARIOS).forEach(r => {
+  norm(dado('PROPRIETARIOS'), 'PROPRIETARIOS').forEach(r => {
     const pid = s(r.PROPRIEDADE_ID);
     if(!donos.has(pid)) donos.set(pid, []);
     donos.get(pid).push({id:s(r.CONTATO_ID), nome:s(r.NOME), doc:s(r.DOCUMENTO), perc:n(r.PERCENTUAL)});
@@ -1294,7 +1341,7 @@ window.__DADOS__ = {
   });
   donos.forEach(l => l.sort((a,b) => b.perc - a.perc));
 
-  norm(RAW.RISCO).forEach(r => {
+  norm(dado('RISCO'), 'RISCO').forEach(r => {
     const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
     const x = {data:s(r.ULTIMA_ANALISE).slice(0,10), aut:s(r.STATUS_AUTORIZACAO), rec:s(r.STATUS_RECEITA),
       cpr:n(r.DIVIDA_CPR), sis:n(r.DIVIDA_SISBACEN), urbano:n(r.PATR_URBANO), rural:n(r.PATR_RURAL), equip:n(r.PATR_EQUIPAMENTOS),
@@ -1304,107 +1351,127 @@ window.__DADOS__ = {
     c.r = x;
   });
 
-  norm(RAW.ESG).forEach(r => {
-    const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
-    const x = {pend:n(r.QTD_PENDENCIAS), verif:n(r.QTD_VERIFICACOES)};
-    ESG_CAMPOS.forEach(f => { x[f.k] = s(r[f.col]); });
-    c.e = x;
-  });
-  norm(RAW.ESG_PROPRIEDADES).forEach(r => { const c = porId.get(s(r.CLIENTE_ID)); if(c) c.esgProps.push({nome:s(r.PROPRIEDADE), status:s(r.STATUS)}); });
-
   const numOuNulo = v => { if(v === null || v === undefined || s(v) === '') return null; const x = Number(String(v).replace(',', '.')); return isFinite(x) ? x : null; };
-  let idxB = 0;
-  const fontesExistentes = new Set();
-  norm(RAW.BUREAU).forEach(r => {
-    const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
-    const b = {uid:'b' + (idxB++), c, fonte:s(r.FONTE) || '(Sem bureau)', data:s(r.DATA_ANALISE).slice(0,10),
-      score:numOuNulo(r.SCORE), prob:numOuNulo(r.PROB_PAGAMENTO),
-      vDiv:n(r.VALOR_DIVIDAS), vPefin:n(r.VALOR_PEFIN), vRefin:n(r.VALOR_REFIN), vVenc:n(r.VALOR_DIVIDAS_VENCIDAS), vProt:n(r.VALOR_PROTESTOS),
-      vAcoes:n(r.VALOR_ACOES), vCons:n(r.VALOR_CONSULTAS), qDiv:n(r.QTD_DIVIDAS), qProt:n(r.QTD_PROTESTOS), qCheq:n(numOuNulo(r.QTD_CHEQUES)), qCons:n(r.QTD_CONSULTAS)};
-    b.mes = b.data.slice(0,7); b.idade = idadeDias(b.data);
-    b.restr = IND_RESTR.some(k => b[k] > 0);
-    c.bureaus.push(b); fontesExistentes.add(b.fonte);
-  });
-  const tickets = new Map(), tiposProposta = new Set(), rotulosComp = new Set();
   const capitaliza = v => v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
-  norm(RAW.PROPOSTAS).forEach(r => {
-    const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
-    const t = {id:s(r.TICKET_ID), c, ident:s(r.IDENTIFICADOR) || ('#' + s(r.TICKET_ID)), criada:s(r.CRIADA_EM), atual:s(r.ATUALIZADA_EM), validade:s(r.VALIDADE).slice(0,10),
-      solic:n(r.VALOR_SOLICITADO), tipoProp:capitaliza(s(r.TIPO_PROPOSTA)) || 'Não informado', tipoCli:TIPO_CLI[s(r.TIPO_CLIENTE)] || s(r.TIPO_CLIENTE) || 'Não informado',
-      loja:s(r.LOJA), safra:s(r.SAFRA), wf:s(r.WORKFLOW), resp:s(r.RESPONSAVEL), criador:s(r.CRIADOR), fase:s(r.FASE) || 'Sem fase', faseTipo:s(r.FASE_TIPO),
-      ultId:s(r.ULTIMA_APROVACAO_ID), aprs:[], rts:[], comp:[]};
-    tickets.set(t.id, t); c.tickets.push(t); tiposProposta.add(t.tipoProp);
-  });
-  norm(RAW.APROVACOES).forEach(r => {
-    const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
-    t.aprs.push({id:s(r.APROVACAO_ID), criada:s(r.CRIADA_EM), validade:s(r.VALIDADE).slice(0,10), valor:n(r.VALOR_APROVADO), clean:n(r.LIMITE_CLEAN), fase:s(r.FASE_APROVACAO) || 'Sem fase', resp:s(r.RESPONSAVEL), det:s(r.DETALHES)});
-  });
-  norm(RAW.AVALIACOES).forEach(r => {
-    const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
-    t.rts.push({data:s(r.DATA), score:numOuNulo(r.SCORE), nota:s(r.NOTA).toUpperCase().trim(), sug:n(r.LIMITE_SUGERIDO)});
-  });
-  norm(RAW.PROPOSTAS_COMPOSICAO).forEach(r => {
-    const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
-    const rot = s(r.ROTULO) || 'Sem rótulo';
-    t.comp.push({tipo:s(r.TIPO).toUpperCase(), rot, val:s(r.VALOR).toUpperCase().trim() || '(NÃO INFORMADO)', vf:n(r.VALOR_FINANCEIRO)});
-    rotulosComp.add(rot);
-  });
-  tickets.forEach(t => {
-    t.aprs.sort((a,b) => a.criada.localeCompare(b.criada));
-    t.rts.sort((a,b) => a.data.localeCompare(b.data));
-    t.ult = t.aprs.find(a => a.id === t.ultId) || t.aprs.at(-1) || null;
-    t.aprs.forEach(a => { let rr = null; t.rts.forEach(x => { if(!a.criada || x.data <= a.criada) rr = x; }); a.rt = rr || t.rts.at(-1) || null; });
-    t.rt = t.rts.at(-1) || null;
-    t.sit = SIT[t.faseTipo] || {nome:'Sem fase', tom:''};
-    t.aprovada = t.sit.nome === 'Aprovada';
-    t.aprovado = t.aprovada && t.ult ? t.ult.valor : 0;
-    t.cleanA = t.aprovada && t.ult ? t.ult.clean : 0;
-    t.vig = t.ult ? t.ult.validade : '';
-    t.mes = t.criada.slice(0,7);
-    t.nota = t.rt && t.rt.nota ? t.rt.nota : 'Sem nota';
-  });
-  const ROTULOS = ORDEM_ROTULOS.filter(r => rotulosComp.has(r)).concat(Array.from(rotulosComp).filter(r => !ORDEM_ROTULOS.includes(r)).sort());
-
-  /* ----- produtividade (consolidado) e ciclo (talhões) ----- */
   const PALETA = ['var(--verde-700)','var(--ouro-500)','var(--terra)','var(--verde-300)','var(--cinza)','var(--alerta)'];
   const safraPadrao = sf => { const m = /^(\d{2})\/(\d{2})$/.exec(sf); return !!m && (Number(m[2]) - Number(m[1]) + 100) % 100 === 1; };
   const quantil = (arr, q) => { if(!arr.length) return null; const pos = (arr.length - 1) * q, b = Math.floor(pos), r = pos - b; return arr[b + 1] !== undefined ? arr[b] + r * (arr[b + 1] - arr[b]) : arr[b]; };
   const mediana = a => a.length ? quantil(a.slice().sort((x,y) => x - y), 0.5) : null;
-  const prodRows = [];
-  norm(RAW.PRODUTIVIDADE).forEach(r => {
-    const p = props.get(s(r.PROPRIEDADE_ID)); if(!p) return;
-    const o = {uid:'c' + prodRows.length, p, crop:s(r.CULTURA) || 'Não informada', safra:s(r.SAFRA) || 'Sem safra', area:n(r.AREA_PRODUTIVA),
-      prod:numOuNulo(r.PRODUTIVIDADE), cot:numOuNulo(r.COTACAO), custo:numOuNulo(r.CUSTO_HA)};
-    prodRows.push(o);
-  });
-  /* limites de valores atípicos por cultura: fora de Q1 - 3*IQR e Q3 + 3*IQR */
-  const limites = new Map(), amostras = new Map();
-  prodRows.forEach(o => { if(!amostras.has(o.crop)) amostras.set(o.crop, {p:[], c:[]}); const x = amostras.get(o.crop); if(o.prod > 0) x.p.push(o.prod); if(o.custo > 0) x.c.push(o.custo); });
-  const cerca = arr => { if(arr.length < 20) return [0, Infinity]; arr.sort((a,b) => a - b); const q1 = quantil(arr, .25), q3 = quantil(arr, .75), iqr = q3 - q1; return [Math.max(0, q1 - 3 * iqr), q3 + 3 * iqr]; };
-  amostras.forEach((x, k) => limites.set(k, {p:cerca(x.p), c:cerca(x.c)}));
-  prodRows.forEach(o => {
-    const L = limites.get(o.crop);
-    o.okP = o.prod > 0 && o.prod >= L.p.at(0) && o.prod <= L.p.at(1);
-    o.okC = o.custo > 0 && o.custo >= L.c.at(0) && o.custo <= L.c.at(1);
-    o.atip = (o.prod > 0 && !o.okP) || (o.custo > 0 && !o.okC);
-    o.rec = o.okP && o.cot > 0 ? o.prod * o.cot : null;
-    o.marg = o.rec !== null && o.okC ? o.rec - o.custo : null;
-    o.equil = o.okC && o.cot > 0 ? o.custo / o.cot : null;
-  });
-  const contaCult = new Map(); prodRows.forEach(o => contaCult.set(o.crop, (contaCult.get(o.crop) || 0) + 1));
-  const CULTURAS = Array.from(contaCult.entries()).sort((a,b) => (b.at(1) - a.at(1)) || a.at(0).localeCompare(b.at(0),'pt-BR')).map(e => e.at(0));
-  const SAFRAS = Array.from(new Set(prodRows.map(o => o.safra))).sort((a,b) => b.localeCompare(a));
-
-  const ORDEM_FONTES = ['SPC','BOA_VISTA','QUOD'].filter(f => fontesExistentes.has(f)).concat(Array.from(fontesExistentes).filter(f => !FONTES[f]).sort());
 
   clientes.forEach(c => {
     c.props.forEach(x => { c.areaTotal += x.p.areaTotal; c.areaProd += x.p.areaProd; c.talhoes += x.p.talhoes; });
     c.props.sort((a,b) => b.p.areaProd - a.p.areaProd);
     if(!c.qtdContatos) c.qtdContatos = c.contatos.length;
     c.patr = c.r ? c.r.patr : 0; c.vProt = c.r ? c.r.vProt : 0;
-    c.esgNC = c.esgProps.filter(p => esgLbl(p.status) === 'Não conforme').length;
   });
   clientes.sort((a,b) => (b.areaProd - a.areaProd) || a.nome.localeCompare(b.nome,'pt-BR'));
+
+  /* ---------- carga sob demanda: cada conjunto é lido na primeira vez que uma aba precisa dele ---------- */
+  const carregado = {esg:false, bureau:false, propostas:false, prod:false};
+  let ORDEM_FONTES = [], ROTULOS = [], CULTURAS = [], SAFRAS = [];
+  const tickets = new Map(), tiposProposta = new Set();
+  const prodRows = [];
+
+  function garantirEsg(){
+    if(carregado.esg) return; carregado.esg = true;
+    norm(dado('ESG'), 'ESG').forEach(r => {
+      const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
+      const x = {pend:n(r.QTD_PENDENCIAS), verif:n(r.QTD_VERIFICACOES)};
+      ESG_CAMPOS.forEach(f => { x[f.k] = s(r[f.col]); });
+      c.e = x;
+    });
+    norm(dado('ESG_PROPRIEDADES'), 'ESG_PROPRIEDADES').forEach(r => { const c = porId.get(s(r.CLIENTE_ID)); if(c) c.esgProps.push({nome:s(r.PROPRIEDADE), status:s(r.STATUS)}); });
+    clientes.forEach(c => { c.esgNC = c.esgProps.filter(p => esgLbl(p.status) === 'Não conforme').length; });
+  }
+
+  function garantirBureau(){
+    if(carregado.bureau) return; carregado.bureau = true;
+    let idxB = 0;
+    const fontesExistentes = new Set();
+    norm(dado('BUREAU'), 'BUREAU').forEach(r => {
+      const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
+      const b = {uid:'b' + (idxB++), c, fonte:s(r.FONTE) || '(Sem bureau)', data:s(r.DATA_ANALISE).slice(0,10),
+        score:numOuNulo(r.SCORE), prob:numOuNulo(r.PROB_PAGAMENTO),
+        vDiv:n(r.VALOR_DIVIDAS), vPefin:n(r.VALOR_PEFIN), vRefin:n(r.VALOR_REFIN), vVenc:n(r.VALOR_DIVIDAS_VENCIDAS), vProt:n(r.VALOR_PROTESTOS),
+        vAcoes:n(r.VALOR_ACOES), vCons:n(r.VALOR_CONSULTAS), qDiv:n(r.QTD_DIVIDAS), qProt:n(r.QTD_PROTESTOS), qCheq:n(numOuNulo(r.QTD_CHEQUES)), qCons:n(r.QTD_CONSULTAS)};
+      b.mes = b.data.slice(0,7); b.idade = idadeDias(b.data);
+      b.restr = IND_RESTR.some(k => b[k] > 0);
+      c.bureaus.push(b); fontesExistentes.add(b.fonte);
+    });
+    ORDEM_FONTES = ['SPC','BOA_VISTA','QUOD'].filter(f => fontesExistentes.has(f)).concat(Array.from(fontesExistentes).filter(f => !FONTES[f]).sort());
+  }
+
+  function garantirPropostas(){
+    if(carregado.propostas) return; carregado.propostas = true;
+    const rotulosComp = new Set();
+    norm(dado('PROPOSTAS'), 'PROPOSTAS').forEach(r => {
+      const c = porId.get(s(r.CLIENTE_ID)); if(!c) return;
+      const t = {id:s(r.TICKET_ID), c, ident:s(r.IDENTIFICADOR) || ('#' + s(r.TICKET_ID)), criada:s(r.CRIADA_EM), atual:s(r.ATUALIZADA_EM), validade:s(r.VALIDADE).slice(0,10),
+        solic:n(r.VALOR_SOLICITADO), tipoProp:capitaliza(s(r.TIPO_PROPOSTA)) || 'Não informado', tipoCli:TIPO_CLI[s(r.TIPO_CLIENTE)] || s(r.TIPO_CLIENTE) || 'Não informado',
+        loja:s(r.LOJA), safra:s(r.SAFRA), wf:s(r.WORKFLOW), resp:s(r.RESPONSAVEL), criador:s(r.CRIADOR), fase:s(r.FASE) || 'Sem fase', faseTipo:s(r.FASE_TIPO),
+        ultId:s(r.ULTIMA_APROVACAO_ID), aprs:[], rts:[], comp:[]};
+      tickets.set(t.id, t); c.tickets.push(t); tiposProposta.add(t.tipoProp);
+    });
+    norm(dado('APROVACOES'), 'APROVACOES').forEach(r => {
+      const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
+      t.aprs.push({id:s(r.APROVACAO_ID), criada:s(r.CRIADA_EM), validade:s(r.VALIDADE).slice(0,10), valor:n(r.VALOR_APROVADO), clean:n(r.LIMITE_CLEAN), fase:s(r.FASE_APROVACAO) || 'Sem fase', resp:s(r.RESPONSAVEL), det:s(r.DETALHES)});
+    });
+    norm(dado('AVALIACOES'), 'AVALIACOES').forEach(r => {
+      const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
+      t.rts.push({data:s(r.DATA), score:numOuNulo(r.SCORE), nota:s(r.NOTA).toUpperCase().trim(), sug:n(r.LIMITE_SUGERIDO)});
+    });
+    const TIPO_COMP = {S:'SOLICITADO', A:'APROVADO'};
+    norm(dado('PROPOSTAS_COMPOSICAO'), 'PROPOSTAS_COMPOSICAO').forEach(r => {
+      const t = tickets.get(s(r.TICKET_ID)); if(!t) return;
+      const rot = s(r.ROTULO) || 'Sem rótulo', tp = s(r.TIPO).toUpperCase();
+      t.comp.push({tipo:TIPO_COMP[tp] || tp, rot, val:s(r.VALOR).toUpperCase().trim() || '(NÃO INFORMADO)', vf:n(r.VALOR_FINANCEIRO)});
+      rotulosComp.add(rot);
+    });
+    tickets.forEach(t => {
+      t.aprs.sort((a,b) => a.criada.localeCompare(b.criada));
+      t.rts.sort((a,b) => a.data.localeCompare(b.data));
+      t.ult = t.aprs.find(a => a.id === t.ultId) || t.aprs.at(-1) || null;
+      t.aprs.forEach(a => { let rr = null; t.rts.forEach(x => { if(!a.criada || x.data <= a.criada) rr = x; }); a.rt = rr || t.rts.at(-1) || null; });
+      t.rt = t.rts.at(-1) || null;
+      t.sit = SIT[t.faseTipo] || {nome:'Sem fase', tom:''};
+      t.aprovada = t.sit.nome === 'Aprovada';
+      t.aprovado = t.aprovada && t.ult ? t.ult.valor : 0;
+      t.cleanA = t.aprovada && t.ult ? t.ult.clean : 0;
+      t.vig = t.ult ? t.ult.validade : '';
+      t.mes = t.criada.slice(0,7);
+      t.nota = t.rt && t.rt.nota ? t.rt.nota : 'Sem nota';
+    });
+    ROTULOS = ORDEM_ROTULOS.filter(r => rotulosComp.has(r)).concat(Array.from(rotulosComp).filter(r => !ORDEM_ROTULOS.includes(r)).sort());
+    document.getElementById('p-tipo').insertAdjacentHTML('beforeend', Array.from(tiposProposta).sort((a,b) => a.localeCompare(b,'pt-BR')).map(t => `<option>${esc(t)}</option>`).join(''));
+  }
+
+  function garantirProd(){
+    if(carregado.prod) return; carregado.prod = true;
+    norm(dado('PRODUTIVIDADE'), 'PRODUTIVIDADE').forEach(r => {
+      const p = props.get(s(r.PROPRIEDADE_ID)); if(!p) return;
+      prodRows.push({uid:'c' + prodRows.length, p, crop:s(r.CULTURA) || 'Não informada', safra:s(r.SAFRA) || 'Sem safra', area:n(r.AREA_PRODUTIVA),
+        prod:numOuNulo(r.PRODUTIVIDADE), cot:numOuNulo(r.COTACAO), custo:numOuNulo(r.CUSTO_HA)});
+    });
+    /* limites de valores atípicos por cultura: fora de Q1 - 3*IQR e Q3 + 3*IQR */
+    const limites = new Map(), amostras = new Map();
+    prodRows.forEach(o => { if(!amostras.has(o.crop)) amostras.set(o.crop, {p:[], c:[]}); const x = amostras.get(o.crop); if(o.prod > 0) x.p.push(o.prod); if(o.custo > 0) x.c.push(o.custo); });
+    const cerca = arr => { if(arr.length < 20) return [0, Infinity]; arr.sort((a,b) => a - b); const q1 = quantil(arr, .25), q3 = quantil(arr, .75), iqr = q3 - q1; return [Math.max(0, q1 - 3 * iqr), q3 + 3 * iqr]; };
+    amostras.forEach((x, k) => limites.set(k, {p:cerca(x.p), c:cerca(x.c)}));
+    prodRows.forEach(o => {
+      const L = limites.get(o.crop);
+      o.okP = o.prod > 0 && o.prod >= L.p.at(0) && o.prod <= L.p.at(1);
+      o.okC = o.custo > 0 && o.custo >= L.c.at(0) && o.custo <= L.c.at(1);
+      o.atip = (o.prod > 0 && !o.okP) || (o.custo > 0 && !o.okC);
+      o.rec = o.okP && o.cot > 0 ? o.prod * o.cot : null;
+      o.marg = o.rec !== null && o.okC ? o.rec - o.custo : null;
+      o.equil = o.okC && o.cot > 0 ? o.custo / o.cot : null;
+    });
+    const contaCult = new Map(); prodRows.forEach(o => contaCult.set(o.crop, (contaCult.get(o.crop) || 0) + 1));
+    CULTURAS = Array.from(contaCult.entries()).sort((a,b) => (b.at(1) - a.at(1)) || a.at(0).localeCompare(b.at(0),'pt-BR')).map(e => e.at(0));
+    SAFRAS = Array.from(new Set(prodRows.map(o => o.safra))).sort((a,b) => b.localeCompare(a));
+    document.getElementById('pr-safra').insertAdjacentHTML('beforeend', SAFRAS.map(sf => `<option value="${esc(sf)}">${esc(sf)}${safraPadrao(sf) ? '' : ' (plurianual)'}</option>`).join(''));
+    document.getElementById('pr-cult').insertAdjacentHTML('beforeend', CULTURAS.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''));
+  }
 
   /* ===================== estado e filtro ===================== */
   const novoPv = () => ({ab:new Set(), mais:new Map(), det:new Set(), pg:1});
@@ -1734,6 +1801,7 @@ window.__DADOS__ = {
   }
 
   function detalheRiscoCliente(c){
+    garantirBureau();
     const r = c.r;
     if(!r) return `<tr class="det"><td colspan="16"><div class="prop-det sub">Cliente sem perfil de risco nas views.</div></td></tr>`;
     const div = r.cpr + r.sis, rel = pct(div, r.patr);
@@ -1776,6 +1844,7 @@ window.__DADOS__ = {
   }
 
   function rEsg(){
+    garantirEsg();
     const ck = [chave, st.esgPor, st.esgPend].join('|');
     if(ck === cache.esg.k && cache.esg.cfg){ rPivot(cache.esg.cfg); return; }
     let lista = vis.lista;
@@ -1831,6 +1900,7 @@ window.__DADOS__ = {
   let gruposBur = [];
 
   function itensBureau(ignorarFonte){
+    garantirBureau();
     const l = [];
     vis.lista.forEach(c => c.bureaus.forEach(b => { if(ignorarFonte || !st.fonte || b.fonte === st.fonte) l.push(b); }));
     return l;
@@ -2015,6 +2085,7 @@ window.__DADOS__ = {
   }
 
   function rBureau(){
+    garantirBureau();
     rFonteBotoes();
     const itens = itensBureau(false);
     rKpisBureau(agBur(itens));
@@ -2037,7 +2108,7 @@ window.__DADOS__ = {
     st.sub = k;
     document.querySelectorAll('.subaba[data-act="sub"]').forEach(b => b.setAttribute('aria-selected', String(b.getAttribute('data-k') === k)));
     ['perfil','esg','bureau'].forEach(x => { document.getElementById('sb-' + x).hidden = x !== k; });
-    rAbaRisco();
+    renderComCarga();
   }
 
 
@@ -2045,6 +2116,7 @@ window.__DADOS__ = {
   let gruposProp = [];
 
   function ticketsVis(){
+    garantirPropostas();
     const ck = [chave, st.pSit, st.pTipo, st.pPer].join('|');
     if(ck === cache.tk.k) return cache.tk.l;
     let lim = '';
@@ -2231,10 +2303,11 @@ window.__DADOS__ = {
     document.querySelectorAll('.subaba[data-act="subc"]').forEach(b => b.setAttribute('aria-selected', String(b.getAttribute('data-k') === k)));
     document.getElementById('sb-cli').hidden = k !== 'cli';
     document.getElementById('sb-prop').hidden = k !== 'prop';
-    render();
+    renderComCarga();
   }
 
   function prodVis(){
+    garantirProd();
     const ck = [chave, st.prSafra, st.prCult].join('|');
     if(cache.pr.k === ck) return cache.pr;
     const ids = new Set(), cliPorProp = new Map();
@@ -2404,6 +2477,22 @@ window.__DADOS__ = {
   }
 
   /* ===================== render geral ===================== */
+  function precisaCarga(){
+    if(st.aba === 'risco') return st.sub === 'esg' ? !carregado.esg : (st.sub === 'bureau' ? !carregado.bureau : false);
+    if(st.aba === 'propostas') return !carregado.propostas;
+    if(st.aba === 'clientes' && st.subC === 'prop') return !carregado.prod;
+    return false;
+  }
+  function renderComCarga(){
+    if(!precisaCarga()){ render(); return; }
+    const m = document.getElementById('principal');
+    m.classList.add('carregando');
+    const aviso = document.getElementById('carga-aviso'); if(aviso) aviso.hidden = false;
+    setTimeout(() => {
+      try{ render(); }
+      finally{ m.classList.remove('carregando'); if(aviso) aviso.hidden = true; }
+    }, 40);
+  }
   function rFoco(){
     const el = document.getElementById('foco'), c = st.foco ? porId.get(st.foco) : null;
     el.classList.toggle('on', !!c);
@@ -2428,7 +2517,7 @@ window.__DADOS__ = {
     document.getElementById('pg-tit').textContent = TIT.at(0);
     document.getElementById('pg-sub').textContent = TIT.at(1);
     document.body.classList.remove('menu-aberto');
-    render();
+    renderComCarga();
   }
 
   /* ===================== filtros e eventos ===================== */
@@ -2456,7 +2545,6 @@ window.__DADOS__ = {
   document.getElementById('bu-restr').addEventListener('change', e => { st.buRestr = e.target.checked; st.pv.bureau = novoPv(); rBuTabela(); });
 
   const pTipo = document.getElementById('p-tipo');
-  pTipo.insertAdjacentHTML('beforeend', Array.from(tiposProposta).sort((a,b) => a.localeCompare(b,'pt-BR')).map(t => `<option>${esc(t)}</option>`).join(''));
   const novoFiltroProp = () => { st.pv.propostas = novoPv(); rAbaPropostas(); };
   document.getElementById('p-sit').addEventListener('change', e => { st.pSit = e.target.value; novoFiltroProp(); });
   pTipo.addEventListener('change', e => { st.pTipo = e.target.value; novoFiltroProp(); });
@@ -2465,8 +2553,6 @@ window.__DADOS__ = {
   document.getElementById('p-ord').addEventListener('change', e => { st.pOrd = e.target.value; rPropTabela(); });
 
   const prSafra = document.getElementById('pr-safra'), prCult = document.getElementById('pr-cult');
-  prSafra.insertAdjacentHTML('beforeend', SAFRAS.map(sf => `<option value="${esc(sf)}">${esc(sf)}${safraPadrao(sf) ? '' : ' (plurianual)'}</option>`).join(''));
-  prCult.insertAdjacentHTML('beforeend', CULTURAS.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''));
   const novoFiltroProd = () => { st.pv.prod = novoPv(); rAbaProd(); };
   prSafra.addEventListener('change', e => { st.prSafra = e.target.value; novoFiltroProd(); });
   prCult.addEventListener('change', e => { st.prCult = e.target.value; novoFiltroProd(); });
